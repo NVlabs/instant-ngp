@@ -4,18 +4,14 @@
 
 Ever wanted to train a NeRF model of a fox in under 5 seconds? Or fly around a scene captured from photos of a factory robot? Of course you have!
 
-Here you will find an implementation of four __neural graphics primitives__, being
-1. NeRF: neural radiance fields,
-2. SDF: signed distance functions,
-3. neural images, and
-4. neural volumes.
-
+Here you will find an implementation of four __neural graphics primitives__, being neural radiance fields (NeRF), signed distance functions (SDFs), neural images, and neural volumes.
 In each case, we train and render a MLP with multiresolution hash input encoding using the [tiny-cuda-nn](https://github.com/NVlabs/tiny-cuda-nn) framework.
-__Please see the [PROJECT PAGE](https://nvlabs.github.io/instant-ngp) for more results__
 
 > __Instant Neural Graphics Primitives with a Multiresolution Hash Encoding__  
 > [Thomas Müller](https://tom94.net), [Alex Evans](https://research.nvidia.com/person/alex-evans), [Christoph Schied](https://research.nvidia.com/person/christoph-schied), [Alexander Keller](https://research.nvidia.com/person/alex-keller)  
 > _arXiv, Jan 2022_
+>
+> [ [Project page](https://nvlabs.github.io/instant-ngp) ] [ [Paper](docs/assets/mueller2022instant.pdf) ] [ [Video](docs/assets/mueller2022instant.mp4) ]
 
  
 For business inquiries, please visit our website and submit the form: [NVIDIA Research Licensing](https://www.nvidia.com/en-us/research/inquiries/)
