@@ -1,14 +1,14 @@
-# Instant Neural Graphics Primitives
+# Instant Neural Graphics Primitives ![](https://github.com/NVlabs/instant-ngp/workflows/CI/badge.svg)
 
 <img src="docs/assets_readme/fox.gif" height="338"/> <img src="docs/assets_readme/robot5.gif" height="338"/>
 
 Ever wanted to train a NeRF model of a fox in under 5 seconds? Or fly around a scene captured from photos of a factory robot? Of course you have!
 
 Here you will find an implementation of four __neural graphics primitives__, being
-- neural radiance fields (NeRF),
-- signed distance functions (SDF),
-- neural images, and
-- neural volumes.
+1. NeRF: neural radiance fields,
+2. SDF: signed distance functions,
+3. neural images, and
+4. neural volumes.
 
 In each case, we train and render a MLP with multiresolution hash input encoding using the [tiny-cuda-nn](https://github.com/NVlabs/tiny-cuda-nn) framework.
 __Please see the [PROJECT PAGE](https://nvlabs.github.io/instant-ngp) for more results__
