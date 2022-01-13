@@ -55,8 +55,7 @@ __device__ Array4f proc_envmap_render(const Vector3f& dir, const Vector3f& up_di
 	// actual sunsky model that we trained from.
 	Array4f result = Array4f::Zero();
 
-	// result.head<3>() = proc_envmap(dir, up_dir, sun_dir, skycol);
-	// result.w() = 1.0f;
+	result = proc_envmap(dir, up_dir, sun_dir, skycol);
 
 	return result;
 }
