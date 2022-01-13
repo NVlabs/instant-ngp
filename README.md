@@ -11,7 +11,7 @@ In each case, we train and render a MLP with multiresolution hash input encoding
 > [Thomas Müller](https://tom94.net), [Alex Evans](https://research.nvidia.com/person/alex-evans), [Christoph Schied](https://research.nvidia.com/person/christoph-schied), [Alexander Keller](https://research.nvidia.com/person/alex-keller)  
 > _arXiv, Jan 2022_
 >
-> [ [Project page](https://nvlabs.github.io/instant-ngp) ] [ [Paper](docs/assets/mueller2022instant.pdf) ] [ [Video](docs/assets/mueller2022instant.mp4) ]
+> [ [Project page](https://nvlabs.github.io/instant-ngp) ] [ [Paper](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.pdf) ] [ [Video](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.mp4) ]
 
  
 For business inquiries, please visit our website and submit the form: [NVIDIA Research Licensing](https://www.nvidia.com/en-us/research/inquiries/)
