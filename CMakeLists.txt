@@ -285,9 +285,11 @@ if (Python_FOUND)
 	if (MSVC)
 		# Copy dlls needed at runtime
 		file(GLOB CUBLAS_DLLS "${CUDA_COMPILER_BIN}/cublas*.dll")
-		add_custom_command(TARGET pyngp POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy ${CUBLAS_DLLS} $<TARGET_FILE_DIR:pyngp>
-			COMMAND_EXPAND_LISTS
-		)
+		if (CUBLAS_DLLS)
+			add_custom_command(TARGET pyngp POST_BUILD
+				COMMAND ${CMAKE_COMMAND} -E copy ${CUBLAS_DLLS} $<TARGET_FILE_DIR:pyngp>
+				COMMAND_EXPAND_LISTS
+			)
+		endif()
 	endif()
 endif()

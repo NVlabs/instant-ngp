@@ -18,9 +18,9 @@ jobs:
           - os: ubuntu-20.04
             cuda: "11.3"
             arch: 86
-          - os: ubuntu-18.04
-            cuda: "10.2"
-            arch: 75
+        #   - os: ubuntu-18.04
+        #     cuda: "10.2"
+        #     arch: 75
     env:
       build_dir: "build"
       config: "Release"
