@@ -1,0 +1,6 @@
+# Copy the header file into the python/ folder.
+include ../tiny_obj_loader.h
+# Include it in the source distribution.
+include tiny_obj_loader.h
+
+include pyproject.toml

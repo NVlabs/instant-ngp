@@ -1,0 +1,7 @@
+{
+	"parent" : "base.json",
+	"encoding": {
+		"otype": "Frequency",
+		"n_frequencies": 16
+	}
+}

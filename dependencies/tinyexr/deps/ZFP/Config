@@ -1,0 +1,49 @@
+# compiler settings -----------------------------------------------------------
+
+# GNU compiler
+CC = gcc
+CXX = g++
+FLAGS = -O3 -fPIC -Wall -I../inc $(DEFS)
+CFLAGS = $(FLAGS) -std=c89 -Wno-unused-function
+#CFLAGS = $(FLAGS) -std=c99
+CXXFLAGS = $(FLAGS) -std=c++98
+
+# IBM compiler
+# CC = xlc
+# CXX = xlc++
+# CFLAGS = -O2 -qmaxmem=-1 -qpic=large -I../inc $(DEFS)
+# CXXFLAGS= $(CFLAGS)
+
+# optional compiler macros ----------------------------------------------------
+
+# use smaller bit stream word type for finer rate granularity
+# DEFS += -DBIT_STREAM_WORD_TYPE=uint8
+# DEFS += -DBIT_STREAM_WORD_TYPE=uint16
+# DEFS += -DBIT_STREAM_WORD_TYPE=uint32
+
+# enable strided access for progressive zfp streams
+# DEFS += -DBIT_STREAM_STRIDED
+
+# run regression test with medium sized arrays
+# DEFS += -DTESTZFP_MEDIUM_ARRAYS
+
+# run regression test with large arrays
+# DEFS += -DTESTZFP_LARGE_ARRAYS
+
+# run diffusion without compression
+# DEFS += -DWITHOUT_COMPRESSION
+
+# use aligned memory allocation
+# DEFS += -DALIGNED_ALLOC
+
+# use two-way skew-associative cache
+# DEFS += -DCACHE_TWOWAY
+
+# use faster but more collision prone hash function
+# DEFS += -DCACHE_FAST_HASH
+
+# count cache misses
+# DEFS += -DCACHE_PROFILE
+
+# for recent versions of MSVC
+# DEFS += -DHAVE_C99_MATH

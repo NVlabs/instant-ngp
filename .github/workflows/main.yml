@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build_linux:
+    name: Build on linux systems
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-20.04
+            cuda: "11.3"
+            arch: 86
+          - os: ubuntu-18.04
+            cuda: "10.2"
+            arch: 75
+    env:
+      build_dir: "build"
+      config: "Release"
+      TCNN_CUDA_ARCHITECTURES: ${{ matrix.arch }}
+    steps:
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install cmake gcc g++
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Install CUDA
+        env:
+          cuda: ${{ matrix.cuda }}
+        run: ./dependencies/cuda-cmake-github-actions/scripts/actions/install_cuda_ubuntu.sh
+        shell: bash
+      - name: CMake
+        run: cmake . -B ${{ env.build_dir }} -DCMAKE_BUILD_TYPE=${{ env.config }}
+      - name: Build
+        working-directory: ${{ env.build_dir }}
+        run: cmake --build . --target all --verbose -j `nproc`
+
+
+  build_windows:
+    name: Build on Windows
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-2019
+            visual_studio: "Visual Studio 16 2019"
+            cuda: "11.5.1"
+            arch: 86
+        #   - os: windows-2016
+        #     visual_studio: "Visual Studio 15 2017"
+        #     cuda: "10.2.89"
+        #     arch: 75
+    env:
+      build_dir: "build"
+      config: "Release"
+      TCNN_CUDA_ARCHITECTURES: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Install CUDA
+        env:
+          cuda: ${{ matrix.cuda }}
+          visual_studio: ${{ matrix.visual_studio }}
+        shell: powershell
+        run: .\dependencies\cuda-cmake-github-actions\scripts\actions\install_cuda_windows.ps1
+      - name: CMake
+        run: cmake . -B ${{ env.build_dir }} -G "${{ matrix.visual_studio }}" -A x64
+      - name: Build
+        working-directory: ${{ env.build_dir }}
+        run: cmake --build . --config ${{ env.config }} --target ALL_BUILD --verbose

@@ -1,0 +1,53 @@
+ninja_required_version = 1.4
+
+gnubuilddir = build
+gnudefines = 
+gnuincludes = -I.
+gnucflags = -O2 -g
+gnucxxflags = -O2 -g -pedantic -Wall -Wextra -Wcast-align -Wcast-qual $
+    -Wctor-dtor-privacy -Wdisabled-optimization -Wformat=2 -Winit-self $
+    -Wmissing-declarations -Wmissing-include-dirs -Wold-style-cast $
+    -Woverloaded-virtual -Wredundant-decls -Wshadow -Wsign-conversion $
+    -Wsign-promo -Wstrict-overflow=5 -Wswitch-default -Wundef -Werror $
+    -Wno-unused -fsanitize=address
+gnuldflags = -fsanitize=address
+
+pool link_pool
+  depth = 1
+
+rule gnucxx
+  command = $gnucxx -MMD -MF $out.d $gnudefines $gnuincludes $gnucxxflags $
+      -c $in -o $out
+  description = CXX $out
+  depfile = $out.d
+  deps = gcc
+rule gnucc
+  command = $gnucc -MMD -MF $out.d $gnudefines $gnuincludes $gnucflags -c $
+      $in -o $out
+  description = CC $out
+  depfile = $out.d
+  deps = gcc
+rule gnulink
+  command = $gnuld -o $out $in $libs $gnuldflags
+  description = LINK $out
+  pool = link_pool
+rule gnuar
+  command = $gnuar rsc $out $in
+  description = AR $out
+  pool = link_pool
+rule gnustamp
+  command = touch $out
+  description = STAMP $out
+
+gnucxx = g++
+gnucc = gcc
+gnuld = $gnucxx
+gnuar = ar
+
+build loader_example.o: gnucxx loader_example.cc
+
+
+build loader_example: gnulink loader_example.o
+build all: phony loader_example
+
+default all

@@ -1,0 +1,9 @@
+{	// multiresolution dense grid - 8 levels, from res 16 to 173. chosen to have less than half of 33m params
+	"parent" : "base.json",
+	"encoding": {
+		"otype": "DenseGrid",
+		"n_levels": 8,
+		"base_resolution": 16,
+		"per_level_scale": 1.405
+	}
+}

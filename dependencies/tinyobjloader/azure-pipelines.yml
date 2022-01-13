@@ -1,0 +1,165 @@
+variables:
+  # https://cibuildwheel.readthedocs.io/en/stable/cpp_standards/
+  # python2.7 + C++11(pybind11) is not available.
+  CIBW_SKIP: "cp27-win* pp27-win32 pp36-win32"
+  CIBW_BEFORE_BUILD: "pip install pybind11"
+  #CIBW_BEFORE_BUILD_MACOS: "pip install -U pip setuptools"
+  #CIBW_BEFORE_BUILD_LINUX: "pip install -U pip setuptools"
+  #CIBW_TEST_COMMAND: TODO "python -c \"import tinyobjloader; tinyobjloader.test()\""
+  CIBW_BUILD_VERBOSITY: "2"
+  #CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+  #CIBW_MANYLINUX_I686_IMAGE: manylinux2014
+
+jobs:
+  - job: unit_linux
+    pool: { vmImage: "ubuntu-latest" }
+    steps:
+      - script: |
+          cd tests
+          make && ./tester
+        displayName: Run unit tests
+
+  - job: python_format
+    pool: { vmImage: "ubuntu-latest" }
+    steps:
+      - task: UsePythonVersion@0
+      - script: |
+          pip install black==19.10b0
+          black --check python/
+        displayName: Check Python code format
+
+  # Ubuntu16.04 seems now deprecated(as of 2021/12/01),
+  # so use `ubuntu-latest`
+  - job: linux
+    pool: {vmImage: "ubuntu-latest"}
+    steps:
+      - task: UsePythonVersion@0
+      - bash: |
+          python3 -m pip install --upgrade pip
+          pip3 install cibuildwheel twine
+          # Make the header files available to the build.
+          cp *.h python
+          mkdir python/mapbox
+          cp mapbox/earcut.hpp python/mapbox/
+          cd python
+
+          # Source dist
+          python3 setup.py sdist
+          ls -la dist/*
+
+          # build binary wheels
+          cibuildwheel --output-dir wheelhouse .
+
+      - task: CopyFiles@2
+        inputs:
+          contents: 'python/wheelhouse/**'
+          targetFolder: $(Build.ArtifactStagingDirectory)
+
+      - task: CopyFiles@2
+        inputs:
+          contents: 'python/dist/**'
+          targetFolder: $(Build.ArtifactStagingDirectory)
+
+      - task: PublishBuildArtifacts@1
+        inputs:
+          path: $(Build.ArtifactStagingDirectory)
+          artifactName: tinyobjDeployLinux
+
+  - job: macos
+    pool: {vmImage: 'macOS-10.15'}
+    variables:
+      # Support C++11: https://github.com/joerick/cibuildwheel/pull/156
+      MACOSX_DEPLOYMENT_TARGET: 10.9
+    steps:
+      - task: UsePythonVersion@0
+      - bash: |
+          python3 -m pip install --upgrade pip
+          pip3 install cibuildwheel
+          # Make the header files available to the build.
+          cp *.h python
+          mkdir python/mapbox
+          cp mapbox/earcut.hpp python/mapbox/earcut.hpp
+          cd python
+          cibuildwheel --output-dir wheelhouse .
+      - task: CopyFiles@2
+        inputs:
+          contents: 'python/wheelhouse/*.whl'
+          targetFolder: $(Build.ArtifactStagingDirectory)
+      - task: PublishBuildArtifacts@1
+        inputs:
+          path: $(Build.ArtifactStagingDirectory)
+          artifactName: tinyobjDeployMacOS
+
+  - job: windows
+    pool: {vmImage: 'windows-2019'}
+    steps:
+      - task: UsePythonVersion@0
+      - bash: |
+          python -m pip install --upgrade pip
+          pip install cibuildwheel
+          # Make the header files available to the build.
+          cp *.h python
+          mkdir python/mapbox
+          cp mapbox/earcut.hpp python/mapbox/
+          cd python
+          cibuildwheel --output-dir wheelhouse .
+      - task: CopyFiles@2
+        inputs:
+          contents: 'python/wheelhouse/*.whl'
+          targetFolder: $(Build.ArtifactStagingDirectory)
+      - task: PublishBuildArtifacts@1
+        inputs:
+          path: $(Build.ArtifactStagingDirectory)
+          artifactName: tinyobjDeployWindows
+
+  - job: deployPyPI
+    # Based on vispy: https://github.com/vispy/vispy/blob/master/azure-pipelines.yml
+    pool: {vmImage: 'Ubuntu-16.04'}
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/v'))
+    dependsOn:
+      - linux
+      - macos
+      - windows
+    steps:
+      - task: UsePythonVersion@0
+
+      # TODO(syoyo): Use buildType: specific to download multiple artifacts at once?
+      - task: DownloadBuildArtifacts@0
+        inputs:
+          artifactName: 'tinyobjDeployLinux'
+          downloadPath: $(Pipeline.Workspace)
+
+      - task: DownloadBuildArtifacts@0
+        inputs:
+          artifactName: 'tinyobjDeployMacOS'
+          downloadPath: $(Pipeline.Workspace)
+
+      - task: DownloadBuildArtifacts@0
+        inputs:
+          artifactName: 'tinyobjDeployWindows'
+          downloadPath: $(Pipeline.Workspace)
+
+      # Publish to PyPI through twine
+      - bash: |
+          cd $(Pipeline.Workspace)
+          find .
+          python -m pip install --upgrade pip
+          pip install twine
+          echo tinyobjDeployLinux/python/dist/*
+          echo tinyobjDeployLinux/python/wheelhouse/* tinyobjDeployMacOS/python/wheelhouse/* tinyobjDeployWindows/python/wheelhouse/*
+          twine upload -u "__token__" --skip-existing tinyobjDeployLinux/python/dist/* tinyobjDeployLinux/python/wheelhouse/* tinyobjDeployMacOS/python/wheelhouse/* tinyobjDeployWindows/python/wheelhouse/*
+        env:
+          TWINE_PASSWORD: $(pypiToken2)
+
+trigger:
+  branches:
+    include:
+      - '*'
+  tags:
+    include:
+      - 'v*'
+
+pr:
+  branches:
+    include:
+      - "*"

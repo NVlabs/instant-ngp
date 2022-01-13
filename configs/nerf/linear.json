@@ -1,0 +1,11 @@
+{
+	"parent": "base.json",
+	"network": {
+		"otype": "CutlassMLP",
+		"n_hidden_layers": 0
+	},
+	"rgb_network": {
+		"otype": "CutlassMLP",
+		"n_hidden_layers": 0
+	}
+}

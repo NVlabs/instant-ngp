@@ -1,0 +1,7 @@
+{
+	"parent" : "base.json",
+	"encoding": {
+		"otype": "OneBlob",
+		"n_bins": 32
+	}
+}

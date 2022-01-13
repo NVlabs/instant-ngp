@@ -1,0 +1,371 @@
+The following is a list of answers to frequently asked questions.  For
+questions not answered here or elsewhere in the documentation, please
+e-mail the author at pl@llnl.gov.
+
+Questions answered in this FAQ:
+
+ Q1: Can zfp compress vector fields?
+ Q2: Should I declare a 2D array as zfp::array1d a(nx * ny, rate)?
+ Q3: How can I initialize a zfp compressed array from disk?
+ Q4: Can I use zfp to represent dense matrices?
+ Q5: Can zfp compress logically regular but geometrically irregular data?
+ Q6: Does zfp handle infinities, NaNs, and denormal floating-point numbers?
+ Q7: Can zfp handle data with some missing values?
+ Q8: Can I use zfp to store integer data?
+ Q9: Can I compress 32-bit integers using zfp?
+Q10: Why does zfp corrupt memory if my allocated buffer is too small?
+Q11: Are zfp compressed streams portable across platforms?
+Q12: How can I achieve finer rate granularity?
+Q13: Can I generate progressive zfp streams?
+Q14: How do I initialize the decompressor?
+Q15: Must I use the same parameters during compression and decompression?
+Q16: Do strides have to match during compression and decompression?
+Q17: Why does zfp sometimes not respect my error tolerance?
+
+-------------------------------------------------------------------------------
+
+Q1: I have a 2D vector field
+
+  double velocity[ny][nx][2];
+
+of dimensions nx * ny.  Can I use a 3D zfp array to store this as
+
+  array3d velocity(2, nx, ny, rate);
+
+A: Although this could be done, zfp assumes that consecutive values are
+related.  The two velocity components (vx, vy) are almost suredly independent,
+and would not exhibit smoothness.  This will severely hurt the compression
+rate or quality.  Instead, consider storing vx and vy as two separate 2D
+scalar arrays
+
+  array2d vx(nx, ny, rate);
+  array2d vy(nx, ny, rate);
+
+or as
+
+  array2d velocity[2] = {array2d(nx, ny, rate), array2d(nx, ny, rate)};
+
+-------------------------------------------------------------------------------
+
+Q2: I have a 2D scalar field of dimensions nx * ny that I allocate as
+
+  double* a = new double[nx * ny];
+
+and index as
+
+  a[x + nx * y]
+
+Should I use a corresponding zfp array
+
+  array1d a(nx * ny, rate);
+
+to store my data in compressed form?
+
+A: Although this is certainly possible, if the scalar field exhibits
+coherence in both spatial dimensions, then far better results can be
+achieved by using a 2D array
+
+  array2d a(nx, ny, rate);
+
+Although both compressed arrays can be indexed as above, the 2D array can
+exploit smoothness in both dimensions and improve the quality dramatically
+for the same rate.
+
+-------------------------------------------------------------------------------
+
+Q3: I have a large, uncompressed, 3D data set
+
+  double a[nz][ny][nx];
+
+stored on disk that I would like to read into a compressed array.  This data
+set will not fit in memory uncompressed.  What is the best way of doing this?
+
+A: Using a zfp array
+
+  array3d a(nx, ny, nz, rate);
+
+the most straightforward way is to read one floating-point value at a time
+and copy it into the array:
+
+  for (uint z = 0; z < nz; z++)
+    for (uint y = 0; y < ny; y++)
+      for (uint x = 0; x < nx; x++) {
+        double f;
+        if (fread(&f, sizeof(f), 1, file) == 1)
+          a(x, y, z) = f;
+        else
+          // handle I/O error
+      }
+
+Note, however, that if the array cache is not large enough, then this may
+compress blocks before they have been completely filled.  Therefore it is
+recommended that the cache holds at least one complete layer of blocks,
+i.e. (nx / 4) * (ny / 4) blocks in the example above.
+
+-------------------------------------------------------------------------------
+
+Q4: Can I use zfp to represent dense matrices?
+
+A: Yes, but your mileage may vary.  Dense matrices, unlike smooth scalar
+fields, rarely exhibit correlation between adjacent rows and columns.  Thus,
+the quality or compression ratio may suffer.
+
+-------------------------------------------------------------------------------
+
+Q5: My data is logically structured but irregularly sampled, e.g. it is
+rectilinear, curvilinear, or Lagrangian, or uses an irregular spacing of
+quadrature points.  Can I still use zfp to compress it?
+
+A: Yes, as long as the data is (or can be) represented as a logical
+multidimensional array, though your mileage may vary.  zfp has been designed
+for uniformly sampled data, and compression will in general suffer the more
+irregular the sampling is.
+
+-------------------------------------------------------------------------------
+
+Q6: Does zfp handle infinities and NaNs?  What about denormal floating-point
+numbers?
+
+A: No, only finite, valid floating-point values are supported.  If a block
+contains a NaN or an infinity, undefined behavior is invoked due to the
+C math function frexp being undefined for non-numbers.  Denorms are, however,
+handled correctly.
+
+-------------------------------------------------------------------------------
+
+Q7: My data has some missing values that are flagged by very large numbers,
+e.g. 1e30.  Is that OK?
+
+A: Although all finite numbers are "correctly" handled, such large sentinel
+values are likely to pollute nearby values, because all values within a block
+are expressed with respect to a common largest exponent.  The presence of
+very large values may result in complete loss of precision of nearby, valid
+numbers.  Currently no solution to this problem is available, but future
+versions of zfp will likely support a bit mask to tag values that should be
+excluded from compression.
+
+-------------------------------------------------------------------------------
+
+Q8: Can I use zfp to store integer data such as 8-bit quantized images or
+16-bit digital elevation models?
+
+A: Yes (as of version 0.4.0), but the data has to be promoted to 32-bit signed
+integers first.  This should be done one block at a time using an appropriate
+zfp_promote_*_to_int32 function call (see zfp.h).  Note that these functions
+shift the low-precision integers into the most significant bits of 31-bit (not
+32-bit) integers and also convert unsigned to signed integers.  Do use these
+functions rather than simply casting 8-bit integers to 32 bits to avoid wasting
+compressed bits to encode leading zeros.  Moreover, in fixed-precision mode,
+set the precision relative to the precision of the source data.
+
+-------------------------------------------------------------------------------
+
+Q9: I have some 32-bit integer data.  Can I compress it using zfp's 32-bit
+integer support?
+
+A: Maybe.  zfp compression of 32-bit and 64-bit integers requires that each
+integer f have magnitude |f| < 2^30 and |f| < 2^62, respectively.  To handle
+signed integers that span the entire range -2^31 <= x < 2^31, or unsigned
+integers 0 <= x < 2^32, the data has to be promoted to 64 bits first.
+
+-------------------------------------------------------------------------------
+
+Q10: Why does zfp corrupt memory rather than return an error code if not enough
+memory is allocated for the compressed data?
+
+A: This is for performance reasons.  zfp was primarily designed for fast
+random access to fixed-rate compressed arrays, where checking for buffer
+overruns is unnecessary.  Adding a test for every compressed byte output
+would significantly compromise performance.
+
+One way around this problem (when not in fixed-rate mode) is to use the
+maxbits parameter in conjunction with the maximum precision or maximum
+absolute error parameters to limit the size of compressed blocks.  Finally,
+the function zfp_stream_maximum_size returns a conservative buffer size
+that is guaranteed to be large enough to hold the compressed data and the
+optional header.
+
+-------------------------------------------------------------------------------
+
+Q11: Are zfp compressed streams portable across platforms?  Are there, for
+example, endianness issues?
+
+A: To ensure portability across different endian platforms, the bit stream
+must be written in increments of single bytes on big endian processors (e.g.
+PowerPC, SPARC), which is achieved by compiling zfp with
+
+  -DBITSTREAM_WORD_TYPE=uint8
+
+See the Config file.  Note that on little endian processors (e.g. Intel
+x86-64 and AMD64), the word size does not affect the bit stream produced,
+and thus the default word size may be used.  By default, zfp uses a word
+size of 64 bits, which results in the coarsest rate granularity but fastest
+(de)compression.  If cross-platform portability is not needed, then the
+maximum word size is recommended (but see also the next question).
+
+Furthermore, zfp assumes that the floating-point format conforms to IEEE 754.
+Issues may arise on architectures that do not support IEEE floating point.
+
+-------------------------------------------------------------------------------
+
+Q12: How can I achieve finer rate granularity?
+
+A: For d-dimensional arrays, zfp supports a granularity of 8 / 4^d bits, i.e.
+the rate can be specified in increments of a fraction of a bit for 2D and 3D
+arrays.  Such fine rate selection is always available for sequential
+compression (e.g. when calling zfp_compress).  
+
+Unlike in sequential compression, zfp's compressed arrays require random
+access writes, which are supported only at the granularity of whole words.
+By default, a word is 64 bits, which gives a rate granularity of 64 / 4^d
+in d dimensions, i.e. 16 bits in 1D, 4 bits in 2D, and 1 bit in 3D.
+
+To achieve finer granularity, recompile zfp with a smaller (but as large as
+possible) stream word size, e.g.
+
+  -DBITSTREAM_WORD_TYPE=uint8
+
+gives the finest possible granularity, but at the expense of (de)compression
+speed.  See the Config file.
+
+-------------------------------------------------------------------------------
+
+Q13: Can I generate progressive zfp streams?
+
+A: Yes, but it requires some coding effort.  There is no high-level support
+for progressive zfp streams.  To implement progressive fixed-rate streams, 
+the fixed-length bit streams should be interleaved among the blocks that
+make up an array.  For instance, if a 3D array uses 1024 bits per block,
+then those 1024 bits could be broken down into, say, 16 pieces of 64 bits
+each, resulting in 16 discrete quality settings.  By storing the blocks
+interleaved such that the first 64 bits of all blocks are contiguous,
+followed by the next 64 bits of all blocks, etc., one can achieve progressive
+decompression by setting the maxbits parameter (see zfp_stream_set_params)
+to the number of bits per block received so far.
+
+To enable interleaving of blocks, zfp must first be compiled with
+
+  -DBIT_STREAM_STRIDED
+
+to enable strided bit stream access.  In the example above, if the stream
+word size is 64 bits and there are n blocks, then
+
+  stream_set_stride(stream, m, n);
+
+implies that after every m 64-bit words have been decoded, the bit stream
+is advanced by m * n words to the next set of m 64-bit words associated
+with the block.
+
+-------------------------------------------------------------------------------
+
+Q14: How do I initialize the decompressor?
+
+A: The zfp_stream and zfp_field objects usually need to be initialized with
+the same values as they had during compression (but see Q15 for exceptions).
+These objects hold the compression mode and parameters, and field data like
+the scalar type and dimensions.  By default, these parameters are not stored
+with the compressed stream (the "codestream") and prior to zfp 0.5.0 had to
+be maintained separately by the application.
+
+Since version 0.5.0, functions exist for reading and writing a 12- to 19-byte
+header that encodes compression and field parameters.  For applications that
+wish to embed only the compression parameters, e.g. when the field dimensions
+are already known, there are separate functions that encode and decode this
+information independently.
+
+-------------------------------------------------------------------------------
+
+Q15: Must I use the same parameters during compression and decompression?
+
+A: Not necessarily.  It is possible to use more tightly constrained zfp_stream
+parameters during decompression than were used during compression.  For
+instance, one may use a larger minbits, smaller maxbits, smaller maxprec, or
+larger minexp during decompression to process fewer compressed bits than are
+stored, and to decompress the array more quickly at a lower precision.  This
+may be useful in situations where the precision and accuracy requirements are
+not known a priori, thus forcing conservative settings during compression, or
+when the compressed stream is used for multiple purposes.  For instance,
+visualization usually has less stringent precision requirements than
+quantitative data analysis.  This feature of decompressing to a lower precision
+is particularly useful when the stream is stored progressively (see Q13).
+
+Note that one may not use less constrained parameters during decompression,
+e.g. one cannot ask for more than maxprec bits of precision when decompressing.
+
+-------------------------------------------------------------------------------
+
+Q16: Do strides have to match during compression and decompression?
+
+A: No.  For instance, a 2D vector field
+
+  float in[ny][nx][2];
+
+could be compressed as two scalar fields with strides sx = 2, sy = 2 * nx,
+and with pointers &in[0][0][0] and &in[0][0][1] to the first value of each
+scalar field.  These two scalar fields can later be decompressed as
+non-interleaved fields
+
+  float out[2][ny][nx];
+
+using strides sx = 1, sy = nx and pointers &out[0][0][0] and &out[1][0][0].
+
+-------------------------------------------------------------------------------
+
+Q17: Why does zfp sometimes not respect my error tolerance?
+
+A: zfp does not store each floating-point value independently, but represents
+a group of values (4, 16, or 64 values, depending on dimensionality) as linear
+combinations like averages by evaluating arithmetic expressions.  Just like in
+uncompressed IEEE floating-point arithmetic, both representation error and
+roundoff error in the least significant bit(s) often occur.
+
+To illustrate this, consider compressing the following 1D array of four floats
+
+  float f[4] = { 1, 1e-1, 1e-2, 1e-3 };
+
+using the zfp command-line tool:
+
+  zfp -f -a 0 4 0 0 input.dat output.dat
+
+In spite of an error tolerance of zero, the reconstructed values are
+
+  float g[4] = { 1, 1e-1, 9.999998e-03, 9.999946e-04 };
+
+with a (computed) maximum error of 5.472e-9.  Because f[3] = 1e-3 can only
+be approximately represented in radix-2 floating-point, the actual error
+is even smaller: 5.424e-9.  This reconstruction error is primarily due to zfp's
+block-floating-point representation, which expresses the four values relative
+to a single, common binary exponent.  Such exponent alignment occurs also in
+regular IEEE floating-point operations like addition.  For instance,
+
+  float x = (f[0] + f[3]) - 1;
+
+should of course result in x = f[3] = 1e-3, but due to exponent alignment
+a few of the least significant bits of f[3] are lost in the addition, giving
+a result of x = 1.0000467e-3 and a roundoff error of 4.668e-8.  Similarly,
+
+  float sum = f[0] + f[1] + f[2] + f[3];
+
+should return sum = 1.111, but is computed as 1.1110000610.  Moreover, the
+value 1.111 cannot even be represented exactly in (radix-2) floating-point;
+the closest float is 1.1109999.  Thus the computed error
+
+  float error = sum - 1.111f;
+
+which itself has some roundoff error, is 1.192e-7.
+
+Phew!  Note how the error introduced by zfp (5.472e-9) is in fact one to two
+orders of magnitude smaller than the roundoff errors (4.668e-8 and 1.192e-7)
+introduced by IEEE floating-point in these computations.  This lower error
+is in part due to zfp's use of 30-bit significands compared to IEEE's 24-bit
+single-precision significands.  Note that data sets with a large dynamic
+range, e.g. where adjacent values differ a lot in magnitude, are more
+susceptible to representation errors.
+
+The moral of the story is that error tolerances smaller than machine epsilon
+(relative to the data range) cannot always be satisfied by zfp.  Nor are such
+tolerances necessarily meaningful for representing floating-point data that
+originated in floating-point arithmetic expressions, since accumulated
+roundoff errors are likely to swamp compression errors.  Because such roundoff
+errors occur frequently in floating-point arithmetic, insisting on lossless
+compression on the grounds of accuracy is tenuous at best.

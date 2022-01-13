@@ -1,0 +1,10 @@
+{ // a dense grid setup so that every level is the same res, 128^3, with 2 8-wide levels. ie a single res grid with 16 wide features
+	"parent" : "base.json",
+	"encoding": {
+		"otype": "TiledGrid",
+		"n_levels": 2,
+		"n_features_per_level": 8, // Use 8-wide levels rather than the default for higher perf.
+		"base_resolution": 128,
+		"per_level_scale": 1.0
+	}
+}

@@ -1,0 +1,18 @@
+[submodule "dependencies/pybind11"]
+	path = dependencies/pybind11
+	url = https://github.com/Tom94/pybind11
+[submodule "dependencies/eigen"]
+	path = dependencies/eigen
+	url = https://github.com/Tom94/eigen
+[submodule "dependencies/glfw"]
+	path = dependencies/glfw
+	url = https://github.com/Tom94/glfw
+[submodule "dependencies/args"]
+	path = dependencies/args
+	url = https://github.com/Taywee/args
+[submodule "dependencies/tinylogger"]
+	path = dependencies/tinylogger
+	url = https://github.com/Tom94/tinylogger
+[submodule "dependencies/tiny-cuda-nn"]
+	path = dependencies/tiny-cuda-nn
+	url = https://github.com/NVlabs/tiny-cuda-nn

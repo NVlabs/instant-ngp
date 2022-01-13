@@ -1,0 +1,9 @@
+{
+	"parent": "frequency.json",
+	"encoding": {
+		"otype": "Identity"
+	},
+	"dir_encoding": {
+		"otype": "Identity"
+	}
+}
