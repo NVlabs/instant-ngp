@@ -72,11 +72,17 @@ def run_colmap(args):
 		os.remove(db)
 	do_system(f"colmap feature_extractor --ImageReader.camera_model OPENCV --ImageReader.single_camera 1 --database_path {db} --image_path {images}")
 	do_system(f"colmap {args.colmap_matcher}_matcher --database_path {db}")
-	do_system(f"rm -rf {sparse}")
+	try:
+		os.remove(sparse)
+	except OSError:
+		pass
 	do_system(f"mkdir {sparse}")
 	do_system(f"colmap mapper --database_path {db} --image_path {images} --output_path {sparse}")
 	do_system(f"colmap bundle_adjuster --input_path {sparse}/0 --output_path {sparse}/0 --BundleAdjustment.refine_principal_point 1")
-	do_system(f"rm -rf {text}")
+	try:
+		os.remove(text)
+	except OSError:
+		pass
 	do_system(f"mkdir {text}")
 	do_system(f"colmap model_converter --input_path {sparse}/0 --output_path {text} --output_type TXT")
 
