@@ -28,9 +28,8 @@ For business inquiries, please visit our website and submit the form: [NVIDIA Re
   - On some machines, `pyexr` refuses to install via `pip`. This can be resolved by installing a pre-built OpenEXR from [here](https://www.lfd.uci.edu/~gohlke/pythonlibs/#openexr).
 - __(optional)__ OptiX __7.3 or higher__ for faster mesh SDF training. Set the environment variable `OptiX_INSTALL_DIR` to the installation directory if it is not discovered automatically.
 
-## Linux
 
-First, install the following packages
+If you are using Linux, we recommend the following packages
 ```sh
 sudo apt-get install build-essential git \
              python3-dev python3-pip libopenexr-dev \
@@ -38,15 +37,15 @@ sudo apt-get install build-essential git \
              libxinerama-dev libxcursor-dev libxi-dev
 ```
 
-Next, we recommend installing CUDA and OptiX in `/usr/local/`.
-Make sure to add your CUDA installation to your path, for example, if you have CUDA 11.4, add the following to your `~/.bashrc`
+We also recommend installing CUDA and OptiX in `/usr/local/` and adding the CUDA installation to your path.
+For example, if you have CUDA 11.4, add the following to your `~/.bashrc`
 ```sh
 export PATH="/usr/local/cuda-11.4/bin:$PATH"
 export LD_LIBRARY_PATH="/usr/local/cuda-11.4/lib64:$LD_LIBRARY_PATH"
 ```
 
 
-# Compilation
+# Compilation (Windows & Linux)
 
 Begin by cloning this repository and all its submodules using the following command:
 ```sh
@@ -72,13 +71,12 @@ If automatic GPU architecture detection fails, (as can happen if you have multip
 
 <img src="docs/assets_readme/testbed.png" width="100%"/>
 
-This codebase comes with an interactive testbed that includes many features beyond our academic publication:
-- Additional training features, such as real-time camera ex- and intrinsics optimization
-- Marching cubes for NeRF->Mesh and SDF->Mesh conversion
-- Various visualization options (e.g. neuron activations)
-- A spline-based camera path editor to create videos
-- Debug visualizations of the activations of every neuron input and output
-- And many more task-specific settings
+This codebase comes with an interactive testbed that includes many features beyond our academic publication, such as:
+- Additional training features, such as real-time camera ex- and intrinsics optimization.
+- Marching cubes for NeRF->Mesh and SDF->Mesh conversion.
+- A spline-based camera path editor to create videos.
+- Debug visualizations of the activations of every neuron input and output.
+- And many more task-specific settings.
 
 
 ## NeRF fox
@@ -89,7 +87,8 @@ One test scene is provided in this repository, using a small number of frames fr
 instant-ngp$ ./build/testbed --scene data/nerf/fox
 ```
 
-Alternatively, download any NeRF-compatible scene (e.g. [from the NeRF authors' drive](https://drive.google.com/drive/folders/1JDdLGDruGNXWnM1eqY1FNL9PlStjaKWi)) into the data subfolder. now you can run:
+Alternatively, download any NeRF-compatible scene (e.g. [from the NeRF authors' drive](https://drive.google.com/drive/folders/1JDdLGDruGNXWnM1eqY1FNL9PlStjaKWi)) into the data subfolder.
+Now you can run:
 
 ```sh
 instant-ngp$ ./build/testbed --scene data/nerf_synthetic/lego
@@ -114,7 +113,7 @@ instant-ngp$ ./build/testbed --scene data/image/albert.exr
 ## Volume Renderer
 
 Download the nanovdb volume file for the Disney Cloud dataset from <a href="https://drive.google.com/drive/folders/1SuycSAOSG64k2KLV7oWgyNWyCvZAkafK?usp=sharing"> this google drive link</a>.
-The dataset is derived from <a href="https://disneyanimation.com/data-sets/?drawer=/resources/clouds/">this</a> dataset which is licensed under a <a href="https://media.disneyanimation.com/uploads/production/data_set_asset/6/asset/License_Cloud.pdf">CC BY-SA 3.0 License</a>.
+The dataset is derived from <a href="https://disneyanimation.com/data-sets/?drawer=/resources/clouds/">this</a> dataset (<a href="https://media.disneyanimation.com/uploads/production/data_set_asset/6/asset/License_Cloud.pdf">CC BY-SA 3.0</a>).
 
 ```sh
 instant-ngp$ ./build/testbed --mode volume --scene data/volume/wdas_cloud_quarter.nvdb

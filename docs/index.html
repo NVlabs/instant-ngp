@@ -225,7 +225,7 @@ figure {
  <body>
 <div class="container">
 	<div class="paper-title">
-	  <h1>Instant Neural Graphics Primitives with a Multiresolution Hash Encoding</h1>
+		<h1>Instant Neural Graphics Primitives with a Multiresolution Hash Encoding</h1>
 	</div>
 
 	<div id="authors">
@@ -275,7 +275,7 @@ figure {
 
 		<figure style="width: 25%; float: left">
 			<p class="caption_bold">
-				Neural radiance field
+				NeRF
 			</p>
 		</figure>
 
@@ -294,11 +294,11 @@ figure {
 
 		<figure style="width: 100%; float: left">
 			<p class="caption_justify">
-				We demonstrate near-instant training of neural graphics primitives on a single GPU for multiple tasks. In <b>Gigapixel image</b> we represent an image by a neural network. <b>SDF</b> learns a signed distance function in 3D space whose zero level-set represents a 2D surface.
+				We demonstrate near-instant training of neural graphics primitives on a single GPU for multiple tasks. In <b>gigapixel image</b> we represent an image by a neural network. <b>SDF</b> learns a signed distance function in 3D space whose zero level-set represents a 2D surface.
 				<!--<b>Neural radiance caching</b> (NRC) <a href="https://research.nvidia.com/publication/2021-06_Real-time-Neural-Radiance">[Müller et al. 2021]</a> employs a neural network that is trained in real-time to cache costly lighting calculations-->
 				<b>NeRF</b> <a href="https://research.nvidia.com/publication/2021-06_Real-time-Neural-Radiance">[Mildenhall et al. 2020]</a> uses 2D images and their camera poses to reconstruct a volumetric radiance-and-density field that is visualized using ray marching.
-				Lastly, <b>Neural volume</b> learns a denoised radiance and density field directly from a volumetric path tracer.
-				In all tasks, our encoding and its efficient implementation provide clear benefits: near-instant training, high quality, and simplicity. Our encoding is task-agnostic: we use the same implementation and hyperparameters across all tasks and only vary the hash table size which trades off quality and performance.
+				Lastly, <b>neural volume</b> learns a denoised radiance and density field directly from a volumetric path tracer.
+				In all tasks, our encoding and its efficient implementation provide clear benefits: instant training, high quality, and simplicity. Our encoding is task-agnostic: we use the same implementation and hyperparameters across all tasks and only vary the hash table size which trades off quality and performance.
 			</p>
 		</figure>
 	</section>
@@ -334,7 +334,7 @@ figure {
 				Your browser does not support the video tag.
 			</video>
 			<p class="caption">
-				Real-time training progress on the image task where the MLP learns the mapping from 2D coordinates to RGB colors of a high-resolution image. Note that in this video, the network is trained from scratch - but converges so quickly you may miss it if you blink! <br/>
+				Real-time training progress on the image task where the neural network learns the mapping from 2D coordinates to RGB colors of a high-resolution image. Note that in this video, the network is trained from scratch - but converges so quickly you may miss it if you blink! <br/>
 			</p>
 		</figure>
 
@@ -390,7 +390,7 @@ figure {
 			<p class="caption_inline">10k + 12.6M parameters</br>1:45 (mm:ss)</p>
 		</figure>
 		<p class="caption_justify">
-			A demonstration of the reconstruction quality of different encodings and parametric data structures for storing trainable feature embeddings. Each configuration was trained for 11000 steps using our fast NeRF implementation, varying only the input encoding. The number of trainable parameters (MLP weights + encoding parameters) and training time are shown below each image. Our encoding (d) with a similar total number of trainable parameters as the frequency encoding (c) trains over 8 times faster, due to the sparsity of updates to the parameters and smaller MLP. Increasing the number of parameters (e) further improves approximation quality without significantly increasing training time.
+			A demonstration of the reconstruction quality of different encodings. Each configuration was trained for 11000 steps using our fast NeRF implementation, varying only the input encoding and the neural network size. The number of trainable parameters (neural network weights + encoding parameters) and training time are shown below each image. Our encoding <span class="caption_bold">(d)</span> with a similar total number of trainable parameters as the frequency encoding <span class="caption_bold">(c)</span> trains over 8 times faster, due to the sparsity of updates to the parameters and smaller neural network. Increasing the number of parameters <span class="caption_bold">(e)</span> further improves approximation quality without significantly increasing training time.
 		</p>
 		<figure>
 			<video class="centered" width="100%" autoplay muted loop playsinline>
@@ -402,46 +402,43 @@ figure {
 			</p>
 		</figure>
 
-		<figure style="width: 50.0%; float: left">
+		<figure style="width: 49.5%; float: left">
 			<video class="centered" width="100.0%" autoplay muted loop playsinline>
 				<source src="assets/robot.mp4" type="video/mp4">
 				Your browser does not support the video tag.
 			</video>
-			<p class="caption">
-				Fly-through in a trained Neural Radiance Field. Large, natural 360 scenes are well supported.
-			</p>
 		</figure>
 
-		<figure style="width: 50.0%; float: left">
+		<figure style="width: 49.5%; float: right">
 			<video class="centered" width="100.0%" autoplay muted loop playsinline>
 				<source src="assets/modsynth.mp4" type="video/mp4">
 				Your browser does not support the video tag.
 			</video>
-			<p class="caption">
-				Fly-through in a trained Neural Radiance Field.
-				Despite being trained from just 34 photos, this complex scene with many disocclusions and specular surfaces is well reconstructed.
-			</p>
 		</figure>
+		<p class="caption_justify">
+			Fly-throughs of trained real-world NeRFs. Large, natural 360 scenes (left) as well as complex scenes with many disocclusions and specular surfaces (right) are well supported.
+			Both models can be rendered in real time and were trained in under 5 minutes from casually captured data: the left one from an iPhone video and the right one from 34 photographs.
+		</p>
 
-		<figure style="width: 50.0%;">
+		<figure style="width: 75.0%;">
 			<video class="centered" width="100.0%" autoplay muted loop playsinline>
 				<source src="assets/cloud_training.mp4" type="video/mp4">
 				Your browser does not support the video tag.
 			</video>
 			<p class="caption">
-				We train NeRF-like radiance fields from the noisy output of a volumetric path tracer. Rays are fed in real-time to the network during training, which learns a denoised radiance field.
+				We also support training NeRF-like radiance fields from the noisy output of a volumetric path tracer. Rays are fed in real-time to the network during training, which learns a denoised radiance field.
 			</p>
 		</figure>
 
 		<h3>Signed Distance Function</h3>
 		<hr>
-		<figure style="width: 50.0%;">
+		<figure style="width: 100.0%;">
 			<video class="centered" width="100.0%" autoplay muted loop playsinline>
 				<source src="assets/sdf_grid_lq.mp4" type="video/mp4">
 				Your browser does not support the video tag.
 			</video>
 			<p class="caption">
-				Real-time training progress on various SDF datsets. Training data is generated on the fly from the ground-truth mesh using the NVIDIA OptiX raytracing framework.
+				Real-time training progress on various SDF datsets. Training data is generated on the fly from the ground-truth mesh using the <a href="https://developer.nvidia.com/optix">NVIDIA OptiX raytracing framework</a>.
 			</p>
 		</figure>
 
@@ -453,7 +450,7 @@ figure {
 				Your browser does not support the video tag.
 			</video>
 			<p class="caption">
-				Direct visualization of a Neural Radiance Cache, in which the network preducts outgoing radiance at the first non-specular vertex of each pixel's path, and is trained on-line from rays generated by a realtime path-tracer. On the left, we show results using the triangular encoding of <a href="https://research.nvidia.com/publication/2021-06_Real-time-Neural-Radiance">[Müller et al. 2021]</a>; on the right, the new Multiresolution Hash Encoding allows the network to learn much sharper details, for example in the shadow regions.
+				Direct visualization of a <em>neural radiance cache</em>, in which the network predicts outgoing radiance at the first non-specular vertex of each pixel's path, and is trained on-line from rays generated by a real-time pathtracer. On the left, we show results using the triangle wave encoding of <a href="https://research.nvidia.com/publication/2021-06_Real-time-Neural-Radiance">[Müller et al. 2021]</a>; on the right, the new multiresolution hash encoding allows the network to learn much sharper details, for example in the shadow regions.
 			</p>
 		</figure>
 
@@ -510,11 +507,13 @@ figure {
 			<a href="https://www.cs.toronto.edu/~jlucas/">James Lucas</a> and
 			<a href="https://tovacinni.github.io">Towaki Takikawa</a>
 			for proof-reading and feedback.
-			We also thank <a href="https://tovacinni.github.io">Towaki Takikawa</a> for providing us with the framework for this website.
+			We also thank <a href="https://joeylitalien.github.io/">Joey Litalien</a> for providing us with the framework for this website.
 			<br/>
 			<em>Girl With a Pearl Earing</em> renovation by Koorosh Orooj <a href="http://profoundism.com/free_licenses.html">(CC BY-SA 4.0 License)</a>
 			<br/>
 			<em>Lucy</em> model from the <a href="http://graphics.stanford.edu/data/3Dscanrep/">Stanford 3D scan repository</a>
+			<br/>
+			<em>Disney Cloud</em> model by Walt Disney Animation Studios. (<a href="https://media.disneyanimation.com/uploads/production/data_set_asset/6/asset/License_Cloud.pdf">CC BY-SA 3.0</a>)
 			</p>
 		</div>
 	</section>

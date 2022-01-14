@@ -38,7 +38,8 @@ DATA_FOLDER = SCRIPTS_FOLDER/"data"
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 RESULTS_DIR = os.path.join(ROOT_DIR, "results")
 NGP_DATA_FOLDER = os.environ.get("NGP_DATA_FOLDER") or os.path.join(ROOT_DIR, "data")
-#print(f"NGP_DATA_FOLDER is {NGP_DATA_FOLDER}")
+
+
 NERF_DATA_FOLDER = os.path.join(NGP_DATA_FOLDER, "nerf")
 SDF_DATA_FOLDER = os.path.join(NGP_DATA_FOLDER, "sdf")
 IMAGE_DATA_FOLDER = os.path.join(NGP_DATA_FOLDER, "image")
