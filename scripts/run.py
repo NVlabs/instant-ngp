@@ -45,8 +45,8 @@ def parse_args():
 	parser.add_argument("--screenshot_h", type=int, default=0, help="screenshot res height")
 	parser.add_argument("--screenshot_spp", type=int, default=16, help="screenshot spp")
 
-	parser.add_argument("--gui", action="store_true", help="Show a gui.")
-	parser.add_argument("--train", action="store_true", help="Train right from the beginning.")
+	parser.add_argument("--gui", action="store_true", help="Run the testbed GUI interactively.")
+	parser.add_argument("--train", action="store_true", help="If the GUI is enabled, controls whether training starts immediately.")
 	parser.add_argument("--n_steps", type=int, default=-1, help="Number of steps to train for before quitting.")
 
 	parser.add_argument("--sharpen", default=0, help="Set amount of sharpening applied to NeRF training images")

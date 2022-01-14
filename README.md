@@ -1,6 +1,6 @@
 # Instant Neural Graphics Primitives ![](https://github.com/NVlabs/instant-ngp/workflows/CI/badge.svg)
 
-<img src="docs/assets_readme/fox.gif" height="338"/> <img src="docs/assets_readme/robot5.gif" height="338"/>
+<img src="docs/assets_readme/fox.gif" height="340"/> <img src="docs/assets_readme/robot5.gif" height="340"/>
 
 Ever wanted to train a NeRF model of a fox in under 5 seconds? Or fly around a scene captured from photos of a factory robot? Of course you have!
 
@@ -9,9 +9,8 @@ In each case, we train and render a MLP with multiresolution hash input encoding
 
 > __Instant Neural Graphics Primitives with a Multiresolution Hash Encoding__  
 > [Thomas Müller](https://tom94.net), [Alex Evans](https://research.nvidia.com/person/alex-evans), [Christoph Schied](https://research.nvidia.com/person/christoph-schied), [Alexander Keller](https://research.nvidia.com/person/alex-keller)  
-> _arXiv, Jan 2022_
->
-> [ [Project page](https://nvlabs.github.io/instant-ngp) ] [ [Paper](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.pdf) ] [ [Video](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.mp4) ]
+> _arXiv [cs.GR], Jan 2022_  
+> __[ [Project page](https://nvlabs.github.io/instant-ngp) ] [ [Paper](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.pdf) ] [ [Video](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.mp4) ]__
 
  
 For business inquiries, please visit our website and submit the form: [NVIDIA Research Licensing](https://www.nvidia.com/en-us/research/inquiries/)
@@ -20,16 +19,14 @@ For business inquiries, please visit our website and submit the form: [NVIDIA Re
 # Requirements
 
 - Both Windows and Linux are supported.
-- CUDA __v10.2 or higher__.
-- CMake __v3.19 or higher__.
-- A __C++14__ capable compiler.
+- CUDA __v10.2 or higher__, a __C++14__ capable compiler, and CMake __v3.19 or higher__.
 - A high-end NVIDIA GPU that supports TensorCores and has a large amount of memory. The framework was tested primarily with an RTX 3090.
 - __(optional)__ Python __3.7 or higher__ for interactive Python bindings. Run `pip install -r requirements.txt` to install the required dependencies.
-  - On some machines, `pyexr` refuses to install via `pip`. This can be resolved by installing a pre-built OpenEXR from [here](https://www.lfd.uci.edu/~gohlke/pythonlibs/#openexr).
+  - On some machines, `pyexr` refuses to install via `pip`. This can be resolved by installing OpenEXR from [here](https://www.lfd.uci.edu/~gohlke/pythonlibs/#openexr).
 - __(optional)__ OptiX __7.3 or higher__ for faster mesh SDF training. Set the environment variable `OptiX_INSTALL_DIR` to the installation directory if it is not discovered automatically.
 
 
-If you are using Linux, we recommend the following packages
+If you are using Linux, install the following packages
 ```sh
 sudo apt-get install build-essential git \
              python3-dev python3-pip libopenexr-dev \
@@ -59,19 +56,16 @@ instant-ngp$ cmake . -B build
 instant-ngp$ cmake --build build --config RelWithDebInfo -j 16
 ```
 
-If the build succeeds, you can now run the code via the `build/testbed` executable, or the `scripts/run.py` script described below.
+If the build succeeded, you can now run the code via the `build/testbed` executable or the `scripts/run.py` script described below.
 
-If automatic GPU architecture detection fails, (as can happen if you have multiple GPUs installed), set the  `TCNN_CUDA_ARCHITECTURES` enivonment variable for the GPU you would like to use. Set it to
-- `86` for RTX 3000 cards,
-- `80` for A100 cards, and
-- `75` for RTX 2000 cards.
+If automatic GPU architecture detection fails, (as can happen if you have multiple GPUs installed), set the  `TCNN_CUDA_ARCHITECTURES` enivonment variable for the GPU you would like to use. Set it to `86` for RTX 3000 cards, `80` for A100 cards, and  `75` for RTX 2000 cards.
 
 
 # Interactive training and rendering
 
 <img src="docs/assets_readme/testbed.png" width="100%"/>
 
-This codebase comes with an interactive testbed that includes many features beyond our academic publication, such as:
+This codebase comes with an interactive testbed that includes many features beyond our academic publication:
 - Additional training features, such as real-time camera ex- and intrinsics optimization.
 - Marching cubes for NeRF->Mesh and SDF->Mesh conversion.
 - A spline-based camera path editor to create videos.
@@ -87,7 +81,7 @@ One test scene is provided in this repository, using a small number of frames fr
 instant-ngp$ ./build/testbed --scene data/nerf/fox
 ```
 
-Alternatively, download any NeRF-compatible scene (e.g. [from the NeRF authors' drive](https://drive.google.com/drive/folders/1JDdLGDruGNXWnM1eqY1FNL9PlStjaKWi)) into the data subfolder.
+Alternatively, download any NeRF-compatible scene (e.g. [from the NeRF authors' drive](https://drive.google.com/drive/folders/1JDdLGDruGNXWnM1eqY1FNL9PlStjaKWi)).
 Now you can run:
 
 ```sh
@@ -112,8 +106,7 @@ instant-ngp$ ./build/testbed --scene data/image/albert.exr
 
 ## Volume Renderer
 
-Download the nanovdb volume file for the Disney Cloud dataset from <a href="https://drive.google.com/drive/folders/1SuycSAOSG64k2KLV7oWgyNWyCvZAkafK?usp=sharing"> this google drive link</a>.
-The dataset is derived from <a href="https://disneyanimation.com/data-sets/?drawer=/resources/clouds/">this</a> dataset (<a href="https://media.disneyanimation.com/uploads/production/data_set_asset/6/asset/License_Cloud.pdf">CC BY-SA 3.0</a>).
+Download the [nanovdb volume for the Disney cloud](https://drive.google.com/drive/folders/1SuycSAOSG64k2KLV7oWgyNWyCvZAkafK?usp=sharing), which is derived [from here](https://disneyanimation.com/data-sets/?drawer=/resources/clouds/) ([CC BY-SA 3.0](https://media.disneyanimation.com/uploads/production/data_set_asset/6/asset/License_Cloud.pdf)).
 
 ```sh
 instant-ngp$ ./build/testbed --mode volume --scene data/volume/wdas_cloud_quarter.nvdb
