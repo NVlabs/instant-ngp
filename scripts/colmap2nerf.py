@@ -53,7 +53,10 @@ def run_ffmpeg(args):
 	print(f"running ffmpeg with input video file={video}, output image folder={images}, fps={fps}.")
 	if (input(f"warning! folder '{images}' will be deleted/replaced. continue? (Y/n)").lower().strip()+"y")[:1] != "y":
 		sys.exit(1)
-	shutil.rmtree(images)
+	try:
+		shutil.rmtree(images)
+	except:
+		pass
 	do_system(f"mkdir {images}")
 	do_system(f"ffmpeg -i {video} -qscale:v 1 -qmin 1 -vf \"fps={fps}\" {images}/%04d.jpg")
 
@@ -73,11 +76,17 @@ def run_colmap(args):
 		os.remove(db)
 	do_system(f"colmap feature_extractor --ImageReader.camera_model OPENCV --ImageReader.single_camera 1 --database_path {db} --image_path {images}")
 	do_system(f"colmap {args.colmap_matcher}_matcher --database_path {db}")
-	shutil.rmtree(sparse)
+	try:
+		shutil.rmtree(sparse)
+	except:
+		pass
 	do_system(f"mkdir {sparse}")
 	do_system(f"colmap mapper --database_path {db} --image_path {images} --output_path {sparse}")
 	do_system(f"colmap bundle_adjuster --input_path {sparse}/0 --output_path {sparse}/0 --BundleAdjustment.refine_principal_point 1")
-	shutil.rmtree(text)
+	try:
+		shutil.rmtree(text)
+	except:
+		pass
 	do_system(f"mkdir {text}")
 	do_system(f"colmap model_converter --input_path {sparse}/0 --output_path {text} --output_type TXT")
 
