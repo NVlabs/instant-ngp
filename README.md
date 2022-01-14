@@ -19,11 +19,11 @@ For business inquiries, please visit our website and submit the form: [NVIDIA Re
 # Requirements
 
 - Both Windows and Linux are supported.
-- CUDA __v10.2 or higher__, a __C++14__ capable compiler, and CMake __v3.19 or higher__.
+- [CUDA](https://developer.nvidia.com/cuda-toolkit) __v10.2 or higher__, a __C++14__ capable compiler, and [CMake](https://cmake.org/) __v3.19 or higher__.
 - A high-end NVIDIA GPU that supports TensorCores and has a large amount of memory. The framework was tested primarily with an RTX 3090.
-- __(optional)__ Python __3.7 or higher__ for interactive Python bindings. Run `pip install -r requirements.txt` to install the required dependencies.
+- __(optional)__ [Python](https://www.python.org/) __3.7 or higher__ for interactive bindings. Also, run `pip install -r requirements.txt`.
   - On some machines, `pyexr` refuses to install via `pip`. This can be resolved by installing OpenEXR from [here](https://www.lfd.uci.edu/~gohlke/pythonlibs/#openexr).
-- __(optional)__ OptiX __7.3 or higher__ for faster mesh SDF training. Set the environment variable `OptiX_INSTALL_DIR` to the installation directory if it is not discovered automatically.
+- __(optional)__ [OptiX](https://developer.nvidia.com/optix) __7.3 or higher__ for faster mesh SDF training. Set the environment variable `OptiX_INSTALL_DIR` to the installation directory if it is not discovered automatically.
 
 
 If you are using Linux, install the following packages
@@ -32,7 +32,7 @@ sudo apt-get install build-essential git python3-dev python3-pip libopenexr-dev 
                      libglfw3-dev libglew-dev libomp-dev libxinerama-dev libxcursor-dev
 ```
 
-We also recommend installing CUDA and OptiX in `/usr/local/` and adding the CUDA installation to your path.
+We also recommend installing [CUDA](https://developer.nvidia.com/cuda-toolkit) and [OptiX](https://developer.nvidia.com/optix) in `/usr/local/` and adding the CUDA installation to your path.
 For example, if you have CUDA 11.4, add the following to your `~/.bashrc`
 ```sh
 export PATH="/usr/local/cuda-11.4/bin:$PATH"
