@@ -1,6 +1,6 @@
 # Instant Neural Graphics Primitives ![](https://github.com/NVlabs/instant-ngp/workflows/CI/badge.svg)
 
-<img src="docs/assets_readme/fox.gif" height="340"/> <img src="docs/assets_readme/robot5.gif" height="340"/>
+<img src="docs/assets_readme/fox.gif" height="342"/> <img src="docs/assets_readme/robot5.gif" height="342"/>
 
 Ever wanted to train a NeRF model of a fox in under 5 seconds? Or fly around a scene captured from photos of a factory robot? Of course you have!
 
@@ -28,10 +28,8 @@ For business inquiries, please visit our website and submit the form: [NVIDIA Re
 
 If you are using Linux, install the following packages
 ```sh
-sudo apt-get install build-essential git \
-             python3-dev python3-pip libopenexr-dev \
-             libglfw3-dev libglew-dev libomp-dev  \
-             libxinerama-dev libxcursor-dev libxi-dev
+sudo apt-get install build-essential git python3-dev python3-pip libopenexr-dev libxi-dev \
+                     libglfw3-dev libglew-dev libomp-dev libxinerama-dev libxcursor-dev
 ```
 
 We also recommend installing CUDA and OptiX in `/usr/local/` and adding the CUDA installation to your path.
@@ -71,6 +69,8 @@ This codebase comes with an interactive testbed that includes many features beyo
 - A spline-based camera path editor to create videos.
 - Debug visualizations of the activations of every neuron input and output.
 - And many more task-specific settings.
+- See also our [one minute demonstration video of the tool](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.mp4).
+
 
 
 ## NeRF fox
