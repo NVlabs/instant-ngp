@@ -18,6 +18,7 @@ import sys
 import math
 import cv2
 import os
+import shutil
 
 def parse_args():
 	parser = argparse.ArgumentParser(description="convert a text colmap export to nerf format transforms.json; optionally convert video to images, and optionally run colmap in the first place")
@@ -52,7 +53,7 @@ def run_ffmpeg(args):
 	print(f"running ffmpeg with input video file={video}, output image folder={images}, fps={fps}.")
 	if (input(f"warning! folder '{images}' will be deleted/replaced. continue? (Y/n)").lower().strip()+"y")[:1] != "y":
 		sys.exit(1)
-	do_system(f"rm -rf {images}")
+	shutil.rmtree(images)
 	do_system(f"mkdir {images}")
 	do_system(f"ffmpeg -i {video} -qscale:v 1 -qmin 1 -vf \"fps={fps}\" {images}/%04d.jpg")
 
@@ -72,17 +73,11 @@ def run_colmap(args):
 		os.remove(db)
 	do_system(f"colmap feature_extractor --ImageReader.camera_model OPENCV --ImageReader.single_camera 1 --database_path {db} --image_path {images}")
 	do_system(f"colmap {args.colmap_matcher}_matcher --database_path {db}")
-	try:
-		os.remove(sparse)
-	except OSError:
-		pass
+	shutil.rmtree(sparse)
 	do_system(f"mkdir {sparse}")
 	do_system(f"colmap mapper --database_path {db} --image_path {images} --output_path {sparse}")
 	do_system(f"colmap bundle_adjuster --input_path {sparse}/0 --output_path {sparse}/0 --BundleAdjustment.refine_principal_point 1")
-	try:
-		os.remove(text)
-	except OSError:
-		pass
+	shutil.rmtree(text)
 	do_system(f"mkdir {text}")
 	do_system(f"colmap model_converter --input_path {sparse}/0 --output_path {text} --output_type TXT")
 
@@ -221,7 +216,10 @@ if __name__ == "__main__":
 				continue
 			if  i%2==1 :
 				elems=line.split(" ") # 1-4 is quat, 5-7 is trans, 9 is filename
-				name = str(PurePosixPath(Path(IMAGE_FOLDER, elems[9])))
+				#name = str(PurePosixPath(Path(IMAGE_FOLDER, elems[9])))
+				# why is this requireing a relitive path while using ^
+				image_rel = os.path.relpath(IMAGE_FOLDER)
+				name = str(f"./{image_rel}/{elems[9]}")
 				b=sharpness(name)
 				print(name, "sharpness=",b)
 				image_id = int(elems[0])
