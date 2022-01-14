@@ -245,6 +245,10 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 
 	size_t image_idx = 0;
 
+	if (result.n_images==0) {
+		throw std::invalid_argument{"No training images were found for NeRF training!"};
+	}
+
 	auto progress = tlog::progress(result.n_images);
 
 	result.from_mitsuba = false;
