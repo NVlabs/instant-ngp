@@ -247,8 +247,8 @@ if __name__ == "__main__":
 		if ref_transforms:
 			testbed.fov_axis = 0
 			testbed.fov = ref_transforms["camera_angle_x"] * 180 / np.pi
-			if not len(args.screenshot_frames):
-				args.screenshot_frames = range(len(ref_transforms))
+			if not args.screenshot_frames:
+				args.screenshot_frames = range(len(ref_transforms["frames"]))
 			print(args.screenshot_frames)
 			for idx in args.screenshot_frames:
 				f = ref_transforms["frames"][int(idx)]
@@ -256,6 +256,8 @@ if __name__ == "__main__":
 				cam_matrix = f["transform_matrix"]
 				testbed.set_nerf_camera_matrix(np.matrix(cam_matrix)[:-1,:])
 				outname = os.path.join(args.screenshot_dir, os.path.basename(f["file_path"]))
+				if not os.path.splitext(outname)[1]:
+					outname = outname + '.png' # Some NeRF datasets lack the .png suffix in the dataset metadata
 				print(f"rendering {outname}")
 				image = testbed.render(args.screenshot_w or int(ref_transforms["w"]), args.screenshot_h or int(ref_transforms["h"]), args.screenshot_spp, True)
 				os.makedirs(os.path.dirname(outname), exist_ok=True)
