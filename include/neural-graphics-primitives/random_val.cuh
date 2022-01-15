@@ -28,7 +28,7 @@ NGP_NAMESPACE_BEGIN
 
 using default_rng_t = tcnn::default_rng_t;
 
-static constexpr __device__ float PI = 3.14159265358979323846f;
+inline constexpr float PI() { return 3.14159265358979323846f; }
 
 template <typename RNG>
 inline __host__ __device__ float random_val(RNG& rng) {
@@ -47,7 +47,7 @@ inline __host__ __device__ Eigen::Vector2f random_val_2d(RNG& rng) {
 
 inline __host__ __device__ Eigen::Vector3f cylindrical_to_dir(const Eigen::Vector2f& p) {
 	const float cos_theta = -2.0f * p.x() + 1.0f;
-	const float phi = 2.0f * PI * (p.y() - 0.5f);
+	const float phi = 2.0f * PI() * (p.y() - 0.5f);
 
 	const float sin_theta = sqrtf(fmaxf(1.0f - cos_theta * cos_theta, 0.0f));
 	float sin_phi, cos_phi;
@@ -59,14 +59,14 @@ inline __host__ __device__ Eigen::Vector3f cylindrical_to_dir(const Eigen::Vecto
 inline __host__ __device__ Eigen::Vector2f dir_to_cylindrical(const Eigen::Vector3f& d) {
 	const float cos_theta = fminf(fmaxf(-d.z(), -1.0f), 1.0f);
 	float phi = std::atan2(d.y(), d.x());
-	return {(cos_theta + 1.0f) / 2.0f, (phi / (2.0f * PI)) + 0.5f};
+	return {(cos_theta + 1.0f) / 2.0f, (phi / (2.0f * PI())) + 0.5f};
 }
 
 inline __host__ __device__ Eigen::Vector2f dir_to_spherical_unorm(const Eigen::Vector3f& d) {
 	const float cos_theta = fminf(fmaxf(d.z(), -1.0f), 1.0f);
 	const float theta = acosf(cos_theta);
 	float phi = std::atan2(d.y(), d.x());
-	return {theta / PI, (phi / (2.0f * PI) + 0.5f)};
+	return {theta / PI(), (phi / (2.0f * PI()) + 0.5f)};
 }
 
 template <typename RNG>
@@ -103,7 +103,7 @@ inline __host__ __device__ Eigen::Vector2f random_uniform_disc(RNG& rng) {
 	Eigen::Vector2f sample = random_val_2d(rng);
 	float r = sqrtf(sample.x());
 	float sin_phi, cos_phi;
-	sincosf(2.0f * PI * sample.y(), &sin_phi, &cos_phi);
+	sincosf(2.0f * PI() * sample.y(), &sin_phi, &cos_phi);
 	return Eigen::Vector2f{ r * sin_phi, r * cos_phi };
 }
 
@@ -113,10 +113,10 @@ inline __host__ __device__ Eigen::Vector2f square2disk_shirley(const Eigen::Vect
 	float b = square.y();
 	if (a*a > b*b) { // use squares instead of absolute values
 		r = a;
-		phi = (PI/4.0f) * (b/a);
+		phi = (PI()/4.0f) * (b/a);
 	} else {
 		r = b;
-		phi = (PI/2.0f) - (PI/4.0f) * (a/b);
+		phi = (PI()/2.0f) - (PI()/4.0f) * (a/b);
 	}
 
 	float sin_phi, cos_phi;
@@ -128,7 +128,7 @@ inline __host__ __device__ Eigen::Vector2f square2disk_shirley(const Eigen::Vect
 inline __host__ __device__ __device__ Eigen::Vector3f cosine_hemisphere(const Eigen::Vector2f& u) {
 	// Uniformly sample disk
 	const float r   = sqrtf(u.x());
-	const float phi = 2.0f * PI * u.y();
+	const float phi = 2.0f * PI() * u.y();
 
 	Eigen::Vector3f p;
 	p.x() = r * cosf(phi);

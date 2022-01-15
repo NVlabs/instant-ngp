@@ -46,8 +46,8 @@ using namespace tcnn;
 
 NGP_NAMESPACE_BEGIN
 
-static constexpr __device__ float MAX_DIST = 10.0f;
-static constexpr __device__ float MAX_DIST_SQ = MAX_DIST*MAX_DIST;
+constexpr float MAX_DIST = 10.0f;
+constexpr float MAX_DIST_SQ = MAX_DIST*MAX_DIST;
 
 #ifdef NGP_OPTIX
 OptixDeviceContext g_optix;
