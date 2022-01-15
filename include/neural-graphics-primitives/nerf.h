@@ -22,7 +22,7 @@
 
 NGP_NAMESPACE_BEGIN
 
-static constexpr __device__ uint32_t NERF_GRIDSIZE = 128; // size of the density/occupancy grid.
+inline constexpr __device__ uint32_t NERF_GRIDSIZE() { return 128; } // size of the density/occupancy grid.
 
 struct NerfPayload {
 	Eigen::Vector3f origin;

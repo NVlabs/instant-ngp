@@ -37,8 +37,8 @@ using namespace tcnn;
 
 NGP_NAMESPACE_BEGIN
 
-static constexpr __device__ uint32_t MARCH_ITER = 10000;
-static constexpr __device__ float MIN_DIST = 0.00005f;
+static constexpr uint32_t MARCH_ITER = 10000;
+static constexpr float MIN_DIST = 0.00005f;
 
 __device__ inline float square(float x) { return x * x; }
 __device__ inline float mix(float a, float b, float t) { return a + (b - a) * t; }
@@ -50,16 +50,16 @@ __device__ inline float SchlickFresnel(float u) {
 }
 
 __device__ inline float G1(float NdotH, float a) {
-	if (a >= 1.0) { return 1.0 / PI; }
+	if (a >= 1.0) { return 1.0 / PI(); }
 	float a2 = square(a);
 	float t = 1.0 + (a2 - 1.0) * NdotH * NdotH;
-	return (a2 - 1.0) / (PI * log(a2) * t);
+	return (a2 - 1.0) / (PI() * log(a2) * t);
 }
 
 __device__ inline float G2(float NdotH, float a) {
 	float a2 = square(a);
 	float t = 1.0 + (a2 - 1.0) * NdotH * NdotH;
-	return a2 / (PI * t * t);
+	return a2 / (PI() * t * t);
 }
 
 __device__ inline float SmithG_GGX(float NdotV, float alphaG) {
@@ -137,7 +137,7 @@ __device__ Vector3f evaluate_shading(
 	float Gr = SmithG_GGX(NdotL, 0.25f) * SmithG_GGX(NdotV, 0.25f);
 
 	float CCs=0.25f * clearcoat * Gr * Fr * Dr;
-	Vector3f brdf = (float(1.0f / PI) * mix(Fd, ss, subsurface) * base_color + Fsheen) * (1.0f - metallic) +
+	Vector3f brdf = (float(1.0f / PI()) * mix(Fd, ss, subsurface) * base_color + Fsheen) * (1.0f - metallic) +
 		Gs * Fs * Ds + Vector3f(CCs,CCs,CCs);
 	return Vector3f(brdf.array() * light_color.array()) * NdotL + amb;
 }

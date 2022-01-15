@@ -18,16 +18,16 @@ jobs:
           - os: ubuntu-20.04
             cuda: "11.3"
             arch: 86
-        #   - os: ubuntu-18.04
-        #     cuda: "10.2"
-        #     arch: 75
+          - os: ubuntu-18.04
+            cuda: "10.2"
+            arch: 75
     env:
       build_dir: "build"
       config: "Release"
       TCNN_CUDA_ARCHITECTURES: ${{ matrix.arch }}
     steps:
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install build-essential python3-dev python3-pip libopenexr-dev libglfw3-dev libglew-dev libomp-dev libxinerama-dev libxcursor-dev libxi-dev
+        run: sudo apt-get update && sudo apt-get install build-essential python3-dev libglfw3-dev libglew-dev libxinerama-dev libxcursor-dev libxi-dev
       - uses: actions/checkout@v2
         with:
           submodules: recursive

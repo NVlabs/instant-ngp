@@ -495,7 +495,7 @@ public:
 			tcnn::GPUMemory<float> sharpness_grid;
 		} training = {};
 
-		tcnn::GPUMemory<float> density_grid; // NERF_GRIDSIZE^3 grid of EMA smoothed densities from the network
+		tcnn::GPUMemory<float> density_grid; // NERF_GRIDSIZE()^3 grid of EMA smoothed densities from the network
 		tcnn::GPUMemory<NerfPosition> density_grid_positions;
 		tcnn::GPUMemory<uint32_t> density_grid_indices;
 		tcnn::GPUMemory<uint8_t> density_grid_bitfield;

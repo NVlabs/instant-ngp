@@ -61,7 +61,7 @@ using namespace Eigen;
 
 
 // how much to scale the scene by vs the original nerf dataset; we want to fit the thing in the unit cube
-static constexpr __device__ float NERF_SCALE = 0.33f;
+static constexpr float NERF_SCALE = 0.33f;
 
 
 __global__ void from_fullp(const uint64_t num_elements, const float* __restrict__ pixels, __half* __restrict__ out) {
@@ -491,7 +491,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 				} else if (json.contains("fl_"s + axis)) {
 					return (float)json["fl_"s + axis];
 				} else if (json.contains("camera_angle_"s + axis)) {
-					return fov_to_focal_length(resolution, (float)json["camera_angle_"s + axis] * 180 / PI);
+					return fov_to_focal_length(resolution, (float)json["camera_angle_"s + axis] * 180 / PI());
 				} else {
 					return 0.0f;
 				}

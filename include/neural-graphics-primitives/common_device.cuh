@@ -268,19 +268,19 @@ inline __host__ __device__ Ray pixel_to_ray(
 }
 
 inline __host__ __device__ float fov_to_focal_length(int resolution, float degrees) {
-	return 0.5f * (float)resolution / tanf(0.5f * degrees*(float)PI/180);
+	return 0.5f * (float)resolution / tanf(0.5f * degrees*(float)PI()/180);
 }
 
 inline __host__ __device__ Eigen::Vector2f fov_to_focal_length(const Eigen::Vector2i& resolution, const Eigen::Vector2f& degrees) {
-	return 0.5f * resolution.cast<float>().cwiseQuotient((0.5f * degrees * (float)PI/180).array().tan().matrix());
+	return 0.5f * resolution.cast<float>().cwiseQuotient((0.5f * degrees * (float)PI()/180).array().tan().matrix());
 }
 
 inline __host__ __device__ float focal_length_to_fov(int resolution, float focal_length) {
-	return 2.f * 180.f / PI * atanf(float(resolution)/(focal_length*2.f));
+	return 2.f * 180.f / PI() * atanf(float(resolution)/(focal_length*2.f));
 }
 
 inline __host__ __device__ Eigen::Vector2f focal_length_to_fov(const Eigen::Vector2i& resolution, const Eigen::Vector2f& focal_length) {
-	return 2.f * 180.f / PI * resolution.cast<float>().cwiseQuotient(focal_length*2).array().atan().matrix();
+	return 2.f * 180.f / PI() * resolution.cast<float>().cwiseQuotient(focal_length*2).array().atan().matrix();
 }
 
 inline __host__ __device__ float4 to_float4(const Eigen::Array4f& x) {

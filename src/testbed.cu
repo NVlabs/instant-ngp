@@ -246,8 +246,8 @@ void Testbed::mouse_drag(const Vector2f& rel, int button) {
 		} else {
 			float rot_sensitivity = m_fps_camera ? 0.35f : 1.0f;
 			Matrix3f rot =
-				(AngleAxisf(static_cast<float>(-rel.x() * 2 * PI * rot_sensitivity), up) * // Scroll sideways around up vector
-				AngleAxisf(static_cast<float>(-rel.y() * 2 * PI * rot_sensitivity), side)).matrix(); // Scroll around side vector
+				(AngleAxisf(static_cast<float>(-rel.x() * 2 * PI() * rot_sensitivity), up) * // Scroll sideways around up vector
+				AngleAxisf(static_cast<float>(-rel.y() * 2 * PI() * rot_sensitivity), side)).matrix(); // Scroll around side vector
 
 			m_image.pos += rel;
 			if (m_fps_camera) {
@@ -266,8 +266,8 @@ void Testbed::mouse_drag(const Vector2f& rel, int button) {
 
 	if (is_right_held) {
 		Matrix3f rot =
-			(AngleAxisf(static_cast<float>(-rel.x() * 2 * PI), up) * // Scroll sideways around up vector
-			AngleAxisf(static_cast<float>(-rel.y() * 2 * PI), side)).matrix(); // Scroll around side vector
+			(AngleAxisf(static_cast<float>(-rel.x() * 2 * PI()), up) * // Scroll sideways around up vector
+			AngleAxisf(static_cast<float>(-rel.y() * 2 * PI()), side)).matrix(); // Scroll around side vector
 
 		if (m_render_mode == ERenderMode::Shade)
 			m_sun_dir = rot.transpose() * m_sun_dir;
@@ -2047,7 +2047,7 @@ void Testbed::save_snapshot(const std::string& filepath_string, bool include_opt
 	m_network_config["snapshot"] = m_trainer->serialize(include_optimizer_state);
 
 	if (m_testbed_mode == ETestbedMode::Nerf) {
-		m_network_config["snapshot"]["density_grid_size"] = NERF_GRIDSIZE;
+		m_network_config["snapshot"]["density_grid_size"] = NERF_GRIDSIZE();
 		m_network_config["snapshot"]["density_grid_binary"] = m_nerf.density_grid;
 	}
 
@@ -2087,7 +2087,7 @@ void Testbed::load_snapshot(const std::string& filepath_string) {
 			load_nerf();
 		}
 
-		if (m_network_config["snapshot"]["density_grid_size"] != NERF_GRIDSIZE) {
+		if (m_network_config["snapshot"]["density_grid_size"] != NERF_GRIDSIZE()) {
 			tlog::warning() << "Incompatible grid size. Skipping.";
 			return;
 		}
