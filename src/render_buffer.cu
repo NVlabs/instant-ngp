@@ -19,12 +19,14 @@
 
 #include <tiny-cuda-nn/gpu_memory.h>
 
-#ifdef _WIN32
-#include <GL/gl3w.h>            // Initialize with gl3wInit()
-#else
-#include <GL/glew.h>            // Initialize with glewInit()
+#ifdef NGP_GUI
+#  ifdef _WIN32
+#    include <GL/gl3w.h>
+#  else
+#    include <GL/glew.h>
+#  endif
+#  include <GLFW/glfw3.h>
 #endif
-#include <GLFW/glfw3.h>
 
 #include <stb_image/stb_image.h>
 
@@ -72,7 +74,6 @@ void CudaSurface2D::resize(const Vector2i& size) {
 }
 
 #ifdef NGP_GUI
-
 GLTexture::~GLTexture() {
 	m_cuda_mapping.reset();
 	if (m_texture_id)
@@ -212,7 +213,6 @@ const float* GLTexture::CUDAMapping::data_cpu() {
 	CUDA_CHECK_THROW(cudaMemcpy2DFromArray(m_data_cpu.data(), m_size.x() * sizeof(float) * 4, array(), 0, 0, m_size.x() * sizeof(float) * 4, m_size.y(), cudaMemcpyDeviceToHost));
 	return m_data_cpu.data();
 }
-
 #endif //NGP_GUI
 
 __global__ void accumulate_kernel(Vector2i resolution, Array4f* frame_buffer, Array4f* accumulate_buffer, float sample_count, EColorSpace color_space) {

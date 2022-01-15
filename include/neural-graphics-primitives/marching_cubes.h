@@ -27,13 +27,30 @@ void compute_mesh_opt_gradients(float thresh,
 	uint32_t padded_output_width, const __half *densities,
 	uint32_t input_gradient_width, 	const float *input_gradients,
 	tcnn::GPUMemory<Eigen::Vector3f> &verts_gradient_out,
-	float k_smooth_amount,	float k_density_amount,	float k_inflate_amount);
+	float k_smooth_amount,	float k_density_amount,	float k_inflate_amount
+);
 
-void save_mesh(tcnn::GPUMemory<Eigen::Vector3f> &verts, tcnn::GPUMemory<Eigen::Vector3f> &normals, tcnn::GPUMemory<uint32_t> &indices,
-				const char *optional_outputname, bool unwrap_it, float nerf_scale, Eigen::Vector3f nerf_offset);
+void save_mesh(tcnn::GPUMemory<Eigen::Vector3f> &verts,
+	tcnn::GPUMemory<Eigen::Vector3f> &normals,
+	tcnn::GPUMemory<uint32_t> &indices,
+	const char *optional_outputname,
+	bool unwrap_it,
+	float nerf_scale,
+	Eigen::Vector3f nerf_offset
+);
 
-void draw_mesh_gl(const tcnn::GPUMemory<Eigen::Vector3f> &verts, const tcnn::GPUMemory<Eigen::Vector3f> &normals, const tcnn::GPUMemory<Eigen::Vector3f> &cols, const tcnn::GPUMemory<uint32_t> &indices,
-					Eigen::Vector2i resolution,	Eigen::Vector2f focal_length, Eigen::Matrix<float, 3, 4> camera_matrix,	Eigen::Vector2f screen_center, int mesh_render_mode);
+#ifdef NGP_GUI
+void draw_mesh_gl(
+	const tcnn::GPUMemory<Eigen::Vector3f> &verts,
+	const tcnn::GPUMemory<Eigen::Vector3f> &normals,
+	const tcnn::GPUMemory<Eigen::Vector3f> &cols,
+	const tcnn::GPUMemory<uint32_t> &indices,
+	Eigen::Vector2i resolution,	Eigen::Vector2f focal_length,
+	Eigen::Matrix<float, 3, 4> camera_matrix,
+	Eigen::Vector2f screen_center,
+	int mesh_render_mode
+);
+#endif
 
 void save_density_grid_to_png(const tcnn::GPUMemory<float> &density, const char *filename, Eigen::Vector3i res3d, float thresh, bool swap_y_z=true);
 

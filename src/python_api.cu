@@ -25,12 +25,14 @@
 
 #include <filesystem/path.h>
 
-#ifdef _WIN32
-#include <GL/gl3w.h>            // Initialize with gl3wInit()
-#else
-#include <GL/glew.h>            // Initialize with glewInit()
+#ifdef NGP_GUI
+#  ifdef _WIN32
+#    include <GL/gl3w.h>
+#  else
+#    include <GL/glew.h>
+#  endif
+#  include <GLFW/glfw3.h>
 #endif
-#include <GLFW/glfw3.h>
 
 using namespace tcnn;
 using namespace Eigen;
@@ -121,6 +123,7 @@ py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool l
 }
 
 py::array_t<float> Testbed::screenshot(bool linear) const {
+#ifdef NGP_GUI
 	std::vector<float> tmp(m_window_res.prod() * 4);
 	glReadPixels(0, 0, m_window_res.x(), m_window_res.y(), GL_RGBA, GL_FLOAT, tmp.data());
 
@@ -144,6 +147,9 @@ py::array_t<float> Testbed::screenshot(bool linear) const {
 	});
 
 	return result;
+#else
+	throw std::runtime_error{"testbed.screenshot() in only supported when compiling with NGP_GUI."};
+#endif
 }
 
 //TODO: use this when magic_enum starts working with CUDA

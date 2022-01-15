@@ -23,14 +23,17 @@
 #include <stb_image/stb_image_write.h>
 #include <stdarg.h>
 
-#ifdef _WIN32
-#include <GL/gl3w.h>            // Initialize with gl3wInit()
-#else
-#include <GL/glew.h>            // Initialize with glewInit()
+#ifdef NGP_GUI
+#  ifdef _WIN32
+#    include <GL/gl3w.h>
+#  else
+#    include <GL/glew.h>
+#  endif
+#  include <GLFW/glfw3.h>
+#  include <cuda_gl_interop.h>
 #endif
-#include <GLFW/glfw3.h>
+
 #include <vector>
-#include <cuda_gl_interop.h>
 
 using namespace Eigen;
 using namespace tcnn;
@@ -38,6 +41,7 @@ using namespace tcnn;
 
 NGP_NAMESPACE_BEGIN
 
+#ifdef NGP_GUI
 static bool check_shader(GLuint handle, const char* desc, bool program) {
 	GLint status = 0, log_length = 0;
 	if (program) {
@@ -210,6 +214,7 @@ void main() {
 
 	glUseProgram(0);
 }
+#endif //NGP_GUI
 
 /*
 vertex indices with z=0

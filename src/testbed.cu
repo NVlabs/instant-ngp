@@ -43,23 +43,29 @@
 
 #include <fstream>
 
-#ifdef _WIN32
-#include <GL/gl3w.h>            // Initialize with gl3wInit()
-#else
-#include <GL/glew.h>            // Initialize with glewInit()
+#ifdef NGP_GUI
+#  ifdef _WIN32
+#    include <GL/gl3w.h>
+#  else
+#    include <GL/glew.h>
+#  endif
+#  include <GLFW/glfw3.h>
 #endif
-#include <GLFW/glfw3.h>
 
 #undef min
 #undef max
+
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
-#pragma comment(lib, "legacy_stdio_definitions")
+#  pragma comment(lib, "legacy_stdio_definitions")
 #endif
-#if defined(_MSC_VER)
-#pragma comment(lib, "glfw/lib-vc2010-64/glfw3.lib")
-#pragma comment(lib, "opengl32.lib")
-#pragma comment(lib, "gdi32.lib")
-#pragma comment(lib, "shell32.lib")
+
+#ifdef NGP_GUI
+#  if defined(_MSC_VER)
+#    pragma comment(lib, "glfw/lib-vc2010-64/glfw3.lib")
+#    pragma comment(lib, "opengl32.lib")
+#    pragma comment(lib, "gdi32.lib")
+#    pragma comment(lib, "shell32.lib")
+#  endif
 #endif
 
 using namespace Eigen;
@@ -851,10 +857,8 @@ void Testbed::draw_visualizations(const Eigen::Matrix<float, 3, 4>& camera_matri
 		if (m_camera_path.imgui_viz(view2proj, world2proj, world2view, focal, aspect)) {
 			m_pip_render_surface->reset_accumulation();
 		}
-
 	}
 }
-
 
 void Testbed::draw_contents() {
 	if (m_train) {
@@ -913,25 +917,32 @@ void Testbed::draw_contents() {
 		m_render_surfaces.front().resize(render_res);
 		if (m_max_spp <= 0 || m_render_surfaces.front().spp() < m_max_spp)
 			render_frame(m_smoothed_camera, m_smoothed_camera, m_render_surfaces.front());
+
+#ifdef NGP_GUI
 		m_render_textures.front()->blit_from_cuda_mapping();
+#endif
 
 		if (m_picture_in_picture_res > 0) {
 			Vector2i res(m_picture_in_picture_res, m_picture_in_picture_res*9/16);
 			m_pip_render_surface->resize(res);
 			if (m_pip_render_surface->spp() < 8) {
 				// a bit gross, but let's copy the keyframe's state into the global state in order to not have to plumb through the fov etc to render_frame.
-				CameraKeyframe backup=copy_camera_to_keyframe();
+				CameraKeyframe backup = copy_camera_to_keyframe();
 				CameraKeyframe pip_kf = m_camera_path.eval_camera_path(m_camera_path.m_playtime);
 				set_camera_from_keyframe(pip_kf);
 				render_frame(pip_kf.m(), pip_kf.m(), *m_pip_render_surface);
 				set_camera_from_keyframe(backup);
+
+#ifdef NGP_GUI
 				m_pip_render_texture->blit_from_cuda_mapping();
+#endif
 			}
 		}
 
 		// Visualizations are only meaningful when rendering a single view
 		draw_visualizations(m_smoothed_camera);
 	} else {
+#ifdef NGP_GUI
 		int n_views = n_dimensions_to_visualize()+1;
 
 		float d = std::sqrt((float)m_window_res.x() * (float)m_window_res.y() / (float)n_views);
@@ -967,6 +978,9 @@ void Testbed::draw_contents() {
 				++i;
 			}
 		}
+#else
+		throw std::runtime_error{"Multi-view rendering is only supported when compiling with NGP_GUI."};
+#endif
 	}
 }
 
@@ -974,14 +988,14 @@ fs::path Testbed::training_data_path() const {
 	return m_data_path.with_extension("training");
 }
 
-void drop_callback(GLFWwindow* window, int count, const char** paths)
-{
+#ifdef NGP_GUI
+void drop_callback(GLFWwindow* window, int count, const char** paths) {
 	Testbed *testbed = (Testbed*)glfwGetWindowUserPointer(window);
 	if (testbed)
 		for (int i = 0;  i < count;  i++)
 			testbed->handle_file(paths[i]);
 }
-
+#endif
 
 void Testbed::init_window(int resw, int resh, bool hidden) {
 #ifndef NGP_GUI

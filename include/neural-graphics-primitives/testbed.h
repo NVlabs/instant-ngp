@@ -396,11 +396,11 @@ public:
 #ifdef NGP_GUI
 	GLFWwindow* m_glfw_window = nullptr;
 	std::shared_ptr<GLTexture> m_pip_render_texture;
-	std::unique_ptr<CudaRenderBuffer> m_pip_render_surface;
 	std::vector<std::shared_ptr<GLTexture>> m_render_textures;
-	std::vector<CudaRenderBuffer> m_render_surfaces;
 #endif
 
+	std::vector<CudaRenderBuffer> m_render_surfaces;
+	std::unique_ptr<CudaRenderBuffer> m_pip_render_surface;
 
 	struct Nerf {
 		NerfTracer tracer;
