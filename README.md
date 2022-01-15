@@ -102,6 +102,13 @@ instant-ngp$ ./build/testbed --scene data/sdf/armadillo.obj
 ```sh
 instant-ngp$ ./build/testbed --scene data/image/albert.exr
 ```
+
+To reproduce the gigapixel results, download, for example, [the Tokyo image](https://www.flickr.com/photos/trevor_dobson_inefekt69/29314390837) and convert it to `.bin` using the `scripts/image2bin.py` script. This custom format improves compatibility and loading speed when resolution is high. Now you can run:
+
+```sh
+instant-ngp$ ./build/testbed --scene data/image/tokyo.bin
+```
+
 <img src="docs/assets_readme/albert.png"/>
 
 ## Volume Renderer
