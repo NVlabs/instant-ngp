@@ -16,7 +16,7 @@ In each case, we train and render a MLP with multiresolution hash input encoding
 For business inquiries, please visit our website and submit the form: [NVIDIA Research Licensing](https://www.nvidia.com/en-us/research/inquiries/)
 
 
-# Requirements
+## Requirements
 
 - Both Windows and Linux are supported.
 - [CUDA](https://developer.nvidia.com/cuda-toolkit) __v10.2 or higher__, a __C++14__ capable compiler, and [CMake](https://cmake.org/) __v3.19 or higher__.
@@ -40,7 +40,7 @@ export LD_LIBRARY_PATH="/usr/local/cuda-11.4/lib64:$LD_LIBRARY_PATH"
 ```
 
 
-# Compilation (Windows & Linux)
+## Compilation (Windows & Linux)
 
 Begin by cloning this repository and all its submodules using the following command:
 ```sh
@@ -59,13 +59,13 @@ If the build succeeded, you can now run the code via the `build/testbed` executa
 If automatic GPU architecture detection fails, (as can happen if you have multiple GPUs installed), set the  `TCNN_CUDA_ARCHITECTURES` enivonment variable for the GPU you would like to use. Set it to `86` for RTX 3000 cards, `80` for A100 cards, and  `75` for RTX 2000 cards.
 
 
-# Interactive training and rendering
+## Interactive training and rendering
 
 <img src="docs/assets_readme/testbed.png" width="100%"/>
 
 This codebase comes with an interactive testbed that includes many features beyond our academic publication:
-- Additional training features, such as real-time camera ex- and intrinsics optimization.
-- Marching cubes for NeRF->Mesh and SDF->Mesh conversion.
+- Additional training features, such as extrinsics and intrinsics optimization.
+- Marching cubes for `NeRF->Mesh` and `SDF->Mesh` conversion.
 - A spline-based camera path editor to create videos.
 - Debug visualizations of the activations of every neuron input and output.
 - And many more task-specific settings.
@@ -73,7 +73,7 @@ This codebase comes with an interactive testbed that includes many features beyo
 
 
 
-## NeRF fox
+### NeRF fox
 
 One test scene is provided in this repository, using a small number of frames from a casually captured phone video:
 
@@ -81,15 +81,17 @@ One test scene is provided in this repository, using a small number of frames fr
 instant-ngp$ ./build/testbed --scene data/nerf/fox
 ```
 
+<img src="docs/assets_readme/fox.png"/>
+
 Alternatively, download any NeRF-compatible scene (e.g. [from the NeRF authors' drive](https://drive.google.com/drive/folders/1JDdLGDruGNXWnM1eqY1FNL9PlStjaKWi)).
 Now you can run:
 
 ```sh
 instant-ngp$ ./build/testbed --scene data/nerf_synthetic/lego
 ```
-<img src="docs/assets_readme/fox.png"/>
 
-## SDF armadillo
+
+### SDF armadillo
 
 ```sh
 instant-ngp$ ./build/testbed --scene data/sdf/armadillo.obj
@@ -97,11 +99,13 @@ instant-ngp$ ./build/testbed --scene data/sdf/armadillo.obj
 
 <img src="docs/assets_readme/armadillo.png"/>
 
-## Image of Einstein
+### Image of Einstein
 
 ```sh
 instant-ngp$ ./build/testbed --scene data/image/albert.exr
 ```
+
+<img src="docs/assets_readme/albert.png"/>
 
 To reproduce the gigapixel results, download, for example, [the Tokyo image](https://www.flickr.com/photos/trevor_dobson_inefekt69/29314390837) and convert it to `.bin` using the `scripts/image2bin.py` script. This custom format improves compatibility and loading speed when resolution is high. Now you can run:
 
@@ -109,9 +113,8 @@ To reproduce the gigapixel results, download, for example, [the Tokyo image](htt
 instant-ngp$ ./build/testbed --scene data/image/tokyo.bin
 ```
 
-<img src="docs/assets_readme/albert.png"/>
 
-## Volume Renderer
+### Volume Renderer
 
 Download the [nanovdb volume for the Disney cloud](https://drive.google.com/drive/folders/1SuycSAOSG64k2KLV7oWgyNWyCvZAkafK?usp=sharing), which is derived [from here](https://disneyanimation.com/data-sets/?drawer=/resources/clouds/) ([CC BY-SA 3.0](https://media.disneyanimation.com/uploads/production/data_set_asset/6/asset/License_Cloud.pdf)).
 
@@ -120,7 +123,7 @@ instant-ngp$ ./build/testbed --mode volume --scene data/volume/wdas_cloud_quarte
 ```
 <img src="docs/assets_readme/cloud.png"/>
 
-# Preparing new NeRF datasets
+## Preparing new NeRF datasets
 
 Our NeRF implementation expects initial camera parameters to be provided in a `transforms.json` file in a format compatible with [the original NeRF codebase](https://www.matthewtancik.com/nerf).
 We provide a script as a convenience, `scripts/colmap2nerf.py`, that can be used to process a video file or sequence of images, using the open source [COLMAP](https://colmap.github.io/) structure from motion software to extract the necessary camera data.
@@ -155,20 +158,20 @@ Assuming success, you can now train your NeRF model as follows, starting in the 
 instant-ngp$ ./build/testbed --mode nerf --scene [path to training data folder containing transforms.json]
 ```
 
-## Tips for NeRF training data
+### Tips for NeRF training data
 
 The NeRF model trains best with between 50-150 images which exhibit minimal scene movement, motion blur or other blurring artefacts. The quality of reconstruction is predicated on COLMAP being able to extract accurate camera parameters from the images.
 
 The `colmap2nerf.py` script assumes that the training images are all pointing approximately at a shared 'point of interest', which it places at the origin. This point is found by taking a weighted average of the closest points of approach between the rays through the central pixel of all pairs of training images. In practice, this means that the script works best when the training images have been captured 'pointing inwards' towards the object of interest, although they do not need to complete a full 360 view of it. Any background visible behind the object of interest will still be reconstructed if `aabb_scale` is set to a number larger than 1, as explained above.
 
-# Python bindings
+## Python bindings
 
 To conduct controlled experiments in an automated fashion, all features from the interactive testbed (and more!) have Python bindings that can be easily instrumented.
 For an example of how the `./build/testbed` application can be implemented and extended from within Python, see `./scripts/run.py`, which supports a superset of the command line arguments that `./build/testbed` does.
 
 Happy hacking!
 
-# Thanks
+## Thanks
 
 Many thanks to [Jonathan Tremblay](https://research.nvidia.com/person/jonathan-tremblay) and [Andrew Tao](https://developer.nvidia.com/blog/author/atao/) for testing early versions of this codebase and to Arman Toornias and Saurabh Jain for the factory robot dataset.
 
