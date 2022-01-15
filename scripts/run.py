@@ -109,20 +109,21 @@ if __name__ == "__main__":
 		testbed.load_training_data(scene)
 
 	if args.load_snapshot:
-		print("loading snapshot ", args.load_snapshot)
+		print("Loading snapshot ", args.load_snapshot)
 		testbed.load_snapshot(args.load_snapshot)
 	else:
 		testbed.reload_network_from_file(network)
 
 	ref_transforms = {}
 	if args.screenshot_transforms: # try to load the given file straight away
-		print("screenshot transforms from ", args.screenshot_transforms)
+		print("Screenshot transforms from ", args.screenshot_transforms)
 		with open(args.screenshot_transforms) as f:
 			ref_transforms = json.load(f)
 
 	if args.gui:
-		sw=args.screenshot_w or 1920
-		sh=args.screenshot_h or 1080
+		# Pick a sensible GUI resolution depending on arguments.
+		sw = args.screenshot_w or 1920
+		sh = args.screenshot_h or 1080
 		while sw*sh > 1920*1080*4:
 			sw = int(sw / 2)
 			sh = int(sh / 2)
@@ -137,11 +138,25 @@ if __name__ == "__main__":
 		setup_colored_sdf(testbed, args.scene)
 
 	if args.nerf_compatibility:
-		# match nerf paper behaviour and train on a fixed white bg
-		testbed.background_color = [1.0, 1.0, 1.0, 1.0]
-		testbed.nerf.training.random_bg_color = False
-		testbed.nerf.cone_angle_constant = 0
 		print(f"NeRF compatibility mode enabled")
+
+		# Prior nerf papers accumulate/blend in the sRGB
+		# color space. This messes not only with background
+		# alpha, but also with DOF effects and the likes.
+		# We support this behavior, but we only enable it
+		# for the case of synthetic nerf data where we need
+		# to compare PSNR numbers to results of prior work.
+		testbed.color_space = ngp.ColorSpace.SRGB
+
+		# No exponential cone tracing. Slightly increases
+		# quality at the cost of speed on synthetic scenes.
+		testbed.nerf.cone_angle_constant = 0
+
+		# Optionally match nerf paper behaviour and train on a
+		# fixed white bg. We prefer training on random BG colors.
+		# testbed.background_color = [1.0, 1.0, 1.0, 1.0]
+		# testbed.nerf.training.random_bg_color = False
+
 
 	old_training_step = 0
 	n_steps = args.n_steps
@@ -170,11 +185,11 @@ if __name__ == "__main__":
 				old_training_step = testbed.training_step
 
 	if args.save_snapshot:
-		print("saving snapshot ", args.save_snapshot)
+		print("Saving snapshot ", args.save_snapshot)
 		testbed.save_snapshot(args.save_snapshot, False)
 
 	if args.test_transforms:
-		print("test transforms from ", args.test_transforms)
+		print("Evaluating test transforms from ", args.test_transforms)
 		with open(args.test_transforms) as f:
 			test_transforms = json.load(f)
 		data_dir=os.path.dirname(args.test_transforms)
@@ -185,13 +200,20 @@ if __name__ == "__main__":
 		minpsnr = 1000
 		maxpsnr = 0
 
-		spp = 8
-		testbed.background_color = [0.0, 0.0, 0.0, 0.0]
+		# Evaluate metrics on black background
+		testbed.background_color = [0.0, 0.0, 0.0, 1.0]
+
+		# Prior nerf papers don't typically do multi-sample anti aliasing.
+		# So snap all pixels to the pixel centers.
 		testbed.snap_to_pixel_centers = True
+		spp = 8
+
 		testbed.nerf.rendering_min_alpha = 1e-4
+
 		testbed.fov_axis = 0
 		testbed.fov = test_transforms["camera_angle_x"] * 180 / np.pi
 		testbed.shall_train = False
+
 		with tqdm(list(enumerate(test_transforms["frames"])), unit="images", desc=f"Rendering test frame") as t:
 			for i, frame in t:
 				p = frame["file_path"]
@@ -206,16 +228,29 @@ if __name__ == "__main__":
 							ref_fname = os.path.join(data_dir, p + ".jpeg")
 							if not os.path.isfile(ref_fname):
 								ref_fname = os.path.join(data_dir, p + ".exr")
+
 				ref_image = read_image(ref_fname)
-				ref_image += (1.0 - ref_image[...,3:4]) # composite ref on opaque white in linear land
+
+				# NeRF blends with background colors in sRGB space, rather than first
+				# transforming to linear space, blending there, and then converting back.
+				# (See e.g. the PNG spec for more information on how the `alpha` channel
+				# is always a linear quantity.)
+				# The following lines of code reproduce NeRF's behavior (if enabled in
+				# testbed) in order to make the numbers comparable.
+				if testbed.color_space == ngp.ColorSpace.SRGB and ref_image.shape[2] == 4:
+					# Since sRGB conversion is non-linear, alpha must be factored out of it
+					ref_image[...,:3] = np.divide(ref_image[...,:3], ref_image[...,3:4], out=np.zeros_like(ref_image[...,:3]), where=ref_image[...,3:4] != 0)
+					ref_image[...,:3] = linear_to_srgb(ref_image[...,:3])
+					ref_image[...,:3] *= ref_image[...,3:4]
+					ref_image += (1.0 - ref_image[...,3:4]) * testbed.background_color
+					ref_image[...,:3] = srgb_to_linear(ref_image[...,:3])
+
 				if i == 0:
 					write_image("ref.png", ref_image)
 
 				testbed.set_nerf_camera_matrix(np.matrix(frame["transform_matrix"])[:-1,:])
 				image = testbed.render(ref_image.shape[1], ref_image.shape[0], spp, True)
-				image[...,:3] = linear_to_srgb(image[...,:3])
-				image += (1.0 - image[...,3:4]) # composite on opaque white in SRGB land
-				image[...,:3] = srgb_to_linear(image[...,:3])
+
 				if i == 0:
 					write_image("out.png", image)
 
@@ -224,10 +259,10 @@ if __name__ == "__main__":
 				if i == 0:
 					write_image("diff.png", diffimg)
 
-				A = linear_to_srgb(image[...,:3])
-				R = linear_to_srgb(ref_image[...,:3])
-				mse = float(compute_error("MSE",A,R))
-				ssim = 0 # float(compute_error("SSIM",A,R))
+				A = np.clip(linear_to_srgb(image[...,:3]), 0.0, 1.0)
+				R = np.clip(linear_to_srgb(ref_image[...,:3]), 0.0, 1.0)
+				mse = float(compute_error("MSE", A, R))
+				ssim = float(compute_error("SSIM", A, R))
 				totssim += ssim
 				totmse += mse
 				psnr = mse2psnr(mse)
@@ -237,11 +272,10 @@ if __name__ == "__main__":
 				totcount = totcount+1
 				t.set_postfix(psnr = totpsnr/(totcount or 1))
 
-
 		psnr_avgmse = mse2psnr(totmse/(totcount or 1))
 		psnr = totpsnr/(totcount or 1)
 		ssim = totssim/(totcount or 1)
-		print(f"psnr {psnr} average, psnr range {minpsnr}-{maxpsnr}, ssim {ssim}")
+		print(f"PSNR={psnr} [min={minpsnr} max={maxpsnr}] SSIM={ssim}")
 
 	if args.screenshot_w:
 		if ref_transforms:
@@ -252,19 +286,21 @@ if __name__ == "__main__":
 			print(args.screenshot_frames)
 			for idx in args.screenshot_frames:
 				f = ref_transforms["frames"][int(idx)]
-				print(f)
 				cam_matrix = f["transform_matrix"]
 				testbed.set_nerf_camera_matrix(np.matrix(cam_matrix)[:-1,:])
 				outname = os.path.join(args.screenshot_dir, os.path.basename(f["file_path"]))
+
+				# Some NeRF datasets lack the .png suffix in the dataset metadata
 				if not os.path.splitext(outname)[1]:
-					outname = outname + '.png' # Some NeRF datasets lack the .png suffix in the dataset metadata
+					outname = outname + ".png"
+
 				print(f"rendering {outname}")
 				image = testbed.render(args.screenshot_w or int(ref_transforms["w"]), args.screenshot_h or int(ref_transforms["h"]), args.screenshot_spp, True)
 				os.makedirs(os.path.dirname(outname), exist_ok=True)
 				write_image(outname, image)
 		else:
 			outname = os.path.join(args.screenshot_dir, args.scene + "_" + network_stem)
-			print(f"rendering {outname}.png")
+			print(f"Rendering {outname}.png")
 			image = testbed.render(args.screenshot_w, args.screenshot_h, args.screenshot_spp, True)
 			if os.path.dirname(outname) != "":
 				os.makedirs(os.path.dirname(outname), exist_ok=True)
