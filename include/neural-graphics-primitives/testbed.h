@@ -522,7 +522,7 @@ public:
 		bool render_with_camera_distortion = false;
 
 		float rendering_min_alpha = 0.01f;
-	} m_nerf = {};
+	} m_nerf;
 
 	struct Sdf {
 		SphereTracer tracer;
@@ -572,7 +572,7 @@ public:
 			tcnn::GPUMemory<float> distances_shuffled;
 			tcnn::GPUMemory<Eigen::Vector3f> perturbations;
 		} training = {};
-	} m_sdf = {};
+	} m_sdf;
 
 	enum EDataType {
 		Float,
@@ -598,7 +598,7 @@ public:
 		} training  = {};
 
 		ERandomMode random_mode = ERandomMode::Stratified;
-	} m_image  = {};
+	} m_image;
 
 	struct VolPayload {
 		Eigen::Vector3f dir;
@@ -626,7 +626,7 @@ public:
 		tcnn::GPUMemory<VolPayload> payload[2] = {};
 		tcnn::GPUMemory<uint32_t> hit_counter = {};
 		tcnn::GPUMemory<Eigen::Array4f> radiance_and_density;
-	} m_volume = {};
+	} m_volume;
 
 	float m_camera_velocity = 1.0f;
 	EColorSpace m_color_space = EColorSpace::Linear;
