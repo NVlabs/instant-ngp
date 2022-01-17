@@ -1726,10 +1726,6 @@ Testbed::Testbed(ETestbedMode mode) : m_testbed_mode(mode) {
 		throw std::runtime_error{std::string{"cudaGetDeviceProperties() returned an error: "} + cudaGetErrorString(error)};
 	}
 
-	if (!((props.major * 10 + props.minor) >= 75)) {
-		throw std::runtime_error{"Turing Tensor Core operations must be run on a machine with compute capability at least 75."};
-	}
-
 	set_exposure(0);
 	set_min_level(0.f);
 	set_max_level(1.f);
