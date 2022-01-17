@@ -21,6 +21,12 @@ jobs:
           - os: ubuntu-18.04
             cuda: "10.2"
             arch: 75
+          - os: ubuntu-18.04
+            cuda: "10.2"
+            arch: 70
+          - os: ubuntu-18.04
+            cuda: "10.2"
+            arch: 60
     env:
       build_dir: "build"
       config: "Release"
@@ -53,10 +59,18 @@ jobs:
             visual_studio: "Visual Studio 16 2019"
             cuda: "11.5.1"
             arch: 86
-        #   - os: windows-2016
-        #     visual_studio: "Visual Studio 15 2017"
-        #     cuda: "10.2.89"
-        #     arch: 75
+          - os: windows-2019
+            visual_studio: "Visual Studio 16 2019"
+            cuda: "11.5.1"
+            arch: 75
+          - os: windows-2019
+            visual_studio: "Visual Studio 16 2019"
+            cuda: "11.5.1"
+            arch: 70
+          - os: windows-2019
+            visual_studio: "Visual Studio 16 2019"
+            cuda: "11.5.1"
+            arch: 60
     env:
       build_dir: "build"
       config: "Release"

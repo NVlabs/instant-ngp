@@ -181,6 +181,7 @@ set(TCNN_BUILD_EXAMPLES OFF)
 add_subdirectory(dependencies/tiny-cuda-nn)
 include_directories("dependencies/tiny-cuda-nn/include")
 include_directories("dependencies/tiny-cuda-nn/dependencies")
+add_definitions(${TCNN_DEFINITIONS})
 
 ##############
 # tinylogger #
