@@ -194,20 +194,20 @@ void main() {
 	glUniform2i(glGetUniformLocation(program, "res"), resolution.x(),resolution.y());
 	glUniform1i(glGetUniformLocation(program, "mode"), mesh_render_mode);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, els);
-    GLuint posat = (GLuint)glGetAttribLocation(program, "pos");
+	GLuint posat = (GLuint)glGetAttribLocation(program, "pos");
 	GLuint norat = (GLuint)glGetAttribLocation(program, "nor");
 	GLuint colat = (GLuint)glGetAttribLocation(program, "col");
-    glEnableVertexAttribArray(posat);
+	glEnableVertexAttribArray(posat);
 	glEnableVertexAttribArray(norat);
 	glEnableVertexAttribArray(colat);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO[0]);
-    glVertexAttribPointer(posat, 3, GL_FLOAT, GL_FALSE, 3*4, 0);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO[0]);
+	glVertexAttribPointer(posat, 3, GL_FLOAT, GL_FALSE, 3*4, 0);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO[1]);
-    glVertexAttribPointer(norat, 3, GL_FLOAT, GL_FALSE, 3*4, 0);
+	glVertexAttribPointer(norat, 3, GL_FLOAT, GL_FALSE, 3*4, 0);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO[2]);
-    glVertexAttribPointer(colat, 3, GL_FLOAT, GL_FALSE, 3*4, 0);
-    glCullFace(GL_BACK);
-    glDisable(GL_CULL_FACE);
+	glVertexAttribPointer(colat, 3, GL_FLOAT, GL_FALSE, 3*4, 0);
+	glCullFace(GL_BACK);
+	glDisable(GL_CULL_FACE);
 	glEnable(GL_DEPTH_TEST);
 	glDrawElements(GL_TRIANGLES, (GLsizei)indices.size(), GL_UNSIGNED_INT , (GLvoid*)0);
 	glDisable(GL_CULL_FACE);
@@ -231,7 +231,7 @@ with z=1
 
 edges 8-11 go in +z direction from vertex 0-3
 */
-__global__ void gen_vertices(BoundingBox aabb, Eigen::Vector3i res_3d, const float* __restrict__ density, int*__restrict__ vertidx_grid, Eigen::Vector3f* verts_out, float thresh, uint32_t *__restrict__ counters) {
+__global__ void gen_vertices(BoundingBox aabb, Eigen::Vector3i res_3d, const float* __restrict__ density, int*__restrict__ vertidx_grid, Eigen::Vector3f* verts_out, float thresh, uint32_t* __restrict__ counters) {
 	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
 	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
 	uint32_t z = blockIdx.z * blockDim.z + threadIdx.z;
@@ -678,9 +678,10 @@ void compute_mesh_1ring(const tcnn::GPUMemory<Eigen::Vector3f> &verts, const tcn
 	linear_kernel(accumulate_1ring, 0, nullptr, indices.size()/3, indices.data(), verts.data(), output_pos.data(), output_normals.data());
 }
 
-__global__ void compute_mesh_opt_gradients_kernel(uint32_t n_verts, float thresh, const Eigen::Vector3f *verts, const Eigen::Vector3f *normals, const Eigen::Vector4f *verts_smoothed,
-	uint32_t padded_output_width, const __half *densities,
-	uint32_t input_gradient_width, const float *input_gradients, Eigen::Vector3f *verts_gradient_out,
+__global__ void compute_mesh_opt_gradients_kernel(
+	uint32_t n_verts, float thresh, const Eigen::Vector3f* verts, const Eigen::Vector3f* normals, const Eigen::Vector4f* verts_smoothed,
+	uint32_t padded_output_width, const network_precision_t* densities,
+	uint32_t input_gradient_width, const float* input_gradients, Eigen::Vector3f* verts_gradient_out,
 	float k_smooth_amount,	float k_density_amount,	float k_inflate_amount
 ) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -706,7 +707,7 @@ __global__ void compute_mesh_opt_gradients_kernel(uint32_t n_verts, float thresh
 void compute_mesh_opt_gradients(float thresh,
 	const tcnn::GPUMemory<Eigen::Vector3f> &verts, const tcnn::GPUMemory<Eigen::Vector3f> &normals,
 	const tcnn::GPUMemory<Eigen::Vector4f> &verts_smoothed,
-	uint32_t padded_output_width, const __half *densities,
+	uint32_t padded_output_width, const network_precision_t* densities,
 	uint32_t input_gradients_width, const float *input_gradients,
 	GPUMemory<Eigen::Vector3f> &verts_gradient_out,
 	float k_smooth_amount,	float k_density_amount,	float k_inflate_amount
@@ -731,7 +732,7 @@ void compute_mesh_opt_gradients(float thresh,
 	);
 }
 
-void marching_cubes_gpu(BoundingBox aabb, Eigen::Vector3i res_3d, float thresh, const tcnn::GPUMemory<float> &density, tcnn::GPUMemory<Eigen::Vector3f> &verts_out, tcnn::GPUMemory<uint32_t> &indices_out) {
+void marching_cubes_gpu(BoundingBox aabb, Eigen::Vector3i res_3d, float thresh, const tcnn::GPUMemory<float> &density, tcnn::GPUMemory<Eigen::Vector3f>& verts_out, tcnn::GPUMemory<uint32_t>& indices_out) {
 	GPUMemory<uint32_t> counters;
 
 	counters.enlarge(4);
