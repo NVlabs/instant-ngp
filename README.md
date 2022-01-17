@@ -19,7 +19,7 @@ For business inquiries, please visit our website and submit the form: [NVIDIA Re
 ## Requirements
 
 - Both Windows and Linux are supported.
-- An __NVIDIA GPU__ with __compute capability 75+ (RTX 20XX or newer)__. All shown results come from an RTX 3090.
+- An __NVIDIA GPU__; tensor cores increase performance when available. All shown results come from an RTX 3090.
 - __[CUDA](https://developer.nvidia.com/cuda-toolkit) v10.2 or higher__, a __C++14__ capable compiler, and __[CMake](https://cmake.org/) v3.19 or higher__.
 - __(optional) [Python](https://www.python.org/) 3.7 or higher__ for interactive bindings. Also, run `pip install -r requirements.txt`.
   - On some machines, `pyexr` refuses to install via `pip`. This can be resolved by installing OpenEXR from [here](https://www.lfd.uci.edu/~gohlke/pythonlibs/#openexr).
