@@ -70,8 +70,6 @@ struct CameraPath {
 	bool m_update_cam_from_path = false;
 	float m_playtime = 0.f;
 	float m_autoplayspeed = 0.f;
-	ImGuizmo::MODE m_gizmo_mode = ImGuizmo::LOCAL;
-	ImGuizmo::OPERATION m_gizmo_op = ImGuizmo::TRANSLATE;
 
 	const CameraKeyframe& get_keyframe(int i) { return m_keyframes[tcnn::clamp(i, 0, (int)m_keyframes.size()-1)]; }
 	CameraKeyframe eval_camera_path(float t) {
@@ -84,15 +82,20 @@ struct CameraPath {
 
 	void save(const std::string& filepath_string);
 	void load(const std::string& filepath_string, const Eigen::Matrix<float, 3, 4> &first_xform);
+
+#ifdef NGP_GUI
+	ImGuizmo::MODE m_gizmo_mode = ImGuizmo::LOCAL;
+	ImGuizmo::OPERATION m_gizmo_op = ImGuizmo::TRANSLATE;
 	int imgui(char path_filename_buf[128], float frame_milliseconds, Eigen::Matrix<float, 3, 4> &camera, float slice_plane_z, float scale, float fov, float dof, float bounding_radius, const Eigen::Matrix<float, 3, 4> &first_xform);
 	bool imgui_viz(Eigen::Matrix<float, 4, 4> &view2proj, Eigen::Matrix<float, 4, 4> &world2proj, Eigen::Matrix<float, 4, 4> &world2view, Eigen::Vector2f focal, float aspect);
+#endif
 };
 
+#ifdef NGP_GUI
 void add_debug_line(const Eigen::Matrix<float, 4, 4>&proj, ImDrawList* list, Eigen::Vector3f a, Eigen::Vector3f b, uint32_t col=0xffffffff, float thickness=1.f);
 void visualize_unit_cube(const Eigen::Matrix<float, 4, 4>& world2proj);
 void visualize_nerf_camera(const Eigen::Matrix<float, 4, 4>& world2proj, const Eigen::Matrix<float, 3, 4>& xform, float aspect, uint32_t col = 0x80ffffff);
-
-
+#endif
 
 NGP_NAMESPACE_END
 
