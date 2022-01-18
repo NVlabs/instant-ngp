@@ -53,6 +53,39 @@ constexpr float MAX_DIST_SQ = MAX_DIST*MAX_DIST;
 OptixDeviceContext g_optix;
 
 namespace optix {
+	bool initialize() {
+		static bool ran_before = false;
+		static bool is_optix_initialized = false;
+		if (ran_before) {
+			return is_optix_initialized;
+		}
+
+		ran_before = true;
+
+		// Initialize CUDA with a no-op call to the the CUDA runtime API
+		CUDA_CHECK_THROW(cudaFree(nullptr));
+
+		try {
+			// Initialize the OptiX API, loading all API entry points
+			OPTIX_CHECK_THROW(optixInit());
+
+			// Specify options for this context. We will use the default options.
+			OptixDeviceContextOptions options = {};
+
+			// Associate a CUDA context (and therefore a specific GPU) with this
+			// device context
+			CUcontext cuCtx = 0; // NULL means take the current active context
+
+			OPTIX_CHECK_THROW(optixDeviceContextCreate(cuCtx, &options, &g_optix));
+		} catch (std::exception& e) {
+			tlog::warning() << "OptiX failed to initialize: " << e.what();
+			return false;
+		}
+
+		is_optix_initialized = true;
+		return true;
+	}
+
 	class Gas {
 	public:
 		Gas(const GPUMemory<Triangle>& triangles, OptixDeviceContext optix, cudaStream_t stream) {
@@ -605,11 +638,18 @@ public:
 
 	void build_optix(const GPUMemory<Triangle>& triangles, cudaStream_t stream) override {
 #ifdef NGP_OPTIX
-		m_optix.gas = std::make_unique<optix::Gas>(triangles, g_optix, stream);
-		m_optix.raystab = std::make_unique<optix::Program<Raystab>>((const char*)optix_ptx::raystab_ptx, sizeof(optix_ptx::raystab_ptx), g_optix);
-		m_optix.raytrace = std::make_unique<optix::Program<Raytrace>>((const char*)optix_ptx::raytrace_ptx, sizeof(optix_ptx::raytrace_ptx), g_optix);
-		m_optix.pathescape = std::make_unique<optix::Program<PathEscape>>((const char*)optix_ptx::pathescape_ptx, sizeof(optix_ptx::pathescape_ptx), g_optix);
-		m_optix.available = true;
+		m_optix.available = optix::initialize();
+		if (m_optix.available) {
+			m_optix.gas = std::make_unique<optix::Gas>(triangles, g_optix, stream);
+			m_optix.raystab = std::make_unique<optix::Program<Raystab>>((const char*)optix_ptx::raystab_ptx, sizeof(optix_ptx::raystab_ptx), g_optix);
+			m_optix.raytrace = std::make_unique<optix::Program<Raytrace>>((const char*)optix_ptx::raytrace_ptx, sizeof(optix_ptx::raytrace_ptx), g_optix);
+			m_optix.pathescape = std::make_unique<optix::Program<PathEscape>>((const char*)optix_ptx::pathescape_ptx, sizeof(optix_ptx::pathescape_ptx), g_optix);
+			tlog::success() << "Built OptiX GAS and shaders";
+		} else {
+			tlog::warning() << "Falling back to slower TriangleBVH::ray_intersect.";
+		}
+#else //NGP_OPTIX
+		tlog::warning() << "OptiX was not built. Falling back to slower TriangleBVH::ray_intersect.";
 #endif //NGP_OPTIX
 	}
 
@@ -693,26 +733,6 @@ __global__ void raytrace_kernel(uint32_t n_elements, Vector3f* __restrict__ posi
 		directions[i] = triangles[p.first].normal();
 	}
 }
-
-void init_optix() {
-	// Initialize CUDA with a no-op call to the the CUDA runtime API
-	CUDA_CHECK_THROW(cudaFree(nullptr));
-
-#ifdef NGP_OPTIX
-	// Initialize the OptiX API, loading all API entry points
-	OPTIX_CHECK_THROW(optixInit());
-
-	// Specify options for this context. We will use the default options.
-	OptixDeviceContextOptions options = {};
-
-	// Associate a CUDA context (and therefore a specific GPU) with this
-	// device context
-	CUcontext cuCtx = 0; // NULL means take the current active context
-
-	OPTIX_CHECK_THROW(optixDeviceContextCreate(cuCtx, &options, &g_optix));
-#endif //NGP_OPTIX
-}
-
 
 NGP_NAMESPACE_END
 

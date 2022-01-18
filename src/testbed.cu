@@ -1712,18 +1712,10 @@ Testbed::Testbed(ETestbedMode mode) : m_testbed_mode(mode) {
 		}},
 	};
 
-	init_optix();
 	reset_camera();
 
 	if (!(__CUDACC_VER_MAJOR__ > 10 || (__CUDACC_VER_MAJOR__ == 10 && __CUDACC_VER_MINOR__ >= 2))) {
-		throw std::runtime_error{"Turing Tensor Core operations must be compiled with CUDA 10.2 Toolkit or later."};
-	}
-
-	cudaDeviceProp props;
-
-	cudaError_t error = cudaGetDeviceProperties(&props, 0);
-	if (error != cudaSuccess) {
-		throw std::runtime_error{std::string{"cudaGetDeviceProperties() returned an error: "} + cudaGetErrorString(error)};
+		throw std::runtime_error{"Testbed required CUDA 10.2 or later."};
 	}
 
 	set_exposure(0);
