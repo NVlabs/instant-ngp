@@ -80,6 +80,4 @@ protected:
 	TriangleBvh() {};
 };
 
-void init_optix();
-
 NGP_NAMESPACE_END

@@ -162,7 +162,7 @@ endif()
 find_package(OptiX)
 # set OptiX_INSTALL_DIR via your environment if it's not found automatically
 
-if (OptiX_FOUND)
+if (OptiX_FOUND OR OptiX_INCLUDE)
 	include_directories("${OptiX_INCLUDE}")
 	add_definitions(-DNGP_OPTIX)
 else()
