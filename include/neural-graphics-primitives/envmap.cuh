@@ -82,13 +82,17 @@ __device__ void deposit_envmap_gradient(const tcnn::vector_t<T, 4>& value, T* __
 		pos.y() = std::max(std::min(pos.y(), envmap_resolution.y()-1), 0);
 
 		Eigen::Array4f result;
-		if (std::is_same<T, float>::value) {
-			for (uint32_t c = 0; c < 4; ++c) {
-				atomicAdd(&envmap_gradient[(pos.x() + pos.y() * envmap_resolution.x()) * 4 + c], value[c] * weight);
-			}
-		} else if (std::is_same<T, __half>::value) {
+
+#if TCNN_MIN_GPU_ARCH >= 60 // atomicAdd(__half2) is only supported with compute capability 60 and above
+		if (std::is_same<T, __half>::value) {
 			for (uint32_t c = 0; c < 4; c += 2) {
 				atomicAdd((__half2*)&envmap_gradient[(pos.x() + pos.y() * envmap_resolution.x()) * 4 + c], {value[c] * weight, value[c+1] * weight});
+			}
+		} else
+#endif
+		{
+			for (uint32_t c = 0; c < 4; ++c) {
+				atomicAdd(&envmap_gradient[(pos.x() + pos.y() * envmap_resolution.x()) * 4 + c], value[c] * weight);
 			}
 		}
 	};
