@@ -12,12 +12,17 @@
  *  @author Thomas Müller & Alex Evans, NVIDIA
  */
 
-#include <neural-graphics-primitives/common.h>
-#include <imgui/imgui.h>
-#include <imgui/ImGuizmo.h> // tiny :)
 #include <neural-graphics-primitives/camera_path.h>
+#include <neural-graphics-primitives/common.h>
+
+#ifdef NGP_GUI
+#include <imgui/imgui.h>
+#include <imgui/ImGuizmo.h>
+#endif
+
 #include <json/json.hpp>
 #include <fstream>
+
 
 NGP_NAMESPACE_BEGIN
 
@@ -25,17 +30,21 @@ using namespace Eigen;
 using namespace nlohmann;
 
 CameraKeyframe lerp(const CameraKeyframe& p0, const CameraKeyframe& p1, float t, float t0, float t1) {
-	t=(t-t0)/(t1-t0);
+	t = (t - t0) / (t1 - t0);
 	Eigen::Vector4f R1 = p1.R;
-	if (R1.dot(p0.R)<0.f) // take the short path
+
+	// take the short path
+	if (R1.dot(p0.R) < 0.f)  {
 		R1=-R1;
+	}
+
 	return {
 		Eigen::Quaternionf(p0.R).slerp(t, Eigen::Quaternionf(R1)).coeffs(),
-		p0.T+(p1.T-p0.T)*t,
-		p0.slice+(p1.slice-p0.slice)*t,
-		p0.scale+(p1.scale-p0.scale)*t,
-		p0.fov+(p1.fov-p0.fov)*t,
-		p0.dof+(p1.dof-p0.dof)*t,
+		p0.T + (p1.T - p0.T) * t,
+		p0.slice + (p1.slice - p0.slice) * t,
+		p0.scale + (p1.scale - p0.scale) * t,
+		p0.fov + (p1.fov - p0.fov) * t,
+		p0.dof + (p1.dof - p0.dof) * t,
 	};
 }
 
@@ -123,6 +132,7 @@ void CameraPath::load(const std::string& filepath_string, const Eigen::Matrix<fl
 	}
 }
 
+#ifdef NGP_GUI
 int CameraPath::imgui(char path_filename_buf[128], float frame_milliseconds, Matrix<float, 3, 4> &camera, float slice_plane_z, float scale, float fov, float dof, float bounding_radius, const Eigen::Matrix<float, 3, 4> &first_xform) {
 	int n=std::max(0,int(m_keyframes.size())-1);
 	int read= 0;					// 1=smooth, 2=hard
@@ -315,5 +325,6 @@ bool CameraPath::imgui_viz(Matrix<float, 4, 4> &view2proj, Matrix<float, 4, 4> &
 	}
 	return changed;
 }
+#endif //NGP_GUI
 
 NGP_NAMESPACE_END

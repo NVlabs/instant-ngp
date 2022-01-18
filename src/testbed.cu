@@ -34,39 +34,34 @@
 
 #include <json/json.hpp>
 
-#include <imgui/imgui.h>
-#include <imgui/imgui_impl_glfw.h>
-#include <imgui/imgui_impl_opengl3.h>
-#include <imgui/ImGuizmo.h>
-
 #include <filesystem/path.h>
 
 #include <fstream>
 
 #ifdef NGP_GUI
+#  include <imgui/imgui.h>
+#  include <imgui/imgui_impl_glfw.h>
+#  include <imgui/imgui_impl_opengl3.h>
+#  include <imgui/ImGuizmo.h>
 #  ifdef _WIN32
 #    include <GL/gl3w.h>
 #  else
 #    include <GL/glew.h>
 #  endif
 #  include <GLFW/glfw3.h>
-#endif
-
-#undef min
-#undef max
-
-#if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
-#  pragma comment(lib, "legacy_stdio_definitions")
-#endif
-
-#ifdef NGP_GUI
 #  if defined(_MSC_VER)
 #    pragma comment(lib, "glfw/lib-vc2010-64/glfw3.lib")
 #    pragma comment(lib, "opengl32.lib")
 #    pragma comment(lib, "gdi32.lib")
 #    pragma comment(lib, "shell32.lib")
 #  endif
+#  if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
+#    pragma comment(lib, "legacy_stdio_definitions")
+#  endif
 #endif
+
+#undef min
+#undef max
 
 using namespace Eigen;
 using namespace tcnn;
@@ -121,20 +116,6 @@ void Testbed::clear_training_data() {
 	m_nerf.training.dataset.rays_data.free_memory();
 }
 
-void Testbed::visualize_nerf_cameras(const Matrix<float, 4, 4>& world2proj) {
-	ImDrawList* list = ImGui::GetForegroundDrawList();
-	for (int i=0; i < m_nerf.training.dataset.n_images;++i) {
-		float aspect = float(m_nerf.training.dataset.image_resolution.x())/float(m_nerf.training.dataset.image_resolution.y());
-		visualize_nerf_camera(world2proj, m_nerf.training.dataset.xforms[i], aspect, 0x40ffff40);
-		visualize_nerf_camera(world2proj, m_nerf.training.transforms[i], aspect, 0x80ffffff);
-
-		add_debug_line(world2proj, list, m_nerf.training.dataset.xforms[i].col(3), m_nerf.training.transforms[i].col(3), 0xffff40ff); // 1% loss change offset
-
-		// Visualize near distance
-		add_debug_line(world2proj, list, m_nerf.training.transforms[i].col(3), m_nerf.training.transforms[i].col(3) + m_nerf.training.transforms[i].col(2) * m_nerf.training.near_distance, 0x20ffffff);
-	}
-}
-
 json Testbed::load_network_config(const fs::path& network_config_path) {
 	if (!network_config_path.empty()) {
 		m_network_config_path = network_config_path;
@@ -172,18 +153,6 @@ void Testbed::reload_network_from_json(const json& json, const std::string& conf
 	// be sure to use a filename, or if a directory, end with a trailing slash
 	m_network_config = merge_parent_network_config(json, config_base_path);
 	reset_network();
-}
-
-void Testbed::mouse_wheel(Vector2f m, float delta) {
-	if (delta == 0) {
-		return;
-	}
-	if (!ImGui::GetIO().WantCaptureMouse) {
-		float scale_factor = pow(1.1f, -delta);
-		m_image.pos = (m_image.pos - m) / scale_factor + m;
-		set_scale(m_scale * scale_factor);
-	}
-	reset_accumulation();
 }
 
 void Testbed::handle_file(const std::string& file) {
@@ -236,57 +205,6 @@ void Testbed::translate_camera(const Vector3f& rel) {
 	m_camera.col(3) += m_camera.block<3,3>(0,0) * rel * m_bounding_radius;
 	reset_accumulation();
 }
-
-void Testbed::mouse_drag(const Vector2f& rel, int button) {
-	Vector3f up = m_up_dir;
-	Vector3f side = m_camera.col(0);
-
-	bool is_left_held = (button & 1) != 0;
-	bool is_right_held = (button & 2) != 0;
-
-	bool shift = ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Shift;
-	if (is_left_held) {
-		if (shift) {
-			auto mouse = ImGui::GetMousePos();
-			determine_autofocus_target_from_pixel({mouse.x, mouse.y});
-		} else {
-			float rot_sensitivity = m_fps_camera ? 0.35f : 1.0f;
-			Matrix3f rot =
-				(AngleAxisf(static_cast<float>(-rel.x() * 2 * PI() * rot_sensitivity), up) * // Scroll sideways around up vector
-				AngleAxisf(static_cast<float>(-rel.y() * 2 * PI() * rot_sensitivity), side)).matrix(); // Scroll around side vector
-
-			m_image.pos += rel;
-			if (m_fps_camera) {
-				m_camera.block<3,3>(0,0) = rot * m_camera.block<3,3>(0,0);
-			} else {
-				// Turntable
-				auto old_look_at = look_at();
-				set_look_at({0.0f, 0.0f, 0.0f});
-				m_camera = rot * m_camera;
-				set_look_at(old_look_at);
-			}
-
-			reset_accumulation();
-		}
-	}
-
-	if (is_right_held) {
-		Matrix3f rot =
-			(AngleAxisf(static_cast<float>(-rel.x() * 2 * PI()), up) * // Scroll sideways around up vector
-			AngleAxisf(static_cast<float>(-rel.y() * 2 * PI()), side)).matrix(); // Scroll around side vector
-
-		if (m_render_mode == ERenderMode::Shade)
-			m_sun_dir = rot.transpose() * m_sun_dir;
-		m_slice_plane_z += -rel.y() * m_bounding_radius;
-		reset_accumulation();
-	}
-
-	bool is_middle_held = (button & 4) != 0;
-	if (is_middle_held) {
-		translate_camera({-rel.x(), -rel.y(), 0.0f});
-	}
-}
-
 
 void Testbed::set_nerf_camera_matrix(const Eigen::Matrix<float, 3, 4>& cam) {
 	m_camera = m_nerf.training.dataset.nerf_matrix_to_ngp(cam);
@@ -341,21 +259,10 @@ void Testbed::reset_camera() {
 	reset_accumulation();
 }
 
-
 void Testbed::set_train(bool mtrain) {
 	if (m_train && !mtrain && m_max_level_rand_training)
 		set_max_level(1.f);
 	m_train = mtrain;
-}
-
-
-bool ColoredButton(const char *name, float hue) {
-	ImGui::PushStyleColor(ImGuiCol_Button, (ImVec4)ImColor::HSV(hue, 0.6f, 0.6f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, (ImVec4)ImColor::HSV(hue, 0.7f, 0.7f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, (ImVec4)ImColor::HSV(hue, 0.8f, 0.8f));
-    bool rv = ImGui::Button(name);
-	ImGui::PopStyleColor(3);
-	return rv;
 }
 
 std::string get_filename_in_data_path_with_suffix(fs::path data_path, fs::path network_config_path, const char* suffix) {
@@ -374,8 +281,17 @@ inline float linear_to_db(float x) {
 	return -10.f*logf(x)/logf(10.f);
 }
 
-void Testbed::imgui() {
 #ifdef NGP_GUI
+bool imgui_colored_button(const char *name, float hue) {
+	ImGui::PushStyleColor(ImGuiCol_Button, (ImVec4)ImColor::HSV(hue, 0.6f, 0.6f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, (ImVec4)ImColor::HSV(hue, 0.7f, 0.7f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, (ImVec4)ImColor::HSV(hue, 0.8f, 0.8f));
+	bool rv = ImGui::Button(name);
+	ImGui::PopStyleColor(3);
+	return rv;
+}
+
+void Testbed::imgui() {
 	m_picture_in_picture_res = 0;
 	if (int read = ImGui::Begin("Camera Path", 0, ImGuiWindowFlags_NoScrollbar)) {
 		static char path_filename_buf[128] = "";
@@ -413,7 +329,7 @@ void Testbed::imgui() {
 		ImGui::BeginDisabled();
 	}
 	if (ImGui::CollapsingHeader("Training", m_training_data_available ? ImGuiTreeNodeFlags_DefaultOpen : 0)) {
-		if (ColoredButton(m_train ? "Stop training" : "Start training", 0.4)) {
+		if (imgui_colored_button(m_train ? "Stop training" : "Start training", 0.4)) {
 			set_train(!m_train);
 		}
 		ImGui::SameLine();
@@ -431,7 +347,7 @@ void Testbed::imgui() {
 			ImGui::SameLine();
 			ImGui::Checkbox("Train distortion", &m_nerf.training.optimize_distortion);
 		}
-		if (ColoredButton("Reset training", 0.f)) {
+		if (imgui_colored_button("Reset training", 0.f)) {
 			reload_network_from_file("");
 		}
 		if (m_train) {
@@ -673,13 +589,13 @@ void Testbed::imgui() {
 	}
 
 	if (ImGui::CollapsingHeader("Marching Cubes Mesh Output")) {
-		if (ColoredButton("Mesh it!", 0.4f)) {
+		if (imgui_colored_button("Mesh it!", 0.4f)) {
 			marching_cubes(get_marching_cubes_res(mc_res), mc_thresh);
 			m_nerf.render_with_camera_distortion=false;
 		}
 		if (indices.size()>0) {
 			ImGui::SameLine();
-			if (ColoredButton("Clear Mesh", 0.f)) {
+			if (imgui_colored_button("Clear Mesh", 0.f)) {
 				indices={};
 				verts={};
 				vert_normals={};
@@ -692,7 +608,7 @@ void Testbed::imgui() {
 			}
 		}
 		ImGui::SameLine();
-		if (ColoredButton("Save density PNG",-0.4f)) {
+		if (imgui_colored_button("Save density PNG",-0.4f)) {
 			char fname[128];
 			auto r = get_marching_cubes_res(mc_res);
 			snprintf(fname, sizeof(fname), "%s_%d_%d_%d.png", m_data_path.stem().str().c_str(), r.x(), r.y(), r.z());
@@ -818,7 +734,20 @@ void Testbed::imgui() {
 	}
 
 	ImGui::End();
-#endif //NGP_GUI
+}
+
+void Testbed::visualize_nerf_cameras(const Matrix<float, 4, 4>& world2proj) {
+	ImDrawList* list = ImGui::GetForegroundDrawList();
+	for (int i=0; i < m_nerf.training.dataset.n_images;++i) {
+		float aspect = float(m_nerf.training.dataset.image_resolution.x())/float(m_nerf.training.dataset.image_resolution.y());
+		visualize_nerf_camera(world2proj, m_nerf.training.dataset.xforms[i], aspect, 0x40ffff40);
+		visualize_nerf_camera(world2proj, m_nerf.training.transforms[i], aspect, 0x80ffffff);
+
+		add_debug_line(world2proj, list, m_nerf.training.dataset.xforms[i].col(3), m_nerf.training.transforms[i].col(3), 0xffff40ff); // 1% loss change offset
+
+		// Visualize near distance
+		add_debug_line(world2proj, list, m_nerf.training.transforms[i].col(3), m_nerf.training.transforms[i].col(3) + m_nerf.training.transforms[i].col(2) * m_nerf.training.near_distance, 0x20ffffff);
+	}
 }
 
 void Testbed::draw_visualizations(const Eigen::Matrix<float, 3, 4>& camera_matrix) {
@@ -859,6 +788,7 @@ void Testbed::draw_visualizations(const Eigen::Matrix<float, 3, 4>& camera_matri
 		}
 	}
 }
+#endif //NGP_GUI
 
 void Testbed::draw_contents() {
 	if (m_train) {
@@ -939,8 +869,10 @@ void Testbed::draw_contents() {
 			}
 		}
 
+#ifdef NGP_GUI
 		// Visualizations are only meaningful when rendering a single view
 		draw_visualizations(m_smoothed_camera);
+#endif
 	} else {
 #ifdef NGP_GUI
 		int n_views = n_dimensions_to_visualize()+1;
@@ -1092,8 +1024,184 @@ void Testbed::apply_camera_smoothing(float elapsed_ms) {
 	}
 }
 
-bool Testbed::handle_user_input() {
 #ifdef NGP_GUI
+bool Testbed::keyboard_event() {
+	if (ImGui::GetIO().WantCaptureKeyboard) {
+		return false;
+	}
+
+	for (int idx = 0; idx < std::min((int)ERenderMode::NumRenderModes, 10); ++idx) {
+		char c[] = { "1234567890" };
+		if (ImGui::IsKeyPressed(c[idx])) {
+			m_render_mode = (ERenderMode)idx;
+			reset_accumulation();
+		}
+	}
+
+	bool shift = ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Shift;
+
+	if (ImGui::IsKeyPressed('Z')) {
+		m_camera_path.m_gizmo_op = ImGuizmo::TRANSLATE;
+	}
+
+	if (ImGui::IsKeyPressed('X')) {
+		m_camera_path.m_gizmo_op = ImGuizmo::ROTATE;
+	}
+
+	if (ImGui::IsKeyPressed('E'))
+		set_exposure(m_exposure + (shift ? -0.5f : 0.5f));
+	if (ImGui::IsKeyPressed('R')) {
+		if (shift) {
+			reset_camera();
+		} else {
+			reload_network_from_file("");
+		}
+	}
+	if (ImGui::IsKeyPressed('O')) {
+		m_nerf.training.render_error_overlay=!m_nerf.training.render_error_overlay;
+	}
+	if (ImGui::IsKeyPressed('G')) {
+		m_render_ground_truth = !m_render_ground_truth;
+		reset_accumulation();
+		if (m_render_ground_truth) {
+			m_nerf.training.view=find_best_training_view(m_nerf.training.view);
+		}
+	}
+	if (ImGui::IsKeyPressed('.')) {
+		if (m_single_view) {
+			if (m_visualized_dimension == m_network->width(m_visualized_layer)-1 && m_visualized_layer < m_network->num_forward_activations()-1) {
+				set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer+1)));
+				set_visualized_dim(0);
+			} else {
+				set_visualized_dim(std::max(-1, std::min((int)m_network->width(m_visualized_layer)-1, m_visualized_dimension+1)));
+			}
+		} else {
+			set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer+1)));
+		}
+	}
+	if (ImGui::IsKeyPressed(',')) {
+		if (m_single_view) {
+			if (m_visualized_dimension == 0 && m_visualized_layer > 0) {
+				set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer-1)));
+				set_visualized_dim(m_network->width(m_visualized_layer)-1);
+			} else {
+				set_visualized_dim(std::max(-1, std::min((int)m_network->width(m_visualized_layer)-1, m_visualized_dimension-1)));
+			}
+		} else {
+			set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer-1)));
+		}
+	}
+	if (ImGui::IsKeyPressed('M')) {
+		m_single_view = !m_single_view;
+		reset_accumulation();
+	}
+	if (ImGui::IsKeyPressed('T'))
+		set_train(!m_train);
+	if (ImGui::IsKeyPressed('N')) {
+		m_sdf.analytic_normals = !m_sdf.analytic_normals;
+		reset_accumulation();
+	}
+
+	if (ImGui::IsKeyPressed('=') || ImGui::IsKeyPressed('+')) {
+		m_camera_velocity *= 1.5f;
+	} else if (ImGui::IsKeyPressed('-') || ImGui::IsKeyPressed('_')) {
+		m_camera_velocity /= 1.5f;
+	}
+
+	// WASD camera movement
+	Eigen::Vector3f translate_vec = Eigen::Vector3f::Zero();
+	if (ImGui::IsKeyDown('W')) {
+		translate_vec.z() += 1.0f;
+	}
+	if (ImGui::IsKeyDown('A')) {
+		translate_vec.x() += -1.0f;
+	}
+	if (ImGui::IsKeyDown('S')) {
+		translate_vec.z() += -1.0f;
+	}
+	if (ImGui::IsKeyDown('D')) {
+		translate_vec.x() += 1.0f;
+	}
+	if (ImGui::IsKeyDown(' ')) {
+		translate_vec.y() += -1.0f;
+	}
+	if (ImGui::IsKeyDown('C')) {
+		translate_vec.y() += 1.0f;
+	}
+	translate_vec *= m_camera_velocity * m_gui_elapsed_ms / 1000.0f;
+	if (shift) {
+		translate_vec *= 5;
+	}
+	if (translate_vec != Eigen::Vector3f::Zero()) {
+		m_fps_camera = true;
+		translate_camera(translate_vec);
+	}
+	return false;
+}
+
+void Testbed::mouse_wheel(Vector2f m, float delta) {
+	if (delta == 0) {
+		return;
+	}
+	if (!ImGui::GetIO().WantCaptureMouse) {
+		float scale_factor = pow(1.1f, -delta);
+		m_image.pos = (m_image.pos - m) / scale_factor + m;
+		set_scale(m_scale * scale_factor);
+	}
+	reset_accumulation();
+}
+
+void Testbed::mouse_drag(const Vector2f& rel, int button) {
+	Vector3f up = m_up_dir;
+	Vector3f side = m_camera.col(0);
+
+	bool is_left_held = (button & 1) != 0;
+	bool is_right_held = (button & 2) != 0;
+
+	bool shift = ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Shift;
+	if (is_left_held) {
+		if (shift) {
+			auto mouse = ImGui::GetMousePos();
+			determine_autofocus_target_from_pixel({mouse.x, mouse.y});
+		} else {
+			float rot_sensitivity = m_fps_camera ? 0.35f : 1.0f;
+			Matrix3f rot =
+				(AngleAxisf(static_cast<float>(-rel.x() * 2 * PI() * rot_sensitivity), up) * // Scroll sideways around up vector
+				AngleAxisf(static_cast<float>(-rel.y() * 2 * PI() * rot_sensitivity), side)).matrix(); // Scroll around side vector
+
+			m_image.pos += rel;
+			if (m_fps_camera) {
+				m_camera.block<3,3>(0,0) = rot * m_camera.block<3,3>(0,0);
+			} else {
+				// Turntable
+				auto old_look_at = look_at();
+				set_look_at({0.0f, 0.0f, 0.0f});
+				m_camera = rot * m_camera;
+				set_look_at(old_look_at);
+			}
+
+			reset_accumulation();
+		}
+	}
+
+	if (is_right_held) {
+		Matrix3f rot =
+			(AngleAxisf(static_cast<float>(-rel.x() * 2 * PI()), up) * // Scroll sideways around up vector
+			AngleAxisf(static_cast<float>(-rel.y() * 2 * PI()), side)).matrix(); // Scroll around side vector
+
+		if (m_render_mode == ERenderMode::Shade)
+			m_sun_dir = rot.transpose() * m_sun_dir;
+		m_slice_plane_z += -rel.y() * m_bounding_radius;
+		reset_accumulation();
+	}
+
+	bool is_middle_held = (button & 4) != 0;
+	if (is_middle_held) {
+		translate_camera({-rel.x(), -rel.y(), 0.0f});
+	}
+}
+
+bool Testbed::handle_user_input() {
 	if (glfwWindowShouldClose(m_glfw_window) || ImGui::IsKeyDown(GLFW_KEY_ESCAPE) || ImGui::IsKeyDown(GLFW_KEY_Q)) {
 		destroy_window();
 		return false;
@@ -1144,12 +1252,10 @@ bool Testbed::handle_user_input() {
 	mouse_drag({relm.x, relm.y}, mb);
 
 	glfwGetWindowSize(m_glfw_window, &m_window_res.x(), &m_window_res.y());
-#endif //NGP_GUI
 	return true;
 }
 
 void Testbed::draw_gui() {
-#ifdef NGP_GUI
 	// Make sure all the cuda code finished its business here
 	CUDA_CHECK_THROW(cudaDeviceSynchronize());
 
@@ -1218,8 +1324,8 @@ void Testbed::draw_gui() {
 	// Any code outside of this function needs to be able to freely write to
 	// textures without being worries about interfering with rendering.
 	glFinish();
-#endif //NGP_GUI
 }
+#endif //NGP_GUI
 
 bool Testbed::want_repl() {
 	bool b=m_want_repl;
@@ -1228,11 +1334,13 @@ bool Testbed::want_repl() {
 }
 
 bool Testbed::frame() {
+#ifdef NGP_GUI
 	if (m_render_window) {
 		if (!handle_user_input()) {
 			return false;
 		}
 	}
+#endif
 
 	draw_contents();
 	if (m_testbed_mode == ETestbedMode::Sdf && m_sdf.calculate_iou_online) {
@@ -1240,6 +1348,7 @@ bool Testbed::frame() {
 		m_sdf.iou_decay = 0.f;
 	}
 
+#ifdef NGP_GUI
 	if (m_render_window) {
 		// Gather histogram statistics of the encoding in use
 		if (m_gather_histograms) {
@@ -1248,6 +1357,7 @@ bool Testbed::frame() {
 
 		draw_gui();
 	}
+#endif
 
 	return true;
 }
@@ -1572,116 +1682,6 @@ void Testbed::reset_network() {
 		}
 	}
 }
-
-bool Testbed::keyboard_event() {
-	if (ImGui::GetIO().WantCaptureKeyboard)
-		return false;
-	for (int idx = 0; idx < std::min((int)ERenderMode::NumRenderModes, 10); ++idx) {
-		char c[] = { "1234567890" };
-		if (ImGui::IsKeyPressed(c[idx])) {
-			m_render_mode = (ERenderMode)idx;
-			reset_accumulation();
-		}
-	}
-	bool shift = ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Shift;
-	if (ImGui::IsKeyPressed('Z'))
-		m_camera_path.m_gizmo_op=ImGuizmo::TRANSLATE;
-	if (ImGui::IsKeyPressed('X'))
-		m_camera_path.m_gizmo_op=ImGuizmo::ROTATE;
-
-
-	if (ImGui::IsKeyPressed('E'))
-		set_exposure(m_exposure + (shift ? -0.5f : 0.5f));
-	if (ImGui::IsKeyPressed('R')) {
-		if (shift) {
-			reset_camera();
-		} else {
-			reload_network_from_file("");
-		}
-	}
-	if (ImGui::IsKeyPressed('O')) {
-		m_nerf.training.render_error_overlay=!m_nerf.training.render_error_overlay;
-	}
-	if (ImGui::IsKeyPressed('G')) {
-		m_render_ground_truth = !m_render_ground_truth;
-		reset_accumulation();
-		if (m_render_ground_truth) {
-			m_nerf.training.view=find_best_training_view(m_nerf.training.view);
-		}
-	}
-	if (ImGui::IsKeyPressed('.')) {
-		if (m_single_view) {
-			if (m_visualized_dimension == m_network->width(m_visualized_layer)-1 && m_visualized_layer < m_network->num_forward_activations()-1) {
-				set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer+1)));
-				set_visualized_dim(0);
-			} else {
-				set_visualized_dim(std::max(-1, std::min((int)m_network->width(m_visualized_layer)-1, m_visualized_dimension+1)));
-			}
-		} else {
-			set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer+1)));
-		}
-	}
-	if (ImGui::IsKeyPressed(',')) {
-		if (m_single_view) {
-			if (m_visualized_dimension == 0 && m_visualized_layer > 0) {
-				set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer-1)));
-				set_visualized_dim(m_network->width(m_visualized_layer)-1);
-			} else {
-				set_visualized_dim(std::max(-1, std::min((int)m_network->width(m_visualized_layer)-1, m_visualized_dimension-1)));
-			}
-		} else {
-			set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer-1)));
-		}
-	}
-	if (ImGui::IsKeyPressed('M')) {
-		m_single_view = !m_single_view;
-		reset_accumulation();
-	}
-	if (ImGui::IsKeyPressed('T'))
-		set_train(!m_train);
-	if (ImGui::IsKeyPressed('N')) {
-		m_sdf.analytic_normals = !m_sdf.analytic_normals;
-		reset_accumulation();
-	}
-
-	if (ImGui::IsKeyPressed('=') || ImGui::IsKeyPressed('+')) {
-		m_camera_velocity *= 1.5f;
-	} else if (ImGui::IsKeyPressed('-') || ImGui::IsKeyPressed('_')) {
-		m_camera_velocity /= 1.5f;
-	}
-
-	// WASD camera movement
-	Eigen::Vector3f translate_vec = Eigen::Vector3f::Zero();
-	if (ImGui::IsKeyDown('W')) {
-		translate_vec.z() += 1.0f;
-	}
-	if (ImGui::IsKeyDown('A')) {
-		translate_vec.x() += -1.0f;
-	}
-	if (ImGui::IsKeyDown('S')) {
-		translate_vec.z() += -1.0f;
-	}
-	if (ImGui::IsKeyDown('D')) {
-		translate_vec.x() += 1.0f;
-	}
-	if (ImGui::IsKeyDown(' ')) {
-		translate_vec.y() += -1.0f;
-	}
-	if (ImGui::IsKeyDown('C')) {
-		translate_vec.y() += 1.0f;
-	}
-	translate_vec *= m_camera_velocity * m_gui_elapsed_ms / 1000.0f;
-	if (shift) {
-		translate_vec *= 5;
-	}
-	if (translate_vec != Eigen::Vector3f::Zero()) {
-		m_fps_camera = true;
-		translate_camera(translate_vec);
-	}
-	return false;
-}
-
-
 
 Testbed::Testbed(ETestbedMode mode) : m_testbed_mode(mode) {
 	m_network_config = {
