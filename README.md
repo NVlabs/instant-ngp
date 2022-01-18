@@ -54,9 +54,16 @@ instant-ngp$ cmake . -B build
 instant-ngp$ cmake --build build --config RelWithDebInfo -j 16
 ```
 
-If the build succeeded, you can now run the code via the `build/testbed` executable or the `scripts/run.py` script described below.
+If the build fails, please consult [this list of possible fixes](https://github.com/NVlabs/instant-ngp#troubleshooting-compile-errors) before opening an issue.
 
-If automatic GPU architecture detection fails, (as can happen if you have multiple GPUs installed), set the  `TCNN_CUDA_ARCHITECTURES` enivonment variable for the GPU you would like to use. Set it to `86` for RTX 3000 cards, `80` for A100 cards, and  `75` for RTX 2000 cards.
+If the build succeeds, you can now run the code via the `build/testbed` executable or the `scripts/run.py` script described below.
+
+If automatic GPU architecture detection fails, (as can happen if you have multiple GPUs installed), set the  `TCNN_CUDA_ARCHITECTURES` enivonment variable for the GPU you would like to use. The following table lists the values for common GPUs. If your GPU is not listed, consult [this exhaustive list](https://developer.nvidia.com/cuda-gpus).
+
+| RTX 30X0 | A100 | RTX 20X0 | TITAN V / V100 | GTX 10X0 / TITAN Xp | GTX 9X0 | K80 |
+|----------|------|----------|----------------|---------------------|---------|-----|
+|       86 |   80 |       75 |             70 |                  61 |      52 |  37 |
+
 
 
 ## Interactive training and rendering
@@ -131,6 +138,26 @@ To conduct controlled experiments in an automated fashion, all features from the
 For an example of how the `./build/testbed` application can be implemented and extended from within Python, see `./scripts/run.py`, which supports a superset of the command line arguments that `./build/testbed` does.
 
 Happy hacking!
+
+
+## Troubleshooting compile errors
+
+Before investigating further, make sure all submodules are up-to-date and try compiling again.
+```sh
+instant-ngp$ git submodule sync --recursive
+instant-ngp$ git submodule update --init --recursive
+```
+If __instant-ngp__ still fails to compile, make sure your CUDA, CMake and compiler versions match [the requirements](https://github.com/NVlabs/instant-ngp#requirements) and look for your problem in the following table.
+If you cannot find it there, please feel free to [open an issue](https://github.com/NVlabs/instant-ngp/issues/new) and ask for help.
+
+| Problem | Resolution |
+|---------|------------|
+| __CMake error:__ No CUDA toolset found / CUDA_ARCHITECTURES is empty for target "cmTC_0c70f" | __Windows:__ the Visual Studio CUDA integration was not installed correctly. Follow [these instructions](https://github.com/mitsuba-renderer/mitsuba2/issues/103#issuecomment-618378963) to fix the problem without re-installing CUDA. (#18) |
+| | __Linux:__ Environment variables for your CUDA installation are probably incorrectly set. You may work around the issue using ```cmake . -B build -DCMAKE_CUDA_COMPILER=/usr/local/cuda-<your cuda version>/bin/nvcc``` (#28) |
+| __CMake error:__ No known features for CXX compiler "MSVC" | Reinstall Visual Studio & make sure you run CMake from a developer shell. (#21) |
+| __Compile error:__ undefined references to "cudaGraphExecUpdate" / identifier "cublasSetWorkspace" is undefined | Update your CUDA installation (which is likely 11.0) to 11.3 or higher. (#34 #41 #42) |
+| __Compile error:__ too few arguments in function call | Update submodules with the above two `git` commands. (#37 #52) |
+| __Python error:__ No module named 'pyngp' | It is likely that CMake did not detect your Python installation and therefore did not build `pyngp`. Check CMake logs to verify this. If `pyngp` was built in a different folder than `instant-ngp/build`, Python will be unable to detect it and you have to supply the full path to the import statement. |
 
 ## Thanks
 
