@@ -240,16 +240,19 @@ __global__ void kernel_takikawa_backward(
 
 				int param_idx = node.vertices[idx] * N_FEATURES_PER_LEVEL;
 
-				if (N_FEATURES_PER_LEVEL == 1 || !std::is_same<T, __half>::value) {
-					#pragma unroll
-					for (uint32_t f = 0; f < N_FEATURES_PER_LEVEL; ++f) {
-						atomicAdd(&grid_gradient[param_idx], (T)((float)grad[f] * weight));
-					}
-				} else {
+#if TCNN_MIN_GPU_ARCH >= 60 // atomicAdd(__half2) is only supported with compute capability 60 and above
+				if (N_FEATURES_PER_LEVEL > 1 && std::is_same<T, __half>::value) {
 					#pragma unroll
 					for (uint32_t feature = 0; feature < N_FEATURES_PER_LEVEL; feature += 2) {
 						__half2 v = {(__half)((float)grad[feature] * weight), (__half)((float)grad[feature+1] * weight)};
 						atomicAdd((__half2*)&grid_gradient[param_idx + feature], v);
+					}
+				} else
+#endif
+				{
+					#pragma unroll
+					for (uint32_t f = 0; f < N_FEATURES_PER_LEVEL; ++f) {
+						atomicAdd(&grid_gradient[param_idx], (T)((float)grad[f] * weight));
 					}
 				}
 			}

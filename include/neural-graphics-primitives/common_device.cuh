@@ -122,15 +122,18 @@ __device__ void deposit_image_gradient(const Eigen::Matrix<float, N_DIMS, 1>& va
 		pos.x() = std::max(std::min(pos.x(), resolution.x()-1), 0);
 		pos.y() = std::max(std::min(pos.y(), resolution.y()-1), 0);
 
-		if (std::is_same<T, float>::value) {
-			for (uint32_t c = 0; c < N_DIMS; ++c) {
-				atomicAdd(&gradient[(pos.x() + pos.y() * resolution.x()) * N_DIMS + c], (T)value[c] * weight);
-				atomicAdd(&gradient_weight[(pos.x() + pos.y() * resolution.x()) * N_DIMS + c], weight);
-			}
-		} else if (std::is_same<T, __half>::value) {
+#if TCNN_MIN_GPU_ARCH >= 60 // atomicAdd(__half2) is only supported with compute capability 60 and above
+		if (std::is_same<T, __half>::value) {
 			for (uint32_t c = 0; c < N_DIMS; c += 2) {
 				atomicAdd((__half2*)&gradient[(pos.x() + pos.y() * resolution.x()) * N_DIMS + c], {(T)value[c] * weight, (T)value[c+1] * weight});
 				atomicAdd((__half2*)&gradient_weight[(pos.x() + pos.y() * resolution.x()) * N_DIMS + c], {weight, weight});
+			}
+		} else
+#endif
+		{
+			for (uint32_t c = 0; c < N_DIMS; ++c) {
+				atomicAdd(&gradient[(pos.x() + pos.y() * resolution.x()) * N_DIMS + c], (T)value[c] * weight);
+				atomicAdd(&gradient_weight[(pos.x() + pos.y() * resolution.x()) * N_DIMS + c], weight);
 			}
 		}
 	};
