@@ -295,7 +295,6 @@ figure {
 		<figure style="width: 100%; float: left">
 			<p class="caption_justify">
 				We demonstrate near-instant training of neural graphics primitives on a single GPU for multiple tasks. In <b>gigapixel image</b> we represent an image by a neural network. <b>SDF</b> learns a signed distance function in 3D space whose zero level-set represents a 2D surface.
-				<!--<b>Neural radiance caching</b> (NRC) <a href="https://research.nvidia.com/publication/2021-06_Real-time-Neural-Radiance">[Müller et al. 2021]</a> employs a neural network that is trained in real-time to cache costly lighting calculations-->
 				<b>NeRF</b> <a href="https://research.nvidia.com/publication/2021-06_Real-time-Neural-Radiance">[Mildenhall et al. 2020]</a> uses 2D images and their camera poses to reconstruct a volumetric radiance-and-density field that is visualized using ray marching.
 				Lastly, <b>neural volume</b> learns a denoised radiance and density field directly from a volumetric path tracer.
 				In all tasks, our encoding and its efficient implementation provide clear benefits: instant training, high quality, and simplicity. Our encoding is task-agnostic: we use the same implementation and hyperparameters across all tasks and only vary the hash table size which trades off quality and performance.
@@ -308,8 +307,8 @@ figure {
 		<h2>News</h2>
 		<hr>
 		<div class="row">
-			<div><span class="material-icons"> integration_instructions </span> [Jan 2022] Code released on <a href="https://github.com/NVlabs/instant-ngp">GitHub</a>.</div>
-			<!-- <div><span class="material-icons"> description </span> [Jan 2022] Paper released on <a href="https://arxiv.org/abs/XXX">arXiv</a>.</div> -->
+			<div><span class="material-icons"> description </span> [Jan 19th 2022] Paper released on <a href="https://arxiv.org/abs/2201.05989">arXiv</a>.</div>
+			<div><span class="material-icons"> integration_instructions </span> [Jan 14th 2022] Code released on <a href="https://github.com/NVlabs/instant-ngp">GitHub</a>.</div>
 		</div>
 	</section>
 
@@ -468,8 +467,8 @@ figure {
 				<p>Thomas Müller, Alex Evans, Christoph Schied, Alexander Keller</p>
 
 				<div><span class="material-icons"> description </span><a href="assets/mueller2022instant.pdf"> Paper preprint (PDF, 15.3 MB)</a></div>
-				<!-- <div><span class="material-icons"> description </span><a href="https://arxiv.org/abs/xxxx.xxxxx"> arXiv version</a></div> -->
-				<!-- <div><span class="material-icons"> insert_comment </span><a href="assets/mueller2022instant.bib"> BibTeX</a></div> -->
+				<div><span class="material-icons"> description </span><a href="https://arxiv.org/abs/2201.05989"> arXiv version</a></div>
+				<div><span class="material-icons"> insert_comment </span><a href="assets/mueller2022instant.bib"> BibTeX</a></div>
 				<div><span class="material-icons"> integration_instructions </span><a href="https://github.com/NVlabs/instant-ngp"> Code</a></div>
 				<div><span class="material-icons"> videocam </span><a href="assets/mueller2022instant.mp4"> Video</a></div>
 
@@ -478,18 +477,18 @@ figure {
 		</div>
 	</section>
 
-	<!-- <section id="bibtex">
+	<section id="bibtex">
 		<h2>Citation</h2>
 		<hr>
 		<pre><code>@article{mueller2022instant,
-	title = {Instant Neural Graphics Primitives with a Multiresolution Hash Encoding},
-	author = {Thomas M\"uller and Alex Evans and Christoph Schied and Alexander Keller},
-	journal = {arXiv:XXX},
-	year = {2022},
-	month = jan
+    title = {Instant Neural Graphics Primitives with a Multiresolution Hash Encoding},
+    author = {Thomas M\"uller and Alex Evans and Christoph Schied and Alexander Keller},
+    journal = {arXiv:2201.05989},
+    year = {2022},
+    month = jan
 }
 </code></pre>
-	</section> -->
+	</section>
 
 	<section id="acknowledgements">
 		<h2>Acknowledgements</h2>
