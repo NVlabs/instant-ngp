@@ -240,7 +240,7 @@ if (OptiX_FOUND)
 
 	set_target_properties(optix_program PROPERTIES CUDA_PTX_COMPILATION ON)
 	set_target_properties(optix_program PROPERTIES CUDA_ARCHITECTURES OFF)
-	target_compile_definitions(optix_program PUBLIC "PTX_FILES")
+	target_compile_definitions(optix_program PUBLIC ${TCNN_DEFINITIONS})
 	target_compile_options(optix_program PUBLIC "--expt-relaxed-constexpr")
 
 	# OptiX programs will be compiled as PTX and packaged
