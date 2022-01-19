@@ -50,15 +50,13 @@
 #endif
 #endif
 
-
-NGP_NAMESPACE_BEGIN
-
-namespace fs = filesystem;
-
 using namespace tcnn;
 using namespace std::literals;
 using namespace Eigen;
+namespace fs = filesystem;
 
+
+NGP_NAMESPACE_BEGIN
 
 // how much to scale the scene by vs the original nerf dataset; we want to fit the thing in the unit cube
 static constexpr float NERF_SCALE = 0.33f;
@@ -189,10 +187,13 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 
 	result.n_images = 0;
 	for (size_t i = 0; i < jsons.size(); ++i) {
-		tlog::info() << "  " << jsonpaths[i];
-
 		auto& json = jsons[i];
 		fs::path basepath = jsonpaths[i].parent_path();
+		if (!json.contains("frames") || !json["frames"].is_array()) {
+			tlog::warning() << "  " << jsonpaths[i] << " does not contain any frames. Skipping.";
+			continue;
+		}
+		tlog::info() << "  " << jsonpaths[i];
 		auto& frames = json["frames"];
 
 		float sharpness_discard_threshold = json.value("sharpness_discard_threshold", 0.0f); // Keep all by default
@@ -257,6 +258,9 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 	BoundingBox cam_aabb;
 	for (size_t i = 0; i < jsons.size(); ++i) {
 		auto& json = jsons[i];
+		if (!json.contains("frames") || !json["frames"].is_array()) {
+			continue;
+		}
 		fs::path basepath = jsonpaths[i].parent_path();
 		std::string jp = jsonpaths[i].str();
 		auto lastdot=jp.find_last_of('.'); if (lastdot==std::string::npos) lastdot=jp.length();

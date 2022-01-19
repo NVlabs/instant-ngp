@@ -39,6 +39,7 @@ using namespace Eigen;
 using namespace nlohmann;
 namespace py = pybind11;
 
+using namespace pybind11::literals; // to bring in the `_a` literal
 
 NGP_NAMESPACE_BEGIN
 
@@ -73,6 +74,31 @@ void Testbed::override_sdf_training_data(py::array_t<float> points, py::array_t<
 	m_sdf.training.max_size = m_sdf.training.size;
 	m_sdf.training.generate_sdf_data_online = false;
 }
+
+pybind11::dict Testbed::compute_marching_cubes_mesh(Eigen::Vector3i res3d, BoundingBox aabb, float thresh) {
+	if (aabb.is_empty()) {
+		aabb = (m_testbed_mode == ETestbedMode::Nerf) ? m_render_aabb : m_aabb;
+	}
+
+	marching_cubes(res3d, aabb, thresh);
+
+	py::array_t<float> cpuverts({(int)m_mesh.verts.size(), 3});
+	py::array_t<float> cpunormals({(int)m_mesh.vert_normals.size(), 3});
+	py::array_t<float> cpucolors({(int)m_mesh.vert_colors.size(), 3});
+	py::array_t<int> cpuindices({(int)m_mesh.indices.size()/3, 3});
+	CUDA_CHECK_THROW(cudaMemcpy(cpuverts.request().ptr, m_mesh.verts.data() , m_mesh.verts.size() * 3 * sizeof(float), cudaMemcpyDeviceToHost));
+	CUDA_CHECK_THROW(cudaMemcpy(cpunormals.request().ptr, m_mesh.vert_normals.data() , m_mesh.vert_normals.size() * 3 * sizeof(float), cudaMemcpyDeviceToHost));
+	CUDA_CHECK_THROW(cudaMemcpy(cpucolors.request().ptr, m_mesh.vert_colors.data() , m_mesh.vert_colors.size() * 3 * sizeof(float), cudaMemcpyDeviceToHost));
+	CUDA_CHECK_THROW(cudaMemcpy(cpuindices.request().ptr, m_mesh.indices.data() , m_mesh.indices.size() * sizeof(int), cudaMemcpyDeviceToHost));
+
+	Eigen::Vector3f* ns = (Eigen::Vector3f*)cpunormals.request().ptr;
+	for (size_t i = 0; i < m_mesh.vert_normals.size(); ++i) {
+		ns[i].normalize();
+	}
+
+	return py::dict("V"_a=cpuverts, "N"_a=cpunormals, "C"_a=cpucolors, "F"_a=cpuindices);
+}
+
 
 py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool linear, float start_time, float end_time, float fps, float shutter_fraction) {
 	m_windowless_render_surface.resize({width, height});
@@ -227,6 +253,11 @@ PYBIND11_MODULE(pyngp, m) {
 		.value("Reinhard", ETonemapCurve::Reinhard)
 		.export_values();
 
+	py::class_<BoundingBox>(m, "BoundingBox")
+		.def_readwrite("min", &BoundingBox::min)
+		.def_readwrite("max", &BoundingBox::max)
+		;
+
 	py::class_<Testbed> testbed(m, "Testbed");
 	testbed
 		.def(py::init<ETestbedMode>())
@@ -235,13 +266,23 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("load_training_data", &Testbed::load_training_data, "Load training data from a given path.")
 		.def("clear_training_data", &Testbed::clear_training_data, "Clears training data to free up GPU memory.")
 		// General control
-		.def("init_window", &Testbed::init_window, "Init a GLFW window that shows real-time progress and a GUI.", py::arg("width"), py::arg("height"), py::arg("hidden")=false)
+		.def("init_window", &Testbed::init_window, "Init a GLFW window that shows real-time progress and a GUI.",
+			py::arg("width"),
+			py::arg("height"),
+			py::arg("hidden") = false
+		)
 		.def("want_repl", &Testbed::want_repl, "returns true if the user clicked the 'I want a repl' button")
 		.def("frame", &Testbed::frame, "Process a single frame. Renders if a window was previously created.")
 		.def("render", &Testbed::render_to_cpu, "Renders an image at the requested resolution. Does not require a window.",
-			py::arg("width")=1920, py::arg("height")=1080, py::arg("spp")=1, py::arg("linear")=true,
-			py::arg("start_t")=-1.f, py::arg("end_t")=-1.f,
-			py::arg("fps")=30.f, py::arg("shutter_fraction")=1.0f)
+			py::arg("width") = 1920,
+			py::arg("height") = 1080,
+			py::arg("spp") = 1,
+			py::arg("linear") = true,
+			py::arg("start_t") = -1.f,
+			py::arg("end_t") = -1.f,
+			py::arg("fps") = 30.f,
+			py::arg("shutter_fraction") = 1.0f
+		)
 		.def("screenshot", &Testbed::screenshot, "Takes a screenshot of the current window contents.", py::arg("linear")=true)
 		// TODO: revisit this binding and return the mesh a python array rather than the number of triangles
 		// .def("marching_cubes", &Testbed::marching_cubes, py::arg("path"), py::arg("res")=128, py::arg("thresh")=2.f, py::arg("unwrap")=false, "Runs marching cubes at the requested res and outputs an OBJ to the given path. Does not require a window.")
@@ -253,12 +294,36 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("reload_network_from_json", &Testbed::reload_network_from_json, "Reload the network from a json object.")
 		.def("override_sdf_training_data", &Testbed::override_sdf_training_data, "Override the training data for learning a signed distance function")
 		.def("calculate_iou", &Testbed::calculate_iou, "Calculate the intersection over union error value",
-			py::arg("n_samples")=128*1024*1024, py::arg("scale_existing_results_factor")=0.0f, py::arg("blocking")=true, py::arg("force_use_octree")=true)
-		.def("n_params", &Testbed::n_params, "get number of trainable parameters")
-		.def("n_encoding_params", &Testbed::n_encoding_params, "get number of trainable parameters in the encoding")
+			py::arg("n_samples") = 128*1024*1024,
+			py::arg("scale_existing_results_factor") = 0.0f,
+			py::arg("blocking") = true,
+			py::arg("force_use_octree") = true
+		)
+		.def("n_params", &Testbed::n_params, "Number of trainable parameters")
+		.def("n_encoding_params", &Testbed::n_encoding_params, "Number of trainable parameters in the encoding")
 		.def("save_snapshot", &Testbed::save_snapshot, py::arg("path"), py::arg("include_optimizer_state")=false, "Save a snapshot of the currently trained model")
 		.def("load_snapshot", &Testbed::load_snapshot, py::arg("path"), "Load a previously saved snapshot")
 		.def("load_camera_path", &Testbed::load_camera_path, "Load a camera path", py::arg("path"))
+		.def("compute_and_save_marching_cubes_mesh", &Testbed::compute_and_save_marching_cubes_mesh,
+			py::arg("filename"),
+			py::arg("resolution") = Eigen::Vector3i::Constant(256),
+			py::arg("aabb") = BoundingBox{},
+			py::arg("thresh") = 2.5f,
+			py::arg("generate_uvs_for_obj_file") = false,
+			"Compute & save a marching cubes mesh from the current SDF or NeRF model. "
+			"Supports OBJ and PLY format. Note that UVs are only supported by OBJ files. "
+			"`thresh` is the density threshold; use 0 for SDF; 2.5 works well for NeRF. "
+			"If the aabb parameter specifies an inside-out (\"empty\") box (default), the current render_aabb bounding box is used."
+		)
+		.def("compute_marching_cubes_mesh", &Testbed::compute_marching_cubes_mesh,
+			py::arg("resolution") = Eigen::Vector3i::Constant(256),
+			py::arg("aabb") = BoundingBox{},
+			py::arg("thresh") = 2.5f,
+			"Compute a marching cubes mesh from the current SDF or NeRF model. "
+			"Returns a python dict with numpy arrays V (vertices), N (vertex normals), C (vertex colors), and F (triangular faces). "
+			"`thresh` is the density threshold; use 0 for SDF; 2.5 works well for NeRF. "
+			"If the aabb parameter specifies an inside-out (\"empty\") box (default), the current render_aabb bounding box is used."
+		)
 		;
 
 	// Interesting members.
@@ -319,12 +384,6 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("rendering_min_alpha", &Testbed::Nerf::rendering_min_alpha)
 		.def_readwrite("cone_angle_constant", &Testbed::Nerf::cone_angle_constant)
 		.def_readwrite("visualize_cameras", &Testbed::Nerf::visualize_cameras)
-		;
-
-	py::class_<BoundingBox> boundingbox(m, "BoundingBox");
-	boundingbox
-		.def_readwrite("min", &BoundingBox::min)
-		.def_readwrite("max", &BoundingBox::max)
 		;
 
 	py::class_<BRDFParams> brdfparams(m, "BRDFParams");

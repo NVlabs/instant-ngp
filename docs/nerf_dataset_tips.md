@@ -32,7 +32,7 @@ The effect can be seen in the image below:
 
 <img src="assets/nerfboxrobot.jpg" width="100%"/>
 
-The cameras are still somewhat centered on the "object of interest" within the unit cube; however the aabb_scale parameter, here set to 16, causes the NeRF implementation to trace rays out to a larger bounding box (of side length 16) containing the background elements, centered at `[0.5,0.5,0.5]`.
+The cameras are still somewhat centered on the "object of interest" within the unit cube; however the aabb_scale parameter, here set to 16, causes the NeRF implementation to trace rays out to a larger bounding box (of side length 16) containing the background elements, centered at `[0.5, 0.5, 0.5]`.
 
 ## Scaling existing datasets
 

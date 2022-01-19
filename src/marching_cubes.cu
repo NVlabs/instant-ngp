@@ -18,6 +18,7 @@
 #include <neural-graphics-primitives/random_val.cuh> // helpers to generate random values, directions
 
 #include <tiny-cuda-nn/gpu_memory.h>
+#include <filesystem/path.h>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image/stb_image_write.h>
@@ -37,9 +38,19 @@
 
 using namespace Eigen;
 using namespace tcnn;
+namespace fs = filesystem;
 
 
 NGP_NAMESPACE_BEGIN
+
+Eigen::Vector3i get_marching_cubes_res(uint32_t res_1d, const BoundingBox &aabb) {
+	float scale = res_1d / (aabb.max-aabb.min).maxCoeff();
+	Vector3i res3d = ((aabb.max-aabb.min)*scale + Vector3f::Constant(0.5f)).cast<int>();
+	res3d.x() = next_multiple((unsigned int)res3d.x(), 16u);
+	res3d.y() = next_multiple((unsigned int)res3d.y(), 16u);
+	res3d.z() = next_multiple((unsigned int)res3d.z(), 16u);
+	return res3d;
+}
 
 #ifdef NGP_GUI
 static bool check_shader(GLuint handle, const char* desc, bool program) {
@@ -171,7 +182,7 @@ void main() {
 	aa=fwidth(gl_BaryCoordNV.x); edge = smoothstep(0.f,aa, gl_BaryCoordNV.x);
 	aa=fwidth(gl_BaryCoordNV.y); edge = min(edge, smoothstep(0.f,aa, gl_BaryCoordNV.y));
 	aa=fwidth(gl_BaryCoordNV.z); edge = min(edge, smoothstep(0.f,aa, gl_BaryCoordNV.z));
-	o.xyz*=sqrt(edge);
+	o.xyz*=sqrt(edge*0.5+0.5);
 }
 )foo");
 		program = glCreateProgram();
@@ -760,91 +771,142 @@ void marching_cubes_gpu(BoundingBox aabb, Eigen::Vector3i res_3d, float thresh, 
 	gen_faces<<<blocks, threads, 0>>>(res_3d, density.data(), vertex_grid.data(), indices_out.data(), thresh, counters.data()+2);
 }
 
-void save_mesh(GPUMemory<Eigen::Vector3f> &verts, GPUMemory<Eigen::Vector3f> &normals, GPUMemory<uint32_t> &indices, const char *optional_outputname, bool unwrap_it, float nerf_scale, Eigen::Vector3f nerf_offset) {
-	if (optional_outputname) {
-		std::vector<Eigen::Vector3f> cpuverts; cpuverts.resize(verts.size());
-		std::vector<Eigen::Vector3f> cpunormals; cpunormals.resize(normals.size());
-		std::vector<uint32_t> cpuindices; cpuindices.resize(indices.size());
-		verts.copy_to_host(cpuverts);
-		normals.copy_to_host(cpunormals);
-		indices.copy_to_host(cpuindices);
+void save_mesh(
+	GPUMemory<Eigen::Vector3f>& verts,
+	GPUMemory<Eigen::Vector3f>& normals,
+	GPUMemory<Eigen::Vector3f>& colors,
+	GPUMemory<uint32_t>& indices,
+	const char* outputname,
+	bool unwrap_it,
+	float nerf_scale,
+	Eigen::Vector3f nerf_offset
+) {
+	std::vector<Eigen::Vector3f> cpuverts; cpuverts.resize(verts.size());
+	std::vector<Eigen::Vector3f> cpunormals; cpunormals.resize(normals.size());
+	std::vector<Eigen::Vector3f> cpucolors; cpucolors.resize(colors.size());
+	std::vector<uint32_t> cpuindices; cpuindices.resize(indices.size());
+	verts.copy_to_host(cpuverts);
+	normals.copy_to_host(cpunormals);
+	colors.copy_to_host(cpucolors);
+	indices.copy_to_host(cpuindices);
 
-		FILE *f=fopen(optional_outputname,"w");
-		if (f) {
-			uint32_t numquads = ((cpuindices.size()/3)+1)/2;
-			uint32_t numquadsx = uint32_t(sqrtf(numquads)+4) & (~3);
-			uint32_t numquadsy = (numquads+numquadsx-1)/numquadsx;
-			uint32_t quadresy = 8;
-			uint32_t quadresx = quadresy+3;
-			uint32_t texw = quadresx*numquadsx;
-			uint32_t texh = quadresy*numquadsy;
-			if (unwrap_it) {
-				fprintf(f, "mtllib nerf.mtl\n");
-				uint8_t *tex=(uint8_t*)malloc(texw*texh*3);
-				for (uint32_t y=0;y<texh;++y) {
-					for (uint32_t x=0;x<texw;++x) {
-						uint32_t q=(x/quadresx)+(y/quadresy)*numquadsx;
-						// 0 x x 3 - - 4
-						// | .\x x\. . |
-						// | . .\x x\. |
-						// 2 - - 1 x x 5
-						uint32_t xi = x % quadresx, yi = y % quadresy;
-						uint32_t t = q*2 + (xi>yi+1);
-						int r=(t*923)&255;
-						int g=(t*3572)&255;
-						int b=(t*5423)&255;
-						//if (xi==yi+1 || xi==yi+2)
-						//	r=g=b=0;
-						tex[x*3+y*3*texw+0]=r;
-						tex[x*3+y*3*texw+1]=g;
-						tex[x*3+y*3*texw+2]=b;
-					}
-				}
-				stbi_write_tga("nerf.tga", texw, texh, 3, tex);
-				free(tex);
+	uint32_t numquads = ((cpuindices.size()/3)+1)/2;
+	uint32_t numquadsx = uint32_t(sqrtf(numquads)+4) & (~3);
+	uint32_t numquadsy = (numquads+numquadsx-1)/numquadsx;
+	uint32_t quadresy = 8;
+	uint32_t quadresx = quadresy+3;
+	uint32_t texw = quadresx*numquadsx;
+	uint32_t texh = quadresy*numquadsy;
+
+	if (unwrap_it) {
+		uint8_t* tex = (uint8_t*)malloc(texw*texh*3);
+		for (uint32_t y = 0; y < texh; ++y) {
+			for (uint32_t x = 0; x < texw; ++x) {
+				uint32_t q = (x/quadresx)+(y/quadresy)*numquadsx;
+				// 0 x x 3 - - 4
+				// | .\x x\. . |
+				// | . .\x x\. |
+				// 2 - - 1 x x 5
+				uint32_t xi = x % quadresx, yi = y % quadresy;
+				uint32_t t = q*2 + (xi>yi+1);
+				int r = (t*923)&255;
+				int g = (t*3572)&255;
+				int b = (t*5423)&255;
+				//if (xi==yi+1 || xi==yi+2)
+				//	r=g=b=0;
+				tex[x*3+y*3*texw+0]=r;
+				tex[x*3+y*3*texw+1]=g;
+				tex[x*3+y*3*texw+2]=b;
 			}
-			for (auto &v: cpuverts) {
-				Eigen::Vector3f p=(v-nerf_offset)/nerf_scale;
-				fprintf(f,"v %0.5f %0.5f %0.5f\n", p.x(), p.y(), p.z());
-			}
-			for (auto &v: cpunormals) {
-				auto n= v.normalized();
-				fprintf(f,"vn %0.5f %0.5f %0.5f\n", n.x(), n.y(), n.z());
-			}
-			if (unwrap_it) {
-				for (size_t i=0;i<cpuindices.size();i++) {
-					uint32_t q=(uint32_t)(i/6);
-					uint32_t x=(q%numquadsx)*quadresx;
-					uint32_t y=(q/numquadsx)*quadresy;
-					uint32_t d=quadresy-1;
-					switch (i%6) {
+		}
+		stbi_write_tga(fs::path(outputname).with_extension(".tga").str().c_str(), texw, texh, 3, tex);
+		free(tex);
+	}
+
+	FILE* f = fopen(outputname,"wb");
+	if (!f) {
+		throw std::runtime_error{"Failed to open " + std::string(outputname) + " for writing."};
+	}
+
+	if (fs::path(outputname).extension() == "ply") {
+		// ply file
+		fprintf(f,
+			"ply\n"
+			"format ascii 1.0\n"
+			"comment output from https://github.com/NVlabs/instant-ngp\n"
+			"element vertex %u\n"
+			"property float x\n"
+			"property float y\n"
+			"property float z\n"
+			"property float nx\n"
+			"property float ny\n"
+			"property float nz\n"
+			"property uchar red\n"
+			"property uchar green\n"
+			"property uchar blue\n"
+			"element face %u\n"
+			"property list uchar int vertex_index\n"
+			"end_header\n"
+			, (unsigned int)cpuverts.size()
+			, (unsigned int)cpuindices.size()/3
+		);
+		for (size_t i=0;i<cpuverts.size();++i) {
+			Eigen::Vector3f p=(cpuverts[i]-nerf_offset)/nerf_scale;
+			Eigen::Vector3f c=cpucolors[i];
+			Eigen::Vector3f n=cpunormals[i].normalized();
+			unsigned char c8[3]={(unsigned char)tcnn::clamp(c.x()*255.f,0.f,255.f),(unsigned char)tcnn::clamp(c.y()*255.f,0.f,255.f),(unsigned char)tcnn::clamp(c.z()*255.f,0.f,255.f)};
+			fprintf(f,"%0.5f %0.5f %0.5f %0.3f %0.3f %0.3f %d %d %d\n", p.x(), p.y(), p.z(), n.x(), n.y(), n.z(), c8[0], c8[1], c8[2]);
+		}
+		for (size_t i=0;i<cpuindices.size();i+=3) {
+			fprintf(f,"3 %d %d %d\n", cpuindices[i+2], cpuindices[i+1], cpuindices[i+0]);
+		}
+	} else {
+		// obj file
+		if (unwrap_it) {
+			fprintf(f, "mtllib nerf.mtl\n");
+		}
+		for (size_t i = 0; i < cpuverts.size(); ++i) {
+			Eigen::Vector3f p = (cpuverts[i]-nerf_offset)/nerf_scale;
+			Eigen::Vector3f c = cpucolors[i];
+			fprintf(f,"v %0.5f %0.5f %0.5f %0.3f %0.3f %0.3f\n", p.x(), p.y(), p.z(), tcnn::clamp(c.x(), 0.f, 1.f), tcnn::clamp(c.y(), 0.f, 1.f), tcnn::clamp(c.z(), 0.f, 1.f));
+		}
+		for (auto &v: cpunormals) {
+			auto n = v.normalized();
+			fprintf(f,"vn %0.5f %0.5f %0.5f\n", n.x(), n.y(), n.z());
+		}
+		if (unwrap_it) {
+			for (size_t i = 0; i < cpuindices.size(); i++) {
+				uint32_t q = (uint32_t)(i/6);
+				uint32_t x = (q%numquadsx)*quadresx;
+				uint32_t y = (q/numquadsx)*quadresy;
+				uint32_t d = quadresy-1;
+				switch (i % 6) {
 					case 0: break;
-					case 1: x+=d;y+=d; break;
-					case 2: y+=d; break;
-					case 3: x+=3; break;
-					case 4: x+=3+d; break;
-					case 5: x+=3+d; y+=d; break;
-					}
-					fprintf(f,"vt %0.5f %0.5f\n", ((float)x+0.5f)/float(texw), 1.f-((float)y+0.5f)/float(texh));
+					case 1: x += d; y += d; break;
+					case 2: y += d; break;
+					case 3: x += 3; break;
+					case 4: x += 3+d; break;
+					case 5: x += 3+d; y += d; break;
 				}
-				fprintf(f, "g default\nusemtl nerf\ns 1\n");
-				for (size_t i=0;i<cpuindices.size();i+=3) {
-					fprintf(f,"f %u/%u/%u %u/%u/%u %u/%u/%u\n",
-						cpuindices[i]+1,(uint32_t)i+1,  cpuindices[i]+1,
-						cpuindices[i+1]+1,(uint32_t)i+2,cpuindices[i+1]+1,
-						cpuindices[i+2]+1,(uint32_t)i+3,cpuindices[i+2]+1
-					);
-				}
-			} else {
-				for (size_t i=0;i<cpuindices.size();i+=3) {
-					fprintf(f,"f %u//%u %u//%u %u//%u\n",
-						cpuindices[i]+1,cpuindices[i]+1,cpuindices[i+1]+1,cpuindices[i+1]+1,cpuindices[i+2]+1,cpuindices[i+2]+1
-					);
-				}
+				fprintf(f,"vt %0.5f %0.5f\n", ((float)x+0.5f)/float(texw), 1.f-((float)y+0.5f)/float(texh));
 			}
-			fclose(f);
+			fprintf(f, "g default\nusemtl nerf\ns 1\n");
+			for (size_t i = 0; i < cpuindices.size(); i += 3) {
+				fprintf(f,"f %u/%u/%u %u/%u/%u %u/%u/%u\n",
+					cpuindices[i+2]+1,(uint32_t)i+3,  cpuindices[i+2]+1,
+					cpuindices[i+1]+1,(uint32_t)i+2,cpuindices[i+1]+1,
+					cpuindices[i+0]+1,(uint32_t)i+1,cpuindices[i+0]+1
+				);
+			}
+		} else {
+			for (size_t i = 0; i < cpuindices.size(); i += 3) {
+				fprintf(f,"f %u//%u %u//%u %u//%u\n",
+					cpuindices[i+2]+1, cpuindices[i+2]+1, cpuindices[i+1]+1, cpuindices[i+1]+1, cpuindices[i+0]+1, cpuindices[i+0]+1
+				);
+			}
 		}
 	}
+	fclose(f);
 }
 
 void save_density_grid_to_png(const GPUMemory<float> &density, const char *filename, Vector3i res3d, float thresh, bool swap_y_z) {

@@ -114,6 +114,10 @@ void CameraPath::save(const std::string& filepath_string) {
 
 void CameraPath::load(const std::string& filepath_string, const Eigen::Matrix<float, 3, 4> &first_xform) {
 	std::ifstream f(filepath_string);
+	if (!f) {
+		throw std::runtime_error{std::string{"Camera path \""} + filepath_string + "\" does not exist."};
+	}
+
 	json j;
 	f >> j;
 
@@ -192,8 +196,22 @@ int CameraPath::imgui(char path_filename_buf[128], float frame_milliseconds, Mat
 
 	ImGui::InputText("##PathFile", path_filename_buf, 128);
 	ImGui::SameLine();
-	if (ImGui::Button("Load"))
-		load(path_filename_buf, first_xform);
+	static std::string camera_path_load_error_string = "";
+	if (ImGui::Button("Load")) {
+		try {
+			load(path_filename_buf, first_xform);
+		} catch (std::exception& e) {
+			ImGui::OpenPopup("Camera path load error");
+			camera_path_load_error_string = std::string{"Failed to load camera path: "} + e.what();
+		}
+	}
+	if (ImGui::BeginPopupModal("Camera path load error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+		ImGui::Text(camera_path_load_error_string.c_str());
+		if (ImGui::Button("OK", ImVec2(120, 0))) {
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
 	if (!m_keyframes.empty()) {
 		ImGui::SameLine();
 		if (ImGui::Button("Save"))
