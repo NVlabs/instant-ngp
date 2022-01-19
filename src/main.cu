@@ -21,13 +21,12 @@
 
 #include <filesystem/path.h>
 
-
-namespace fs = filesystem;
-
 using namespace args;
 using namespace ngp;
 using namespace std;
 using namespace tcnn;
+namespace fs = filesystem;
+
 
 int main(int argc, char** argv) {
 	ArgumentParser parser{

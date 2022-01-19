@@ -283,9 +283,8 @@ public:
 	Eigen::Vector2f render_screen_center() const ;
 	void optimise_mesh_step(uint32_t N_STEPS);
 	void compute_mesh_vertex_colors();
-	Eigen::Vector3i get_marching_cubes_res(uint32_t res_1d);
-	tcnn::GPUMemory<float> get_density_on_grid(Eigen::Vector3i res3d);
-	int marching_cubes(Eigen::Vector3i res3d, float thresh);
+	tcnn::GPUMemory<float> get_density_on_grid(Eigen::Vector3i res3d, const BoundingBox& aabb);
+	int marching_cubes(Eigen::Vector3i res3d, const BoundingBox& aabb, float thresh);
 	// Determines the 3d focus point by rendering a little 16x16 depth image around
 	// the mouse cursor and picking the median depth.
 	void determine_autofocus_target_from_pixel(const Eigen::Vector2i& focus_pixel);
@@ -295,6 +294,7 @@ public:
 	size_t n_encoding_params();
 
 #ifdef NGP_PYTHON
+	pybind11::dict compute_marching_cubes_mesh(Eigen::Vector3i res3d = Eigen::Vector3i::Constant(128), BoundingBox aabb = BoundingBox{Eigen::Vector3f::Zero(), Eigen::Vector3f::Ones()}, float thresh=2.5f);
 	pybind11::array_t<float> render_to_cpu(int width, int height, int spp, bool linear, float start_t, float end_t, float fps, float shutter_fraction);
 	pybind11::array_t<float> screenshot(bool linear) const;
 	void override_sdf_training_data(pybind11::array_t<float> points, pybind11::array_t<float> distances);
@@ -333,22 +333,40 @@ public:
 
 	float compute_image_mse();
 
-	////////////////////////////////////////////////////////////////
+	void compute_and_save_marching_cubes_mesh(const char* filename, Eigen::Vector3i res3d = Eigen::Vector3i::Constant(128), BoundingBox aabb = {}, float thresh = 2.5f, bool unwrap_it = false);
 
-	float mc_thresh = 2.5f;
-	int mc_res = 128;
-	bool mc_unwrap = true;
-	float m_smooth_amount=2048.f;
-	float m_density_amount=128.f;
-	float m_inflate_amount=1.f;
-	bool m_optimize_mesh=false;
-	tcnn::GPUMemory<Eigen::Vector3f> verts;
-	tcnn::GPUMemory<Eigen::Vector3f> vert_normals;
-	tcnn::GPUMemory<Eigen::Vector3f> vert_colors;
-	tcnn::GPUMemory<Eigen::Vector4f> verts_smoothed; // homogenous
-	tcnn::GPUMemory<uint32_t> indices;
-	tcnn::GPUMemory<Eigen::Vector3f> verts_gradient;
-public:
+	////////////////////////////////////////////////////////////////
+	// marching cubes related state
+	struct MeshState {
+		float thresh = 2.5f;
+		int res = 256;
+		bool unwrap = false;
+		float smooth_amount = 2048.f;
+		float density_amount = 128.f;
+		float inflate_amount = 1.f;
+		bool optimize_mesh = false;
+		tcnn::GPUMemory<Eigen::Vector3f> verts;
+		tcnn::GPUMemory<Eigen::Vector3f> vert_normals;
+		tcnn::GPUMemory<Eigen::Vector3f> vert_colors;
+		tcnn::GPUMemory<Eigen::Vector4f> verts_smoothed; // homogenous
+		tcnn::GPUMemory<uint32_t> indices;
+		tcnn::GPUMemory<Eigen::Vector3f> verts_gradient;
+		std::shared_ptr<TrainableBuffer<3, 1, float>> trainable_verts;
+		std::shared_ptr<tcnn::Optimizer<float>> verts_optimizer;
+
+		void clear() {
+			indices={};
+			verts={};
+			vert_normals={};
+			vert_colors={};
+			verts_smoothed={};
+			verts_gradient={};
+			trainable_verts=nullptr;
+			verts_optimizer=nullptr;
+		}
+	};
+	MeshState m_mesh;
+
 	bool m_want_repl = false;
 
 	bool m_render_window = false;
@@ -708,8 +726,6 @@ public:
 		Eigen::Vector2i resolution;
 		ELossType loss_type;
 	} m_envmap;
-	std::shared_ptr<TrainableBuffer<3, 1, float>> trainable_verts;
-	std::shared_ptr<tcnn::Optimizer<float>> verts_optimizer;
 	struct TrainableDistortionMap {
 		std::shared_ptr<tcnn::Optimizer<float>> optimizer;
 		std::shared_ptr<TrainableBuffer<2, 2, float>> map;

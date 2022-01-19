@@ -970,7 +970,7 @@ void Testbed::load_mesh() {
 	}
 	m_aabb = m_aabb.intersection(BoundingBox{Vector3f::Zero(), Vector3f::Ones()});
 	m_render_aabb = m_aabb;
-	mc_thresh=0.f;
+	m_mesh.thresh = 0.f;
 
 	m_sdf.triangles_cpu.resize(n_triangles);
 	for (size_t i = 0; i < n_vertices; i += 3) {

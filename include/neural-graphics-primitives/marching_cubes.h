@@ -19,6 +19,8 @@
 
 NGP_NAMESPACE_BEGIN
 
+Eigen::Vector3i get_marching_cubes_res(uint32_t res_1d, const BoundingBox &aabb);
+
 void marching_cubes_gpu(BoundingBox aabb, Eigen::Vector3i res_3d, float thresh, const tcnn::GPUMemory<float> &density, tcnn::GPUMemory<Eigen::Vector3f> &vert_out, tcnn::GPUMemory<uint32_t> &indices_out);
 
 // computes the average of the 1ring of all verts, as homogenous coordinates
@@ -33,10 +35,12 @@ void compute_mesh_opt_gradients(float thresh,
 	float k_smooth_amount,	float k_density_amount,	float k_inflate_amount
 );
 
-void save_mesh(tcnn::GPUMemory<Eigen::Vector3f>& verts,
+void save_mesh(
+	tcnn::GPUMemory<Eigen::Vector3f>& verts,
 	tcnn::GPUMemory<Eigen::Vector3f>& normals,
+	tcnn::GPUMemory<Eigen::Vector3f>& colors,
 	tcnn::GPUMemory<uint32_t>& indices,
-	const char* optional_outputname,
+	const char* outputname,
 	bool unwrap_it,
 	float nerf_scale,
 	Eigen::Vector3f nerf_offset
