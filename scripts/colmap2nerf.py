@@ -29,7 +29,7 @@ def parse_args():
 	parser.add_argument("--colmap_matcher", default="sequential", choices=["exhaustive","sequential","spatial","transitive","vocab_tree"], help="select which matcher colmap should use. sequential for videos, exhaustive for adhoc images")
 	parser.add_argument("--colmap_db", default="colmap.db", help="colmap database filename")
 	parser.add_argument("--images", default="images", help="input path to the images")
-	parser.add_argument("--text", default="text", help="input path to the colmap text files (set automatically if run_colmap is used)")
+	parser.add_argument("--text", default="colmap_text", help="input path to the colmap text files (set automatically if run_colmap is used)")
 	parser.add_argument("--aabb_scale", default=16, choices=["1","2","4","8","16"], help="large scene scale factor. 1=scene fits in unit cube; power of 2 up to 16")
 	parser.add_argument("--skip_early", default=0, help="skip this many images from the start")
 	parser.add_argument("--out", default="transforms.json", help="output path")
@@ -132,9 +132,9 @@ def closest_point_2_lines(oa, da, ob, db): # returns point closest to both rays 
 	t=ob-oa
 	ta=np.linalg.det([t,db,c])/(denom+1e-10)
 	tb=np.linalg.det([t,da,c])/(denom+1e-10)
-	if ta<0:
+	if ta>0:
 		ta=0
-	if tb<0:
+	if tb>0:
 		tb=0
 	return (oa+ta*da+ob+tb*db)*0.5,denom
 
@@ -214,7 +214,7 @@ if __name__ == "__main__":
 			"h":h,
 			"aabb_scale":AABB_SCALE,"frames":[]
 		}
-		centroid=np.zeros(3)
+
 		up=np.zeros(3)
 		for line in f:
 			line=line.strip()
@@ -243,31 +243,20 @@ if __name__ == "__main__":
 				c2w=c2w[[1,0,2,3],:] # swap y and z
 				c2w[2,:] *= -1 # flip whole world upside down
 
-				centroid += c2w[0:3,3]
 				up += c2w[0:3,1]
 
 				frame={"file_path":name,"sharpness":b,"transform_matrix": c2w}
 				out["frames"].append(frame)
 	nframes = len(out["frames"])
-	centroid *= 1/nframes
 	up = up / np.linalg.norm(up)
 	print("up vector was ", up)
 	R=rotmat(up,[0,0,1]) # rotate up vector to [0,0,1]
 	R=np.pad(R,[0,1])
 	R[-1,-1]=1
-	avglen=0.
-	for f in out["frames"]:
-		f["transform_matrix"][0:3,3]-=centroid
-		avglen+=np.linalg.norm(f["transform_matrix"][0:3,3])
-	avglen/=nframes
-	print("avg camera distance from origin ", avglen)
+
 
 	for f in out["frames"]:
-		#print(f["transform_matrix"])
-		f["transform_matrix"][0:3,3]*=3./avglen     # scale to "nerf sized"
 		f["transform_matrix"]=np.matmul(R,f["transform_matrix"]) # rotate up to be the z axis
-		# f["transform_matrix"][2,3]+=0.5 # shift up a bit as cameras under ground are rare
-		#print(f["transform_matrix"])
 
 	# find a central point they are all looking at
 	print("computing center of attention...")
@@ -285,6 +274,14 @@ if __name__ == "__main__":
 	print(totp) # the cameras are looking at totp
 	for f in out["frames"]:
 		f["transform_matrix"][0:3,3]-=totp
+
+	avglen=0.
+	for f in out["frames"]:
+		avglen+=np.linalg.norm(f["transform_matrix"][0:3,3])
+	avglen/=nframes
+	print("avg camera distance from origin ", avglen)
+	for f in out["frames"]:
+		f["transform_matrix"][0:3,3]*=4./avglen     # scale to "nerf sized"
 
 	for f in out["frames"]:
 		f["transform_matrix"]=f["transform_matrix"].tolist()
