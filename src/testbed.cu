@@ -1703,7 +1703,15 @@ void Testbed::reset_network() {
 	}
 }
 
-Testbed::Testbed(ETestbedMode mode) : m_testbed_mode(mode) {
+Testbed::Testbed(ETestbedMode mode)
+: m_testbed_mode(mode)
+{
+	uint32_t compute_capability = cuda_compute_capability();
+	if (compute_capability < MIN_GPU_ARCH) {
+		tlog::warning() << "Insufficient compute capability " << compute_capability << " detected.";
+		tlog::warning() << "This program was compiled for >=" << MIN_GPU_ARCH << " and may thus behave unexpectedly.";
+	}
+
 	m_network_config = {
 		{"loss", {
 			{"otype", "L2"}
