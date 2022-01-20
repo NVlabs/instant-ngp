@@ -56,14 +56,17 @@ public:
 		throw std::runtime_error{"The trainable buffer does not support backward(). Its content is meant to be used externally."};
 	}
 
-	void initialize_params(tcnn::pcg32& rnd, float* params_full_precision, T* params, T* inference_params, T* backward_params, T* gradients, float scale = 1) override {
-		m_params_full_precision = params_full_precision;
+	void set_params(T* params, T* inference_params, T* backward_params, T* gradients) override {
 		m_params = params;
 		m_params_inference = inference_params;
 		m_params_gradient = gradients;
+	}
+
+	void initialize_params(tcnn::pcg32& rnd, float* params_full_precision, T* params, T* inference_params, T* backward_params, T* gradients, float scale = 1) override {
+		set_params(params, inference_params, backward_params, gradients);
 
 		// Initialize the buffer to zero from the GPU
-		CUDA_CHECK_THROW(cudaMemset(m_params_full_precision, 0, n_params()*sizeof(float)));
+		CUDA_CHECK_THROW(cudaMemset(params_full_precision, 0, n_params()*sizeof(float)));
 
 		m_params_gradient_weight.resize(n_params());
 	}
@@ -111,7 +114,6 @@ public:
 private:
 	ResVector m_resolution;
 
-	float* m_params_full_precision = nullptr;
 	T* m_params = nullptr;
 	T* m_params_inference = nullptr;
 	T* m_params_gradient = nullptr;

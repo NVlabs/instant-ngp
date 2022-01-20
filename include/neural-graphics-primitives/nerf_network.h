@@ -393,6 +393,41 @@ public:
 		}
 	}
 
+	void set_params(T* params, T* inference_params, T* backward_params, T* gradients) override {
+		size_t offset = 0;
+		m_density_network->set_params(
+			params + offset,
+			inference_params + offset,
+			backward_params + offset,
+			gradients + offset
+		);
+		offset += m_density_network->n_params();
+
+		m_rgb_network->set_params(
+			params + offset,
+			inference_params + offset,
+			backward_params + offset,
+			gradients + offset
+		);
+		offset += m_rgb_network->n_params();
+
+		m_pos_encoding->set_params(
+			params + offset,
+			inference_params + offset,
+			backward_params + offset,
+			gradients + offset
+		);
+		offset += m_pos_encoding->n_params();
+
+		m_dir_encoding->set_params(
+			params + offset,
+			inference_params + offset,
+			backward_params + offset,
+			gradients + offset
+		);
+		offset += m_dir_encoding->n_params();
+	}
+
 	void initialize_params(tcnn::pcg32& rnd, float* params_full_precision, T* params, T* inference_params, T* backward_params, T* gradients, float scale = 1) override {
 		size_t offset = 0;
 		m_density_network->initialize_params(

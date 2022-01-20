@@ -369,14 +369,17 @@ public:
 		return N_FEATURES_PER_LEVEL;
 	}
 
-	void initialize_params(tcnn::pcg32& rnd, float* params_full_precision, T* params, T* inference_params, T* backward_params, T* gradients, float scale = 1) override {
-		m_params_full_precision = params_full_precision;
+	void set_params(T* params, T* inference_params, T* backward_params, T* gradients) override {
 		m_params = params;
 		m_params_inference = inference_params;
 		m_params_gradient = gradients;
+	}
+
+	void initialize_params(tcnn::pcg32& rnd, float* params_full_precision, T* params, T* inference_params, T* backward_params, T* gradients, float scale = 1) override {
+		set_params(params, inference_params, backward_params, gradients);
 
 		// Initialize the encoding from the GPU, because the number of parameters can be quite large.
-		tcnn::generate_random_uniform<float>(rnd, n_params(), m_params_full_precision, -1e-4f, 1e-4f);
+		tcnn::generate_random_uniform<float>(rnd, n_params(), params_full_precision, -1e-4f, 1e-4f);
 	}
 
 	size_t n_params() const override {
@@ -407,7 +410,6 @@ private:
 	// Storage of params
 	T* m_params;
 	T* m_params_inference;
-	float* m_params_full_precision;
 	T* m_params_gradient;
 
 	std::shared_ptr<TriangleOctree> m_octree;
