@@ -93,7 +93,7 @@ Alternatively, download any NeRF-compatible scene (e.g. [from the NeRF authors' 
 Now you can run:
 
 ```sh
-instant-ngp$ ./build/testbed --scene data/nerf_synthetic/lego
+instant-ngp$ ./build/testbed --scene data/nerf_synthetic/lego/transforms_train.json
 ```
 
 For more information about preparing datasets for use with our NeRF implementation, please see [this document](docs/nerf_dataset_tips.md).
@@ -160,7 +160,8 @@ If you cannot find it there, please feel free to [open an issue](https://github.
 
 ## Thanks
 
-Many thanks to [Jonathan Tremblay](https://research.nvidia.com/person/jonathan-tremblay) and [Andrew Tao](https://developer.nvidia.com/blog/author/atao/) for testing early versions of this codebase and to Arman Toornias and Saurabh Jain for the factory robot dataset.
+Many thanks to [Jonathan Tremblay](https://research.nvidia.com/person/jonathan-tremblay) and [Andrew Tao](https://developer.nvidia.com/blog/author/atao/) for testing early versions of this codebase and to Arman Toorians and Saurabh Jain for the factory robot dataset.
+We also thank [Andrew Webb](https://github.com/grey-area) for noticing that one of the prime numbers in the spatial hash was not actually prime; this has been fixed since.
 
 This project makes use of a number of awesome open source libraries, including:
 * [tiny-cuda-nn](https://github.com/NVlabs/tiny-cuda-nn) for fast CUDA MLP networks
