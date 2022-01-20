@@ -107,10 +107,6 @@ public:
 		return m_params_inference;
 	}
 
-	float* params_full_precision() const {
-		return m_params_full_precision;
-	}
-
 private:
 	ResVector m_resolution;
 

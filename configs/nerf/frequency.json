@@ -25,7 +25,7 @@
 		"n_hidden_layers": 7
 	},
 	"rgb_network": {
-		"otype": "FullyFusedMLP",
+		"otype": "CutlassMLP",
 		"activation": "ReLU",
 		"output_activation": "None",
 		"n_neurons": 256,
