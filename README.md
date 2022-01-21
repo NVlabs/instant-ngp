@@ -47,7 +47,7 @@ $ git clone --recursive https://github.com/nvlabs/instant-ngp
 $ cd instant-ngp
 ```
 
-Then, use CMake to build the project:
+Then, use CMake to build the project: (on Windows, this must be in a developer command prompt)
 ```sh
 instant-ngp$ cmake . -B build
 instant-ngp$ cmake --build build --config RelWithDebInfo -j 16
