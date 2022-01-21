@@ -206,7 +206,7 @@ int CameraPath::imgui(char path_filename_buf[128], float frame_milliseconds, Mat
 		}
 	}
 	if (ImGui::BeginPopupModal("Camera path load error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-		ImGui::Text(camera_path_load_error_string.c_str());
+		ImGui::Text("%s", camera_path_load_error_string.c_str());
 		if (ImGui::Button("OK", ImVec2(120, 0))) {
 			ImGui::CloseCurrentPopup();
 		}

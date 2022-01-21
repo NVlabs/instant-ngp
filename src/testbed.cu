@@ -594,7 +594,7 @@ void Testbed::imgui() {
 			}
 		}
 		if (ImGui::BeginPopupModal("Snapshot load error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-			ImGui::Text(snapshot_load_error_string.c_str());
+			ImGui::Text("%s", snapshot_load_error_string.c_str());
 			if (ImGui::Button("OK", ImVec2(120, 0))) {
 				ImGui::CloseCurrentPopup();
 			}
