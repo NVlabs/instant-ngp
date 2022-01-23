@@ -49,7 +49,7 @@ $ git clone --recursive https://github.com/nvlabs/instant-ngp
 $ cd instant-ngp
 ```
 
-Then, use CMake to build the project: (on Windows, this must be in a [developer command prompt](https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line?view=msvc-160))
+Then, use CMake to build the project: (on Windows, this must be in a [developer command prompt](https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line?view=msvc-160#developer_command_prompt))
 ```sh
 instant-ngp$ cmake . -B build
 instant-ngp$ cmake --build build --config RelWithDebInfo -j 16
@@ -148,8 +148,8 @@ Before investigating further, make sure all submodules are up-to-date and try co
 instant-ngp$ git submodule sync --recursive
 instant-ngp$ git submodule update --init --recursive
 ```
-If __instant-ngp__ still fails to compile, make sure your CUDA, CMake and compiler versions match [the requirements](https://github.com/NVlabs/instant-ngp#requirements) and look for your problem in the following table.
-If you cannot find it there, please feel free to [open an issue](https://github.com/NVlabs/instant-ngp/issues/new) and ask for help.
+If __instant-ngp__ still fails to compile, update CUDA as well as your compiler to the latest versions you can install on your system. It is crucial that you update _both_, as newer CUDA versions are not always compatible with earlier compilers and vice versa.
+If your problem persists, consult the following table of known issues.
 
 | Problem | Resolution |
 |---------|------------|
@@ -159,6 +159,8 @@ If you cannot find it there, please feel free to [open an issue](https://github.
 | __Compile error:__ undefined references to "cudaGraphExecUpdate" / identifier "cublasSetWorkspace" is undefined | Update your CUDA installation (which is likely 11.0) to 11.3 or higher. ([#34](https://github.com/NVlabs/instant-ngp/issues/34) [#41](https://github.com/NVlabs/instant-ngp/issues/41) [#42](https://github.com/NVlabs/instant-ngp/issues/42)) |
 | __Compile error:__ too few arguments in function call | Update submodules with the above two `git` commands. ([#37](https://github.com/NVlabs/instant-ngp/issues/37) [#52](https://github.com/NVlabs/instant-ngp/issues/52)) |
 | __Python error:__ No module named 'pyngp' | It is likely that CMake did not detect your Python installation and therefore did not build `pyngp`. Check CMake logs to verify this. If `pyngp` was built in a different folder than `instant-ngp/build`, Python will be unable to detect it and you have to supply the full path to the import statement. ([#43](https://github.com/NVlabs/instant-ngp/issues/43)) |
+
+If you cannot find your problem in the table, please feel free to [open an issue](https://github.com/NVlabs/instant-ngp/issues/new) and ask for help.
 
 ## Thanks
 
