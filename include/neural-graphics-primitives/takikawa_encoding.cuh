@@ -240,7 +240,7 @@ __global__ void kernel_takikawa_backward(
 
 				int param_idx = node.vertices[idx] * N_FEATURES_PER_LEVEL;
 
-#if TCNN_MIN_GPU_ARCH >= 60 // atomicAdd(__half2) is only supported with compute capability 60 and above
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600 // atomicAdd(__half2) is only supported with compute capability 60 and above
 				if (N_FEATURES_PER_LEVEL > 1 && std::is_same<GRAD_T, __half>::value) {
 					#pragma unroll
 					for (uint32_t feature = 0; feature < N_FEATURES_PER_LEVEL; feature += 2) {
@@ -250,9 +250,14 @@ __global__ void kernel_takikawa_backward(
 				} else
 #endif
 				{
-					#pragma unroll
-					for (uint32_t f = 0; f < N_FEATURES_PER_LEVEL; ++f) {
-						atomicAdd(&params_gradient[param_idx], (T)((float)grad[f] * weight));
+					if (std::is_same<GRAD_T, __half>::value) {
+						// Should never happen
+						//printf("Attempted to use atomicAdd(__half)\n")
+					} else {
+						#pragma unroll
+						for (uint32_t f = 0; f < N_FEATURES_PER_LEVEL; ++f) {
+							atomicAdd((float*)&params_gradient[param_idx], (float)grad[f] * weight);
+						}
 					}
 				}
 			}
@@ -263,7 +268,7 @@ __global__ void kernel_takikawa_backward(
 template <typename T, uint32_t N_FEATURES_PER_LEVEL=8>
 class TakikawaEncoding : public tcnn::Encoding<T> {
 public:
-#if TCNN_MIN_GPU_ARCH >= 70
+#if TCNN_MIN_GPU_ARCH >= 60
 	// The GPUs that we tested this on do not have an efficient 1D fp16
 	// atomicAdd feature. Thus, we accumulate gradients at fp32 if we're
 	// forced to use 1D atomicAdds. As soon as 2D or higher is possible,
