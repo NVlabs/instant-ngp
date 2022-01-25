@@ -224,7 +224,7 @@ __global__ void init_rays_volume(
 	BoundingBox aabb,
 	float plane_z,
 	float dof,
-	const network_precision_t* __restrict__ envmap_data,
+	const float* __restrict__ envmap_data,
 	const Vector2i envmap_resolution,
 	Array4f* __restrict__ framebuffer,
 	default_rng_t rng,

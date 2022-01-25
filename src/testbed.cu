@@ -1693,9 +1693,9 @@ void Testbed::reset_network() {
 		m_envmap.loss_type = string_to_loss_type(envmap_loss_config.value("otype", "L2"));
 
 		m_envmap.resolution = m_nerf.training.dataset.envmap_resolution;
-		m_envmap.envmap = std::make_shared<TrainableBuffer<4, 2, precision_t>>(m_envmap.resolution);
-		m_envmap.optimizer.reset(create_optimizer<precision_t>(envmap_optimizer_config));
-		m_envmap.trainer = std::make_shared<Trainer<float, precision_t, precision_t>>(m_envmap.envmap, m_envmap.optimizer, m_loss, m_seed);
+		m_envmap.envmap = std::make_shared<TrainableBuffer<4, 2, float>>(m_envmap.resolution);
+		m_envmap.optimizer.reset(create_optimizer<float>(envmap_optimizer_config));
+		m_envmap.trainer = std::make_shared<Trainer<float, float, float>>(m_envmap.envmap, m_envmap.optimizer, std::shared_ptr<Loss<float>>{create_loss<float>(envmap_loss_config)}, m_seed);
 
 		if (m_nerf.training.dataset.envmap_data.data()) {
 			m_envmap.trainer->set_params_full_precision(m_nerf.training.dataset.envmap_data.data(), m_nerf.training.dataset.envmap_data.size());

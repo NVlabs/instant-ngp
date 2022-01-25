@@ -1118,8 +1118,8 @@ __global__ void compute_loss_kernel_train_nerf(
 	const uint32_t* __restrict__ rays_counter,
 	float loss_scale,
 	int padded_output_width,
-	const tcnn::network_precision_t* __restrict__ envmap_data,
-	tcnn::network_precision_t* __restrict__ envmap_gradient,
+	const float* __restrict__ envmap_data,
+	float* __restrict__ envmap_gradient,
 	const Vector2i envmap_resolution,
 	ELossType envmap_loss_type,
 	Array3f background_color,
@@ -1569,7 +1569,7 @@ __global__ void init_rays_with_payload_kernel_nerf(
 	float plane_z,
 	float dof,
 	CameraDistortion camera_distortion,
-	const network_precision_t* __restrict__ envmap_data,
+	const float* __restrict__ envmap_data,
 	const Vector2i envmap_resolution,
 	Array4f* __restrict__ framebuffer,
 	const float* __restrict__ distortion_data,
@@ -1729,7 +1729,7 @@ void Testbed::NerfTracer::init_rays_from_camera(uint32_t spp,
 	float plane_z,
 	float dof,
 	const CameraDistortion& camera_distortion,
-	const network_precision_t* envmap_data,
+	const float* envmap_data,
 	const Vector2i& envmap_resolution,
 	const float* distortion_data,
 	const Vector2i& distortion_resolution,
@@ -2247,9 +2247,9 @@ void Testbed::train_nerf(uint32_t target_batch_size, uint32_t n_training_steps, 
 		CUDA_CHECK_THROW(cudaMemsetAsync(m_nerf.training.error_map.data.data(), 0, m_nerf.training.error_map.data.get_bytes(), stream));
 	}
 
-	network_precision_t* envmap_gradient = m_nerf.training.train_envmap ? m_envmap.envmap->gradients() : nullptr;
+	float* envmap_gradient = m_nerf.training.train_envmap ? m_envmap.envmap->gradients() : nullptr;
 	if (envmap_gradient) {
-		CUDA_CHECK_THROW(cudaMemsetAsync(envmap_gradient, 0, sizeof(network_precision_t)*m_envmap.envmap->n_params(), stream));
+		CUDA_CHECK_THROW(cudaMemsetAsync(envmap_gradient, 0, sizeof(float)*m_envmap.envmap->n_params(), stream));
 	}
 
 	for (uint32_t i = 0; i < n_training_steps; ++i) {
@@ -2468,7 +2468,7 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 	m_nerf.training.n_rays_since_error_map_update += n_rays_per_batch;
 
 	// If we have an envmap, prepare its gradient buffer
-	network_precision_t* envmap_gradient = m_nerf.training.train_envmap ? m_envmap.envmap->gradients() : nullptr;
+	float* envmap_gradient = m_nerf.training.train_envmap ? m_envmap.envmap->gradients() : nullptr;
 
 	bool sample_focal_plane_proportional_to_error = m_nerf.training.error_map.is_cdf_valid && m_nerf.training.sample_focal_plane_proportional_to_error;
 	bool sample_image_proportional_to_error = m_nerf.training.error_map.is_cdf_valid && m_nerf.training.sample_image_proportional_to_error;
