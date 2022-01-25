@@ -183,7 +183,7 @@ __global__ void kernel_takikawa_backward_input(
 	dL_dx(i)[j] = result;
 }
 
-template <typename T, uint32_t N_FEATURES_PER_LEVEL>
+template <typename T, typename GRAD_T, uint32_t N_FEATURES_PER_LEVEL>
 __global__ void kernel_takikawa_backward(
 	const uint32_t num_elements,
 	const uint32_t n_levels,
@@ -191,7 +191,7 @@ __global__ void kernel_takikawa_backward(
 	const tcnn::InterpolationType interpolation_type,
 	const TriangleOctreeNode* octree_nodes,
 	const TriangleOctreeDualNode* octree_dual_nodes,
-	T* __restrict__ grid_gradient,
+	GRAD_T* __restrict__ params_gradient,
 	const tcnn::PitchedPtr<const float> data_in,
 	const tcnn::PitchedPtr<const T> dL_dy
 ) {
@@ -240,19 +240,24 @@ __global__ void kernel_takikawa_backward(
 
 				int param_idx = node.vertices[idx] * N_FEATURES_PER_LEVEL;
 
-#if TCNN_MIN_GPU_ARCH >= 60 // atomicAdd(__half2) is only supported with compute capability 60 and above
-				if (N_FEATURES_PER_LEVEL > 1 && std::is_same<T, __half>::value) {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600 // atomicAdd(__half2) is only supported with compute capability 60 and above
+				if (N_FEATURES_PER_LEVEL > 1 && std::is_same<GRAD_T, __half>::value) {
 					#pragma unroll
 					for (uint32_t feature = 0; feature < N_FEATURES_PER_LEVEL; feature += 2) {
 						__half2 v = {(__half)((float)grad[feature] * weight), (__half)((float)grad[feature+1] * weight)};
-						atomicAdd((__half2*)&grid_gradient[param_idx + feature], v);
+						atomicAdd((__half2*)&params_gradient[param_idx + feature], v);
 					}
 				} else
 #endif
 				{
-					#pragma unroll
-					for (uint32_t f = 0; f < N_FEATURES_PER_LEVEL; ++f) {
-						atomicAdd(&grid_gradient[param_idx], (T)((float)grad[f] * weight));
+					if (std::is_same<GRAD_T, __half>::value) {
+						// Should never happen
+						//printf("Attempted to use atomicAdd(__half)\n")
+					} else {
+						#pragma unroll
+						for (uint32_t f = 0; f < N_FEATURES_PER_LEVEL; ++f) {
+							atomicAdd((float*)&params_gradient[param_idx], (float)grad[f] * weight);
+						}
 					}
 				}
 			}
@@ -263,6 +268,19 @@ __global__ void kernel_takikawa_backward(
 template <typename T, uint32_t N_FEATURES_PER_LEVEL=8>
 class TakikawaEncoding : public tcnn::Encoding<T> {
 public:
+#if TCNN_MIN_GPU_ARCH >= 60
+	// The GPUs that we tested this on do not have an efficient 1D fp16
+	// atomicAdd feature. Thus, we accumulate gradients at fp32 if we're
+	// forced to use 1D atomicAdds. As soon as 2D or higher is possible,
+	// we can make use the efficient atomicAdd(half2) function.
+	using grad_t = std::conditional_t<N_FEATURES_PER_LEVEL == 1, float, T>;
+#else
+	// atomicAdd(__half2) is only supported with compute capability 60 and above.
+	// Since atomicAdd(__half) is relatively slow / doesn't exist for low compute
+	// capabilities, accumulate in fp32 instead.
+	using grad_t = float;
+#endif
+
 	TakikawaEncoding(uint32_t starting_level, bool sum_instead_of_concat, std::shared_ptr<TriangleOctree> octree, tcnn::InterpolationType interpolation_type)
 		: m_starting_level{starting_level}, m_sum_instead_of_concat{sum_instead_of_concat}, m_octree{octree}, m_interpolation_type{interpolation_type} {
 
@@ -315,21 +333,36 @@ public:
 		}
 
 		{
-			if (!accumulate_param_gradients) {
-				CUDA_CHECK_THROW(cudaMemsetAsync(m_params_gradient, 0, n_params() * sizeof(T), stream));
+			// We accumulate gradients with grad_t precision, which, for performance reasons, is not always T.
+			// If not, accumulate in a temporary buffer and cast later.
+			grad_t* params_gradient;
+			if (!std::is_same<grad_t, T>::value) {
+				params_gradient = (grad_t*)m_params_gradient_tmp.data();
+			} else {
+				params_gradient = (grad_t*)m_params_gradient;
 			}
 
-			tcnn::linear_kernel(kernel_takikawa_backward<T, N_FEATURES_PER_LEVEL>, 0, stream,
+			if (!accumulate_param_gradients) {
+				CUDA_CHECK_THROW(cudaMemsetAsync(params_gradient, 0, n_params() * sizeof(grad_t), stream));
+			}
+
+			tcnn::linear_kernel(kernel_takikawa_backward<T, grad_t, N_FEATURES_PER_LEVEL>, 0, stream,
 				num_elements,
 				n_levels(),
 				m_starting_level,
 				m_interpolation_type,
 				m_octree->nodes_gpu(),
 				m_octree->dual_nodes_gpu(),
-				m_params_gradient,
+				params_gradient,
 				inputs,
 				dL_dy
 			);
+
+			if (!std::is_same<grad_t, T>::value) {
+				parallel_for_gpu(stream, n_params(), [grad=m_params_gradient, grad_tmp=params_gradient] __device__ (size_t i) {
+					grad[i] = (T)grad_tmp[i];
+				});
+			}
 		}
 
 		// Gradient computation w.r.t. input
@@ -380,6 +413,11 @@ public:
 
 		// Initialize the encoding from the GPU, because the number of parameters can be quite large.
 		tcnn::generate_random_uniform<float>(rnd, n_params(), params_full_precision, -1e-4f, 1e-4f);
+
+		// Only needs temporary storage if gradients are computed with different precision from T.
+		if (!std::is_same<grad_t, T>::value) {
+			m_params_gradient_tmp.resize(n_params());
+		}
 	}
 
 	size_t n_params() const override {
@@ -410,6 +448,8 @@ private:
 	// Storage of params
 	T* m_params;
 	T* m_params_inference;
+
+	tcnn::GPUMemory<grad_t> m_params_gradient_tmp;
 	T* m_params_gradient;
 
 	std::shared_ptr<TriangleOctree> m_octree;

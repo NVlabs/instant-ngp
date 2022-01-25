@@ -85,7 +85,7 @@ public:
 			float floor_y,
 			float plane_z,
 			float dof,
-			const precision_t* envmap_data,
+			const float* envmap_data,
 			const Eigen::Vector2i& envmap_resolution,
 			Eigen::Array4f* frame_buffer,
 			const TriangleOctree* octree, cudaStream_t stream);
@@ -125,7 +125,7 @@ public:
 			float plane_z,
 			float dof,
 			const CameraDistortion& camera_distortion,
-			const precision_t* envmap_data,
+			const float* envmap_data,
 			const Eigen::Vector2i& envmap_resolution,
 			const float* distortion_data,
 			const Eigen::Vector2i& distortion_resolution,
@@ -718,14 +718,16 @@ public:
 	std::shared_ptr<tcnn::Encoding<precision_t>> m_encoding;
 	std::shared_ptr<tcnn::Network<float, precision_t>> m_network;
 	std::shared_ptr<tcnn::Trainer<float, precision_t, precision_t>> m_trainer;
+
 	struct TrainableEnvmap {
-		std::shared_ptr<tcnn::Optimizer<precision_t>> optimizer;
-		std::shared_ptr<TrainableBuffer<4, 2, precision_t>> envmap;
-		std::shared_ptr<tcnn::Trainer<float, precision_t, precision_t>> trainer;
+		std::shared_ptr<tcnn::Optimizer<float>> optimizer;
+		std::shared_ptr<TrainableBuffer<4, 2, float>> envmap;
+		std::shared_ptr<tcnn::Trainer<float, float, float>> trainer;
 
 		Eigen::Vector2i resolution;
 		ELossType loss_type;
 	} m_envmap;
+
 	struct TrainableDistortionMap {
 		std::shared_ptr<tcnn::Optimizer<float>> optimizer;
 		std::shared_ptr<TrainableBuffer<2, 2, float>> map;
