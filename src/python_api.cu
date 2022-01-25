@@ -432,6 +432,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readonly("transforms", &Testbed::Nerf::Training::transforms)
 		.def_readonly("focal_lengths", &Testbed::Nerf::Training::focal_lengths)
 		.def_readonly("image_resolution", &Testbed::Nerf::Training::image_resolution)
+		.def_readwrite("near_distance", &Testbed::Nerf::Training::near_distance)
 		.def_readwrite("density_grid_decay", &Testbed::Nerf::Training::density_grid_decay)
 		.def_readonly("dataset", &Testbed::Nerf::Training::dataset)
 		;
