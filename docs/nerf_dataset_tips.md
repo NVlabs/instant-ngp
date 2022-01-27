@@ -9,7 +9,7 @@ This document attempts to give a few tips.
 A good rule of thumb is that if your NeRF model does not seem to be converging after 20 seconds or so, it is unlikely to get much better after a long training time.
 We therefore recommend adjusting the data to get clear results in the early stages of training.
 For large real world scenes, it is possible to get a little bit of extra sharpness by training for a few minutes at most.
-Almost all of the convergence happens in the first few seconds.
+Almost all the convergence happens in the first few seconds.
 
 The most common issue with datasets is an incorrect scale or offset in the camera positions; more details below.
 The next most common issue is too few images, or images with inaccurate camera parameters (for example, if COLMAP fails).
