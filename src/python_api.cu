@@ -345,6 +345,8 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_property("scale", &Testbed::scale, &Testbed::set_scale)
 		.def_readonly("bounding_radius", &Testbed::m_bounding_radius)
 		.def_readwrite("render_aabb", &Testbed::m_render_aabb)
+		.def_readwrite("aabb", &Testbed::m_aabb)
+		.def_readwrite("raw_aabb", &Testbed::m_raw_aabb)
 		.def_property("fov", &Testbed::fov, &Testbed::set_fov)
 		.def_property("fov_xy", &Testbed::fov_xy, &Testbed::set_fov_xy)
 		.def_readwrite("fov_axis", &Testbed::m_fov_axis)
@@ -441,6 +443,7 @@ PYBIND11_MODULE(pyngp, m) {
 	sdf
 		.def_readonly("training", &Testbed::Sdf::training)
 		.def_readwrite("mesh_sdf_mode", &Testbed::Sdf::mesh_sdf_mode)
+		.def_readwrite("mesh_scale", &Testbed::Sdf::mesh_scale)
 		.def_readwrite("analytic_normals", &Testbed::Sdf::analytic_normals)
 		.def_readwrite("shadow_sharpness", &Testbed::Sdf::shadow_sharpness)
 		.def_readwrite("fd_normals_epsilon", &Testbed::Sdf::fd_normals_epsilon)

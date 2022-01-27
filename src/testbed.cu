@@ -220,13 +220,11 @@ void Testbed::set_look_at(const Eigen::Vector3f& pos) {
 	m_camera.col(3) += pos - look_at();
 }
 
-
 void Testbed::set_scale(float scale) {
 	auto prev_look_at = look_at();
 	m_camera.col(3) = (view_pos() - prev_look_at) * (scale / m_scale) + prev_look_at;
 	m_scale = scale;
 }
-
 
 void Testbed::set_view_dir(const Eigen::Vector3f& dir) {
 	auto old_look_at = look_at();
