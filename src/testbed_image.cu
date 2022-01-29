@@ -15,6 +15,7 @@
 #include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/render_buffer.h>
+#include <neural-graphics-primitives/random_val.cuh>
 #include <neural-graphics-primitives/testbed.h>
 
 #include <tiny-cuda-nn/gpu_matrix.h>
@@ -44,11 +45,18 @@ __host__ __device__ float halton(size_t idx) {
 	return result;
 }
 
-__global__ void halton23_kernel(uint32_t n_elements, size_t baseIdx, Vector2f* __restrict__ output) {
+__global__ void halton23_kernel(uint32_t n_elements, size_t base_idx, Vector2f* __restrict__ output) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i >= n_elements) return;
 
-	output[i] = {halton<2>(baseIdx+i), halton<3>(baseIdx+i)};
+	output[i] = {halton<2>(base_idx+i), halton<3>(base_idx+i)};
+}
+
+__global__ void sobol2_kernel(uint32_t n_elements, size_t base_idx, uint32_t seed, Vector2f* __restrict__ output) {
+	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
+	if (i >= n_elements) return;
+
+	output[i] = ld_random_val_2d(base_idx + i, seed);
 }
 
 __global__ void zip_kernel(uint32_t n_elements, const float* __restrict__ in, Vector2f* __restrict__ output) {
@@ -227,8 +235,7 @@ void Testbed::train_image(size_t target_batch_size, size_t n_steps, cudaStream_t
 	if (m_image.random_mode == ERandomMode::Halton) {
 		linear_kernel(halton23_kernel, 0, stream, n_elements, (size_t)batch_size * m_training_step, m_image.training.positions.data());
 	} else if (m_image.random_mode == ERandomMode::Sobol) {
-		// TODO: use owen scrambled sobol in custom kernel
-		throw std::runtime_error{"Image: Sobol generation currently unsupported"};
+		linear_kernel(sobol2_kernel, 0, stream, n_elements, (size_t)batch_size * m_training_step, m_seed, m_image.training.positions.data());
 	} else {
 		generate_random_uniform<float>(stream, m_rng, n_elements * n_input_dims, (float*)m_image.training.positions.data());
 		if (m_image.random_mode == ERandomMode::Stratified) {
