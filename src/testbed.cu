@@ -358,6 +358,8 @@ void Testbed::imgui() {
 		if (imgui_colored_button("Reset training", 0.f)) {
 			reload_network_from_file("");
 		}
+		ImGui::SameLine();
+		ImGui::DragInt("Seed", (int*)&m_seed, 1.0f, 0, std::numeric_limits<int>::max());
 		if (m_train) {
 			ImGui::Text("%s: %dms, Training: %dms", m_testbed_mode == ETestbedMode::Nerf ? "Grid" : "Datagen", (int)m_training_prep_milliseconds, (int)m_training_milliseconds);
 		} else {
