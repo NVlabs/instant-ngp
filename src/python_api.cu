@@ -284,8 +284,6 @@ PYBIND11_MODULE(pyngp, m) {
 			py::arg("shutter_fraction") = 1.0f
 		)
 		.def("screenshot", &Testbed::screenshot, "Takes a screenshot of the current window contents.", py::arg("linear")=true)
-		// TODO: revisit this binding and return the mesh a python array rather than the number of triangles
-		// .def("marching_cubes", &Testbed::marching_cubes, py::arg("path"), py::arg("res")=128, py::arg("thresh")=2.f, py::arg("unwrap")=false, "Runs marching cubes at the requested res and outputs an OBJ to the given path. Does not require a window.")
 		.def("destroy_window", &Testbed::destroy_window, "Destroy the window again.")
 		.def("train", &Testbed::train, "Perform a specified number of training steps.")
 		.def("reset", &Testbed::reset_network, "Reset training.")
