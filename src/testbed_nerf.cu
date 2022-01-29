@@ -88,6 +88,14 @@ inline __host__ __device__ float calc_dt(float t, float cone_angle) {
 struct LossAndGradient {
 	Eigen::Array3f loss;
 	Eigen::Array3f gradient;
+
+	__host__ __device__ LossAndGradient operator*(float scalar) {
+		return {loss * scalar, gradient * scalar};
+	}
+
+	__host__ __device__ LossAndGradient operator/(float scalar) {
+		return {loss / scalar, gradient / scalar};
+	}
 };
 
 inline __device__ Array3f copysign(const Array3f& a, const Array3f& b) {
@@ -123,7 +131,7 @@ inline __device__ LossAndGradient l1_loss(const Array3f& target, const Array3f& 
 	};
 }
 
-inline __device__ LossAndGradient smooth_l1_loss(const Array3f& target, const Array3f& prediction, float alpha = 1) {
+inline __device__ LossAndGradient huber_loss(const Array3f& target, const Array3f& prediction, float alpha = 1) {
 	Array3f difference = prediction - target;
 	Array3f abs_diff = difference.abs();
 	Array3f square = 0.5f/alpha * difference * difference;
@@ -1055,7 +1063,12 @@ __device__ LossAndGradient loss_and_gradient(const Vector3f& target, const Vecto
 		case ELossType::L1:          return l1_loss(target, prediction); break;
 		case ELossType::Mape:        return mape_loss(target, prediction); break;
 		case ELossType::Smape:       return smape_loss(target, prediction); break;
-		case ELossType::SmoothL1:    return smooth_l1_loss(target, prediction, 0.1f); break;
+		// Note: we multiply the huber loss by a factor of 5 such that its L2 region near zero
+		// matches with the L2 loss and error numbers become more comparable. This allows reading
+		// off dB numbers of ~converged models and treating them as approximate PSNR to compare
+		// with other NeRF methods. Self-normalizing optimizers such as Adam are agnostic to such
+		// constant factors; optimization is therefore unaffected.
+		case ELossType::Huber:       return huber_loss(target, prediction, 0.1f) / 5.0f; break;
 		case ELossType::LogL1:       return log_l1_loss(target, prediction); break;
 		default: case ELossType::L2: return l2_loss(target, prediction); break;
 	}
