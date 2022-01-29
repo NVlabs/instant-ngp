@@ -1488,7 +1488,7 @@ ELossType Testbed::string_to_loss_type(const std::string& str) {
 void Testbed::reset_network() {
 	m_sdf.iou_decay = 0;
 
-	m_rng = default_rng_t{(uint64_t)m_seed};
+	m_rng = default_rng_t{m_seed};
 
 	// Start with a low rendering resolution and gradually ramp up
 	m_frame_milliseconds = 10000;

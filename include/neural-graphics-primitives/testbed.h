@@ -410,7 +410,8 @@ public:
 	ERenderMode m_render_mode = ERenderMode::Shade;
 	EMeshRenderMode m_mesh_render_mode = EMeshRenderMode::VertexNormals;
 
-	int m_seed = 1337;
+	uint32_t m_seed = 1337;
+
 #ifdef NGP_GUI
 	GLFWwindow* m_glfw_window = nullptr;
 	std::shared_ptr<GLTexture> m_pip_render_texture;

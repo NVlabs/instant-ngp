@@ -2748,7 +2748,7 @@ int Testbed::marching_cubes(Vector3i res3d, const BoundingBox& aabb, float thres
 	m_mesh.trainable_verts = std::make_shared<TrainableBuffer<3, 1, float>>(Matrix<int, 1, 1>{(int)n_verts});
 	m_mesh.verts_gradient.copy_from_device(m_mesh.verts); // Make sure the vertices don't get destroyed in the initialization
 
-	pcg32 rnd{(uint64_t)m_seed};
+	pcg32 rnd{m_seed};
 	m_mesh.trainable_verts->initialize_params(rnd, (float*)m_mesh.verts.data(), (float*)m_mesh.verts.data(), (float*)m_mesh.verts.data(), (float*)m_mesh.verts.data(), (float*)m_mesh.verts_gradient.data());
 	m_mesh.verts.copy_from_device(m_mesh.verts_gradient);
 
