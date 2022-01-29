@@ -1,6 +1,6 @@
 {
 	"loss": {
-		"otype": "SmoothL1"
+		"otype": "Huber"
 	},
 	"optimizer": {
 		"otype": "Ema",

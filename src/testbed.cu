@@ -1478,8 +1478,9 @@ ELossType Testbed::string_to_loss_type(const std::string& str) {
 		return ELossType::Mape;
 	} else if (equals_case_insensitive(str, "Smape")) {
 		return ELossType::Smape;
-	} else if (equals_case_insensitive(str, "SmoothL1")) {
-		return ELossType::SmoothL1;
+	} else if (equals_case_insensitive(str, "Huber") || equals_case_insensitive(str, "SmoothL1")) {
+		// Legacy: we used to refer to the Huber loss (L2 near zero, L1 further away) as "SmoothL1".
+		return ELossType::Huber;
 	} else if (equals_case_insensitive(str, "LogL1")) {
 		return ELossType::LogL1;
 	} else {

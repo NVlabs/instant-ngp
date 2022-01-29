@@ -223,7 +223,10 @@ PYBIND11_MODULE(pyngp, m) {
 		.value("L1", ELossType::L1)
 		.value("Mape", ELossType::Mape)
 		.value("Smape", ELossType::Smape)
-		.value("SmoothL1", ELossType::SmoothL1)
+		.value("Huber", ELossType::Huber)
+		// Legacy: we used to refer to the Huber loss
+		// (L2 near zero, L1 further away) as "SmoothL1".
+		.value("SmoothL1", ELossType::Huber)
 		.value("LogL1", ELossType::LogL1)
 		.value("RelativeL2", ELossType::RelativeL2)
 		.export_values();

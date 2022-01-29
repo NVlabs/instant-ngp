@@ -109,11 +109,11 @@ enum class ELossType : int {
 	L1,
 	Mape,
 	Smape,
-	SmoothL1,
+	Huber,
 	LogL1,
 	RelativeL2,
 };
-static constexpr const char* LossTypeStr = "L2\0L1\0MAPE\0SMAPE\0SmoothL1\0LogL1\0RelativeL2\0\0";
+static constexpr const char* LossTypeStr = "L2\0L1\0MAPE\0SMAPE\0Huber\0LogL1\0RelativeL2\0\0";
 
 enum class ENerfActivation : int {
 	None,
