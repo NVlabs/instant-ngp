@@ -1246,7 +1246,7 @@ __global__ void compute_loss_kernel_train_nerf(
 
 	Array3f rgbtarget;
 	if (train_in_linear_colors || color_space == EColorSpace::Linear) {
-		rgbtarget = exposure_scale * texsamp.head<3>() + (1 - texsamp.w()) * background_color;
+		rgbtarget = exposure_scale * texsamp.head<3>() + (1.0f - texsamp.w()) * background_color;
 
 		if (!train_in_linear_colors) {
 			rgbtarget = linear_to_srgb(rgbtarget);
@@ -1255,7 +1255,7 @@ __global__ void compute_loss_kernel_train_nerf(
 	} else if (color_space == EColorSpace::SRGB) {
 		background_color = linear_to_srgb(background_color);
 		if (texsamp.w() > 0) {
-			rgbtarget = linear_to_srgb(exposure_scale * texsamp.head<3>() / texsamp.w()) * texsamp.w() + (1 - texsamp.w()) * background_color;
+			rgbtarget = linear_to_srgb(exposure_scale * texsamp.head<3>() / texsamp.w()) * texsamp.w() + (1.0f - texsamp.w()) * background_color;
 		} else {
 			rgbtarget = background_color;
 		}
@@ -1730,7 +1730,9 @@ __global__ void safe_divide(const uint32_t num_elements, float* __restrict__ ino
 	inout[i] = local_divisor > 0.0f ? (inout[i] / local_divisor) : 0.0f;
 }
 
-void Testbed::NerfTracer::init_rays_from_camera(uint32_t spp,
+void Testbed::NerfTracer::init_rays_from_camera(
+	GPUMemory<char>& scratch_memory,
+	uint32_t spp,
 	uint32_t padded_output_width,
 	const Vector2i& resolution,
 	const Vector2f& focal_length,
@@ -1755,13 +1757,13 @@ void Testbed::NerfTracer::init_rays_from_camera(uint32_t spp,
 ) {
 	// Make sure we have enough memory reserved to render at the requested resolution
 	size_t n_pixels = (size_t)resolution.x() * resolution.y();
-	enlarge(n_pixels, padded_output_width);
+	enlarge(scratch_memory, n_pixels, padded_output_width);
 
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)resolution.x(), threads.x), div_round_up((uint32_t)resolution.y(), threads.y), 1 };
 	init_rays_with_payload_kernel_nerf<<<blocks, threads, 0, stream>>>(
 		spp,
-		m_rays[0].payload.data(),
+		m_rays[0].payload,
 		resolution,
 		focal_length,
 		camera_matrix0,
@@ -1782,7 +1784,7 @@ void Testbed::NerfTracer::init_rays_from_camera(uint32_t spp,
 
 	m_n_rays_initialized = resolution.x() * resolution.y();
 
-	CUDA_CHECK_THROW(cudaMemsetAsync(m_rays[0].rgba.data(), 0, m_rays[0].rgba.get_bytes(), stream));
+	CUDA_CHECK_THROW(cudaMemsetAsync(m_rays[0].rgba, 0, m_n_rays_initialized * sizeof(Array4f), stream));
 
 	linear_kernel(advance_pos_nerf, 0, stream,
 		m_n_rays_initialized,
@@ -1790,7 +1792,7 @@ void Testbed::NerfTracer::init_rays_from_camera(uint32_t spp,
 		camera_matrix1.col(2),
 		focal_length,
 		spp,
-		m_rays[0].payload.data(),
+		m_rays[0].payload,
 		grid,
 		(show_accel >= 0) ? show_accel : 0,
 		cone_angle_constant
@@ -1838,9 +1840,9 @@ uint32_t Testbed::NerfTracer::trace(
 			CUDA_CHECK_THROW(cudaMemsetAsync(m_alive_counter.data(), 0, sizeof(uint32_t), stream));
 			linear_kernel(compact_kernel_nerf, 0, stream,
 				n_alive,
-				rays_tmp.rgba.data(), rays_tmp.payload.data(),
-				rays_current.rgba.data(), rays_current.payload.data(),
-				m_rays_hit.rgba.data(), m_rays_hit.payload.data(),
+				rays_tmp.rgba, rays_tmp.payload,
+				rays_current.rgba, rays_current.payload,
+				m_rays_hit.rgba, m_rays_hit.payload,
 				m_alive_counter.data(), m_hit_counter.data()
 			);
 			CUDA_CHECK_THROW(cudaMemcpyAsync(&n_alive, m_alive_counter.data(), sizeof(uint32_t), cudaMemcpyDeviceToHost, stream));
@@ -1859,16 +1861,16 @@ uint32_t Testbed::NerfTracer::trace(
 			train_aabb,
 			focal_length,
 			camera_matrix.col(2),
-			rays_current.payload.data(),
-			m_network_input.data(),
+			rays_current.payload,
+			m_network_input,
 			n_steps_between_compaction,
 			grid,
 			(show_accel>=0) ? show_accel : 0,
 			cone_angle_constant
 		);
 		uint32_t n_elements = next_multiple(n_alive*n_steps_between_compaction, BATCH_SIZE_MULTIPLE);
-		GPUMatrix<float> positions_matrix((float*)m_network_input.data(), sizeof(NerfCoordinate)/sizeof(float), n_elements);
-		GPUMatrix<network_precision_t> rgbsigma_matrix((network_precision_t*)m_network_output.data(), network.padded_output_width(), n_elements);
+		GPUMatrix<float> positions_matrix((float*)m_network_input, sizeof(NerfCoordinate)/sizeof(float), n_elements);
+		GPUMatrix<network_precision_t> rgbsigma_matrix((network_precision_t*)m_network_output, network.padded_output_width(), n_elements);
 		network.inference_mixed_precision(stream, positions_matrix, rgbsigma_matrix);
 
 		if (render_mode == ERenderMode::Normals) {
@@ -1886,10 +1888,10 @@ uint32_t Testbed::NerfTracer::trace(
 			camera_matrix,
 			focal_length,
 			depth_scale,
-			rays_current.rgba.data(),
-			rays_current.payload.data(),
-			m_network_input.data(),
-			m_network_output.data(),
+			rays_current.rgba,
+			rays_current.payload,
+			m_network_input,
+			m_network_output,
 			network.padded_output_width(),
 			n_steps_between_compaction,
 			render_mode,
@@ -1909,18 +1911,35 @@ uint32_t Testbed::NerfTracer::trace(
 	return n_hit;
 }
 
-void Testbed::NerfTracer::enlarge(size_t n_elements, uint32_t padded_output_width) {
+void Testbed::NerfTracer::enlarge(tcnn::GPUMemory<char>& scratch_memory, size_t n_elements, uint32_t padded_output_width) {
 	n_elements = next_multiple(n_elements, size_t(BATCH_SIZE_MULTIPLE)); // network inference rounds n_elements up to 256, and uses these arrays, so we must do so also.
-	m_rays[0].enlarge(n_elements);
-	m_rays[1].enlarge(n_elements);
-	m_rays_hit.enlarge(n_elements);
-	m_network_output.enlarge(n_elements * MAX_STEPS_INBETWEEN_COMPACTION * padded_output_width);
-	m_network_input.enlarge(n_elements * MAX_STEPS_INBETWEEN_COMPACTION);
+
+	auto scratch = scratch_memory.enlarge_and_distribute<
+		Array4f, NerfPayload, // m_rays[0]
+		Array4f, NerfPayload, // m_rays[1]
+		Array4f, NerfPayload, // m_rays_hit
+
+		network_precision_t,
+		NerfCoordinate
+	>(
+		n_elements, n_elements,
+		n_elements, n_elements,
+		n_elements, n_elements,
+		n_elements * MAX_STEPS_INBETWEEN_COMPACTION * padded_output_width,
+		n_elements * MAX_STEPS_INBETWEEN_COMPACTION
+	);
+
+	m_rays[0].set(std::get<0>(scratch), std::get<1>(scratch), n_elements);
+	m_rays[1].set(std::get<2>(scratch), std::get<3>(scratch), n_elements);
+	m_rays_hit.set(std::get<4>(scratch), std::get<5>(scratch), n_elements);
+
+	m_network_output = std::get<6>(scratch);
+	m_network_input = std::get<7>(scratch);
 }
 
 void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_res, const Vector2f& focal_length, const Matrix<float, 3, 4>& camera_matrix0, const Matrix<float, 3, 4>& camera_matrix1, const Vector2f& screen_center, cudaStream_t stream) {
 	// Reserve the memory for max-res rendering to prevent stuttering
-	m_nerf.tracer.enlarge(max_res.x() * max_res.y(), m_network->padded_output_width());
+	m_nerf.tracer.enlarge(m_scratch_gpu_memory, max_res.x() * max_res.y(), m_network->padded_output_width());
 
 	float plane_z = m_slice_plane_z + m_scale;
 	if (m_render_mode == ERenderMode::Slice) {
@@ -1930,6 +1949,7 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 	ERenderMode render_mode = m_visualized_dimension > -1 ? ERenderMode::EncodingVis : m_render_mode;
 
 	m_nerf.tracer.init_rays_from_camera(
+		m_scratch_gpu_memory,
 		render_buffer.spp(),
 		m_network->padded_output_width(),
 		render_buffer.resolution(),
@@ -1981,7 +2001,7 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 
 		m_nerf.vis_input.enlarge(n_elements);
 		m_nerf.vis_rgba.enlarge(n_elements);
-		linear_kernel(generate_nerf_network_inputs_at_current_position, 0, stream, n_hit, m_aabb, rays_hit.payload.data(), m_nerf.vis_input.data());
+		linear_kernel(generate_nerf_network_inputs_at_current_position, 0, stream, n_hit, m_aabb, rays_hit.payload, m_nerf.vis_input.data());
 
 		GPUMatrix<float> positions_matrix((float*)m_nerf.vis_input.data(), sizeof(NerfCoordinate)/sizeof(float), n_elements);
 		GPUMatrix<float> rgbsigma_matrix((float*)m_nerf.vis_rgba.data(), 4, n_elements);
@@ -1996,7 +2016,7 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 		linear_kernel(shade_kernel_nerf, 0, stream,
 			n_hit,
 			m_nerf.vis_rgba.data(),
-			rays_hit.payload.data(),
+			rays_hit.payload,
 			m_render_mode,
 			m_nerf.training.linear_colors,
 			render_buffer.frame_buffer()
@@ -2006,8 +2026,8 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 
 	linear_kernel(shade_kernel_nerf, 0, stream,
 		n_hit,
-		rays_hit.rgba.data(),
-		rays_hit.payload.data(),
+		rays_hit.rgba,
+		rays_hit.payload,
 		m_render_mode,
 		m_nerf.training.linear_colors,
 		render_buffer.frame_buffer()
@@ -2015,7 +2035,9 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 
 	if (render_mode == ERenderMode::Cost) {
 		std::vector<NerfPayload> payloads_final_cpu(n_hit);
-		rays_hit.payload.copy_to_host(payloads_final_cpu, n_hit);
+		CUDA_CHECK_THROW(cudaMemcpyAsync(payloads_final_cpu.data(), rays_hit.payload, n_hit * sizeof(NerfPayload), cudaMemcpyDeviceToHost, stream));
+		CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
+
 		size_t total_n_steps = 0;
 		for (uint32_t i = 0; i < n_hit; ++i) {
 			total_n_steps += payloads_final_cpu[i].n_steps;
@@ -2140,14 +2162,22 @@ void Testbed::update_density_grid_nerf(float decay, uint32_t n_uniform_density_g
 	const uint32_t n_elements = NERF_GRIDSIZE() * NERF_GRIDSIZE() * NERF_GRIDSIZE() * NERF_CASCADES();
 
 	m_nerf.density_grid.enlarge(n_elements);
-	m_nerf.density_grid_indices.enlarge(n_elements);
-	m_nerf.density_grid_tmp.enlarge(n_elements);
 
 	const uint32_t n_density_grid_samples = n_uniform_density_grid_samples + n_nonuniform_density_grid_samples;
-	m_nerf.density_grid_positions.enlarge(n_density_grid_samples);
 
 	const uint32_t padded_output_width = m_nerf_network->padded_density_output_width();
-	m_nerf.training.mlp_out.enlarge(n_density_grid_samples * padded_output_width);
+
+	auto scratch = m_scratch_gpu_memory.enlarge_and_distribute<
+		NerfPosition,       // positions at which the NN will be queried for density evaluation
+		uint32_t,           // indices of corresponding density grid cells
+		float,              // the resulting densities `density_grid_tmp` to be merged with the running estimate of the grid
+		network_precision_t // output of the MLP before being converted to densities.
+	>(n_density_grid_samples, n_elements, n_elements, n_density_grid_samples * padded_output_width);
+
+	NerfPosition* density_grid_positions = std::get<0>(scratch);
+	uint32_t* density_grid_indices = std::get<1>(scratch);
+	float* density_grid_tmp = std::get<2>(scratch);
+	network_precision_t* mlp_out = std::get<3>(scratch);
 
 	if (m_training_step == 0) {
 		m_nerf.density_grid_ema_step = 0;
@@ -2166,7 +2196,7 @@ void Testbed::update_density_grid_nerf(float decay, uint32_t n_uniform_density_g
 
 	uint32_t n_steps = 1;
 	for (uint32_t i = 0; i < n_steps; ++i) {
-		CUDA_CHECK_THROW(cudaMemsetAsync(m_nerf.density_grid_tmp.data(), 0, sizeof(float)*n_elements, stream));
+		CUDA_CHECK_THROW(cudaMemsetAsync(density_grid_tmp, 0, sizeof(float)*n_elements, stream));
 
 		linear_kernel(generate_grid_samples_nerf_nonuniform, 0, stream,
 			n_uniform_density_grid_samples,
@@ -2174,8 +2204,8 @@ void Testbed::update_density_grid_nerf(float decay, uint32_t n_uniform_density_g
 			m_nerf.density_grid_ema_step,
 			m_aabb,
 			m_nerf.density_grid.data(),
-			m_nerf.density_grid_positions.data(),
-			m_nerf.density_grid_indices.data(),
+			density_grid_positions,
+			density_grid_indices,
 			m_nerf.max_cascade+1,
 			-0.01f
 		);
@@ -2187,18 +2217,18 @@ void Testbed::update_density_grid_nerf(float decay, uint32_t n_uniform_density_g
 			m_nerf.density_grid_ema_step,
 			m_aabb,
 			m_nerf.density_grid.data(),
-			m_nerf.density_grid_positions.data()+n_uniform_density_grid_samples,
-			m_nerf.density_grid_indices.data()+n_uniform_density_grid_samples,
+			density_grid_positions+n_uniform_density_grid_samples,
+			density_grid_indices+n_uniform_density_grid_samples,
 			m_nerf.max_cascade+1,
 			NERF_MIN_OPTICAL_THICKNESS()
 		);
 		m_rng.advance();
 
-		GPUMatrix<network_precision_t> rgbsigma_matrix(m_nerf.training.mlp_out.data(), padded_output_width, n_density_grid_samples);
-		m_nerf_network->density(stream, {(float*)m_nerf.density_grid_positions.data(), sizeof(NerfPosition)/sizeof(float)}, rgbsigma_matrix, false);
+		GPUMatrix<network_precision_t> rgbsigma_matrix(mlp_out, padded_output_width, n_density_grid_samples);
+		m_nerf_network->density(stream, {(float*)density_grid_positions, sizeof(NerfPosition)/sizeof(float)}, rgbsigma_matrix, false);
 
-		linear_kernel(splat_grid_samples_nerf_max_nearest_neighbor, 0, stream, n_density_grid_samples, m_nerf.density_grid_indices.data(), padded_output_width, m_nerf.training.mlp_out.data(), m_nerf.density_grid_tmp.data(), m_nerf.rgb_activation, m_nerf.density_activation);
-		linear_kernel(ema_grid_samples_nerf, 0, stream, n_elements, decay, m_nerf.density_grid_ema_step, m_nerf.density_grid.data(), m_nerf.density_grid_tmp.data());
+		linear_kernel(splat_grid_samples_nerf_max_nearest_neighbor, 0, stream, n_density_grid_samples, density_grid_indices, padded_output_width, mlp_out, density_grid_tmp, m_nerf.rgb_activation, m_nerf.density_activation);
+		linear_kernel(ema_grid_samples_nerf, 0, stream, n_elements, decay, m_nerf.density_grid_ema_step, m_nerf.density_grid.data(), density_grid_tmp);
 
 		++m_nerf.density_grid_ema_step;
 	}
@@ -2224,11 +2254,18 @@ void Testbed::update_density_grid_mean_and_bitfield(cudaStream_t stream) {
 }
 
 void Testbed::train_nerf(uint32_t target_batch_size, uint32_t n_training_steps, cudaStream_t stream) {
-	m_nerf.training.sharpness_grid.enlarge(NERF_GRIDSIZE() * NERF_GRIDSIZE() * NERF_GRIDSIZE() * NERF_CASCADES());
-	if (m_training_step == 0) {
-		CUDA_CHECK_THROW(cudaMemsetAsync(m_nerf.training.sharpness_grid.data(), 0, m_nerf.training.sharpness_grid.get_bytes(), stream)); // clear the counter in the first slot
-	} else if (m_nerf.training.include_sharpness_in_error) {
-		linear_kernel(decay_sharpness_grid_nerf, 0, stream, m_nerf.training.sharpness_grid.size(), 0.95f, m_nerf.training.sharpness_grid.data());
+	if (m_nerf.training.include_sharpness_in_error) {
+		size_t n_cells = NERF_GRIDSIZE() * NERF_GRIDSIZE() * NERF_GRIDSIZE() * NERF_CASCADES();
+		if (m_nerf.training.sharpness_grid.size() < n_cells) {
+			m_nerf.training.sharpness_grid.enlarge(NERF_GRIDSIZE() * NERF_GRIDSIZE() * NERF_GRIDSIZE() * NERF_CASCADES());
+			CUDA_CHECK_THROW(cudaMemsetAsync(m_nerf.training.sharpness_grid.data(), 0, m_nerf.training.sharpness_grid.get_bytes(), stream));
+		}
+
+		if (m_training_step == 0) {
+			CUDA_CHECK_THROW(cudaMemsetAsync(m_nerf.training.sharpness_grid.data(), 0, m_nerf.training.sharpness_grid.get_bytes(), stream));
+		} else {
+			linear_kernel(decay_sharpness_grid_nerf, 0, stream, m_nerf.training.sharpness_grid.size(), 0.95f, m_nerf.training.sharpness_grid.data());
+		}
 	}
 
 	// number of steps each ray took, and the first offset of samples
@@ -2443,19 +2480,47 @@ void Testbed::train_nerf(uint32_t target_batch_size, uint32_t n_training_steps, 
 void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_batch, uint32_t* counter, uint32_t* compacted_counter, float* loss, cudaStream_t stream) {
 	const uint32_t padded_output_width = m_network->padded_output_width();
 	const uint32_t max_samples = target_batch_size * 16; // Somewhat of a worst case
-	m_nerf.training.ray_counter.enlarge(1);
-	m_nerf.training.ray_indices.enlarge(n_rays_per_batch);
-	m_nerf.training.rays.enlarge(n_rays_per_batch);
-	m_nerf.training.numsteps.enlarge(n_rays_per_batch*2); // number of steps each ray took, and the first offset of samples
-	m_nerf.training.coords.enlarge(max_samples); // positions + directions
-	m_nerf.training.max_level.enlarge(max_samples);
 
-	m_nerf.training.mlp_out.enlarge(std::max(target_batch_size, max_samples) * padded_output_width); // space for mlp to output into - half, padded output size
-	m_nerf.training.mlp_out_trimmed.enlarge(std::max(target_batch_size, max_samples) * 4);
-	m_nerf.training.dloss_dmlp_out.enlarge(target_batch_size * padded_output_width); // space for loss gradients - padded_output_width
-	m_nerf.training.coords_compacted.enlarge(target_batch_size); // positions + directions
-	m_nerf.training.coords_gradient.enlarge(target_batch_size); // positions + directions
-	m_nerf.training.max_level_compacted.enlarge(target_batch_size); // positions + directions
+	m_nerf.training.ray_counter.enlarge(1);
+
+	auto scratch = m_scratch_gpu_memory.enlarge_and_distribute<
+		uint32_t, // ray_indices
+		Ray, // rays
+		uint32_t, // numsteps
+		NerfCoordinate, // coords
+		float, // max_level
+		network_precision_t, // mlp_out
+		network_precision_t, // mlp_out_trimmed
+		network_precision_t, // dloss_dmlp_out
+		NerfCoordinate, // coords_compacted
+		NerfCoordinate, // coords_gradient
+		float // max_level_compacted
+	>(
+		n_rays_per_batch,
+		n_rays_per_batch,
+		n_rays_per_batch * 2,
+		max_samples,
+		max_samples,
+		std::max(target_batch_size, max_samples) * padded_output_width,
+		std::max(target_batch_size, max_samples) * 4,
+		target_batch_size * padded_output_width,
+		target_batch_size,
+		target_batch_size,
+		target_batch_size
+	);
+
+	// TODO: C++17 structured binding
+	uint32_t* ray_indices = std::get<0>(scratch);
+	Ray* rays = std::get<1>(scratch);
+	uint32_t* numsteps = std::get<2>(scratch);
+	NerfCoordinate* coords = std::get<3>(scratch);
+	float* max_level = std::get<4>(scratch);
+	network_precision_t* mlp_out = std::get<5>(scratch);
+	network_precision_t* mlp_out_trimmed = std::get<6>(scratch);
+	network_precision_t* dloss_dmlp_out = std::get<7>(scratch);
+	NerfCoordinate* coords_compacted = std::get<8>(scratch);
+	NerfCoordinate* coords_gradient = std::get<9>(scratch);
+	float* max_level_compacted = std::get<10>(scratch);
 
 	uint32_t max_inference;
 	if (m_nerf.training.measured_batch_size_before_compaction == 0) {
@@ -2464,13 +2529,13 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 		max_inference = next_multiple(std::min(m_nerf.training.measured_batch_size_before_compaction, max_samples), BATCH_SIZE_MULTIPLE);
 	}
 
-	GPUMatrix<float> coords_matrix((float*)m_nerf.training.coords.data(), sizeof(NerfCoordinate)/sizeof(float), max_inference);
-	GPUMatrix<network_precision_t> rgbsigma_matrix(m_nerf.training.mlp_out.data(), padded_output_width, max_inference);
+	GPUMatrix<float> coords_matrix((float*)coords, sizeof(NerfCoordinate)/sizeof(float), max_inference);
+	GPUMatrix<network_precision_t> rgbsigma_matrix(mlp_out, padded_output_width, max_inference);
 
-	GPUMatrix<float> compacted_coords_matrix((float*)m_nerf.training.coords_compacted.data(), sizeof(NerfCoordinate)/sizeof(float), target_batch_size);
-	GPUMatrix<network_precision_t> compacted_rgbsigma_matrix(m_nerf.training.mlp_out.data(), padded_output_width, target_batch_size);
+	GPUMatrix<float> compacted_coords_matrix((float*)coords_compacted, sizeof(NerfCoordinate)/sizeof(float), target_batch_size);
+	GPUMatrix<network_precision_t> compacted_rgbsigma_matrix(mlp_out, padded_output_width, target_batch_size);
 
-	GPUMatrix<network_precision_t> gradient_matrix(m_nerf.training.dloss_dmlp_out.data(), padded_output_width, target_batch_size);
+	GPUMatrix<network_precision_t> gradient_matrix(dloss_dmlp_out, padded_output_width, target_batch_size);
 
 	if (m_training_step == 0) {
 		m_nerf.training.n_rays_total = 0;
@@ -2499,10 +2564,10 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 		m_nerf.training.dataset.rays_data.data(),
 		m_nerf.training.ray_counter.data(),
 		counter,
-		m_nerf.training.ray_indices.data(),
-		m_nerf.training.rays.data(),
-		m_nerf.training.numsteps.data(),
-		m_nerf.training.coords.data(),
+		ray_indices,
+		rays,
+		numsteps,
+		coords,
 		m_nerf.training.image_resolution,
 		m_nerf.training.n_images,
 		m_nerf.training.dataset.principal_point,
@@ -2511,7 +2576,7 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 		m_nerf.training.dataset.camera_distortion,
 		m_nerf.density_grid_bitfield.data(),
 		m_max_level_rand_training,
-		m_nerf.training.max_level.data(),
+		max_level,
 		m_nerf.training.snap_to_pixel_centers,
 		m_nerf.training.train_envmap,
 		m_nerf.cone_angle_constant,
@@ -2527,18 +2592,17 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 
 	auto hg_enc = dynamic_cast<GridEncoding<network_precision_t>*>(m_encoding.get());
 	if (hg_enc) {
-		hg_enc->set_max_level_gpu(m_max_level_rand_training ? m_nerf.training.max_level.data() : nullptr);
+		hg_enc->set_max_level_gpu(m_max_level_rand_training ? max_level : nullptr);
 	}
 
 	m_network->inference_mixed_precision(stream, coords_matrix, rgbsigma_matrix, false);
-	network_precision_t* mlp_out = m_nerf.training.mlp_out.data();
 	if (padded_output_width != 4) {
-		mlp_out = m_nerf.training.mlp_out_trimmed.data();
-		linear_kernel(tcnn::trim<network_precision_t>, 0, stream, max_inference*4, padded_output_width, 4, m_nerf.training.mlp_out.data(), m_nerf.training.mlp_out_trimmed.data());
+		linear_kernel(tcnn::trim<network_precision_t>, 0, stream, max_inference*4, padded_output_width, 4, mlp_out, mlp_out_trimmed);
+		mlp_out = mlp_out_trimmed;
 	}
 
 	if (hg_enc) {
-		hg_enc->set_max_level_gpu(m_max_level_rand_training ? m_nerf.training.max_level_compacted.data() : nullptr);
+		hg_enc->set_max_level_gpu(m_max_level_rand_training ? max_level_compacted : nullptr);
 	}
 
 	linear_kernel(compute_loss_kernel_train_nerf, 0, stream,
@@ -2563,16 +2627,16 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 		m_nerf.training.image_resolution,
 		mlp_out,
 		compacted_counter,
-		m_nerf.training.ray_indices.data(),
-		m_nerf.training.rays.data(),
-		m_nerf.training.numsteps.data(),
-		m_nerf.training.coords.data(),
-		m_nerf.training.coords_compacted.data(),
-		m_nerf.training.dloss_dmlp_out.data(),
+		ray_indices,
+		rays,
+		numsteps,
+		coords,
+		coords_compacted,
+		dloss_dmlp_out,
 		m_nerf.training.loss_type,
 		loss,
 		m_max_level_rand_training,
-		m_nerf.training.max_level_compacted.data(),
+		max_level_compacted,
 		m_nerf.rgb_activation,
 		m_nerf.density_activation,
 		m_nerf.training.snap_to_pixel_centers,
@@ -2592,19 +2656,19 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 	);
 
 	fill_rollover_and_rescale<network_precision_t><<<n_blocks_linear(target_batch_size*padded_output_width), n_threads_linear, 0, stream>>>(
-		target_batch_size, padded_output_width, compacted_counter, m_nerf.training.dloss_dmlp_out.data()
+		target_batch_size, padded_output_width, compacted_counter, dloss_dmlp_out
 	);
 	fill_rollover<NerfCoordinate><<<n_blocks_linear(target_batch_size), n_threads_linear, 0, stream>>>(
-		target_batch_size, 1, compacted_counter, m_nerf.training.coords_compacted.data()
+		target_batch_size, 1, compacted_counter, coords_compacted
 	);
 	fill_rollover<float><<<n_blocks_linear(target_batch_size), n_threads_linear, 0, stream>>>(
-		target_batch_size, 1, compacted_counter, m_nerf.training.max_level_compacted.data()
+		target_batch_size, 1, compacted_counter, max_level_compacted
 	);
 
 	bool train_camera = m_nerf.training.optimize_extrinsics || m_nerf.training.optimize_distortion || m_nerf.training.optimize_focal_length;
 	m_network->forward(stream, compacted_coords_matrix, &compacted_rgbsigma_matrix, false, train_camera);
 
-	GPUMatrix<float> coords_gradient_matrix((float*)m_nerf.training.coords_gradient.data(), sizeof(NerfCoordinate)/sizeof(float), target_batch_size);
+	GPUMatrix<float> coords_gradient_matrix((float*)coords_gradient, sizeof(NerfCoordinate)/sizeof(float), target_batch_size);
 	m_network->backward(stream, compacted_coords_matrix, compacted_rgbsigma_matrix, gradient_matrix, train_camera ? &coords_gradient_matrix : nullptr);
 
 	if (train_camera) {
@@ -2621,11 +2685,11 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 			m_nerf.training.optimize_extrinsics ? m_nerf.training.cam_pos_gradient_gpu.data() : nullptr,
 			m_nerf.training.optimize_extrinsics ? m_nerf.training.cam_rot_gradient_gpu.data() : nullptr,
 			m_nerf.training.n_images,
-			m_nerf.training.ray_indices.data(),
-			m_nerf.training.rays.data(),
-			m_nerf.training.numsteps.data(),
-			m_nerf.training.coords_compacted.data(),
-			m_nerf.training.coords_gradient.data(),
+			ray_indices,
+			rays,
+			numsteps,
+			coords_compacted,
+			coords_gradient,
 			m_nerf.training.optimize_distortion ? m_distortion.map->gradients() : nullptr,
 			m_nerf.training.optimize_distortion ? m_distortion.map->gradient_weights() : nullptr,
 			m_distortion.resolution,
@@ -2709,28 +2773,35 @@ void Testbed::compute_mesh_vertex_colors() {
 GPUMemory<float> Testbed::get_density_on_grid(Vector3i res3d, const BoundingBox& aabb) {
 	const uint32_t n_elements = (res3d.x()*res3d.y()*res3d.z());
 	GPUMemory<float> density(n_elements);
-	GPUMemory<NerfPosition> positions(n_elements);
+
 	const uint32_t batch_size = std::min(n_elements, 1u<<20);
-	bool nerf_mode = m_testbed_mode==ETestbedMode::Nerf;
+	bool nerf_mode = m_testbed_mode == ETestbedMode::Nerf;
 
 	const uint32_t padded_output_width = nerf_mode ? m_nerf_network->padded_density_output_width() : m_network->padded_output_width();
-	GPUMemory<network_precision_t> mlp_out(batch_size * padded_output_width);
+
+	auto scratch = m_scratch_gpu_memory.enlarge_and_distribute<
+		NerfPosition,
+		network_precision_t
+	>(n_elements, batch_size * padded_output_width);
+
+	NerfPosition* positions = std::get<0>(scratch);
+	network_precision_t* mlp_out = std::get<1>(scratch);
 
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)res3d.x(), threads.x), div_round_up((uint32_t)res3d.y(), threads.y), div_round_up((uint32_t)res3d.z(), threads.z) };
 
 	BoundingBox unit_cube = BoundingBox{Vector3f::Zero(), Vector3f::Ones()};
-	generate_grid_samples_nerf_uniform<<<blocks, threads, 0, m_inference_stream>>>(res3d, m_nerf.density_grid_ema_step, aabb, nerf_mode ? m_aabb : unit_cube , positions.data());
+	generate_grid_samples_nerf_uniform<<<blocks, threads, 0, m_inference_stream>>>(res3d, m_nerf.density_grid_ema_step, aabb, nerf_mode ? m_aabb : unit_cube , positions);
 
 	// Only process 1m elements at a time
 	for (uint32_t offset = 0; offset < n_elements; offset += batch_size) {
 		uint32_t local_batch_size = std::min(n_elements - offset, batch_size);
 
-		GPUMatrix<network_precision_t> density_matrix(mlp_out.data(), padded_output_width, local_batch_size);
+		GPUMatrix<network_precision_t> density_matrix(mlp_out, padded_output_width, local_batch_size);
 		if (nerf_mode)
-			m_nerf_network->density(m_inference_stream, {(float*)(positions.data() + offset), sizeof(NerfPosition)/sizeof(float)}, density_matrix);
+			m_nerf_network->density(m_inference_stream, {(float*)(positions + offset), sizeof(NerfPosition)/sizeof(float)}, density_matrix);
 		else {
-			GPUMatrix<float> positions_matrix((float*)(positions.data() + offset), sizeof(NerfPosition)/sizeof(float), local_batch_size);
+			GPUMatrix<float> positions_matrix((float*)(positions + offset), sizeof(NerfPosition)/sizeof(float), local_batch_size);
 			m_network->inference_mixed_precision(m_inference_stream, positions_matrix, density_matrix);
 		}
 		linear_kernel(grid_samples_half_to_float, 0, m_inference_stream,
@@ -2738,12 +2809,13 @@ GPUMemory<float> Testbed::get_density_on_grid(Vector3i res3d, const BoundingBox&
 			m_aabb,
 			density.data() + offset , //+ axis_step * n_elements,
 			padded_output_width,
-			mlp_out.data(),
+			mlp_out,
 			m_nerf.density_activation,
-			positions.data() + offset,
+			positions + offset,
 			nerf_mode ? m_nerf.density_grid.data() : nullptr
 		);
 	}
+
 	return density;
 }
 
@@ -2753,7 +2825,7 @@ int Testbed::marching_cubes(Vector3i res3d, const BoundingBox& aabb, float thres
 	res3d.z() = next_multiple((unsigned int)res3d.z(), 16u);
 
 	GPUMemory<float> density = get_density_on_grid(res3d, aabb);
-	marching_cubes_gpu(m_render_aabb, res3d, thresh, density, m_mesh.verts, m_mesh.indices);
+	marching_cubes_gpu(m_scratch_gpu_memory, m_render_aabb, res3d, thresh, density, m_mesh.verts, m_mesh.indices);
 
 	uint32_t n_verts = (uint32_t)m_mesh.verts.size();
 	m_mesh.verts_gradient.resize(n_verts);

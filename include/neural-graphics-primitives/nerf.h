@@ -34,18 +34,22 @@ struct NerfPayload {
 };
 
 struct RaysNerfSoa {
-	void enlarge(size_t n_elements) {
-		rgba.enlarge(n_elements);
-		payload.enlarge(n_elements);
-	}
 #ifdef __NVCC__
 	void copy_from_other_async(const RaysNerfSoa& other, cudaStream_t stream) {
-		CUDA_CHECK_THROW(cudaMemcpyAsync(rgba.data(), other.rgba.data(), rgba.get_bytes(), cudaMemcpyDeviceToDevice, stream));
-		CUDA_CHECK_THROW(cudaMemcpyAsync(payload.data(), other.payload.data(), payload.get_bytes(), cudaMemcpyDeviceToDevice, stream));
+		CUDA_CHECK_THROW(cudaMemcpyAsync(rgba, other.rgba, size * sizeof(Eigen::Array4f), cudaMemcpyDeviceToDevice, stream));
+		CUDA_CHECK_THROW(cudaMemcpyAsync(payload, other.payload, size * sizeof(NerfPayload), cudaMemcpyDeviceToDevice, stream));
 	}
 #endif
-	tcnn::GPUMemory<Eigen::Array4f> rgba;
-	tcnn::GPUMemory<NerfPayload> payload;
+
+	void set(Eigen::Array4f* _rgba, NerfPayload* _payload, size_t _size) {
+		rgba = _rgba;
+		payload = _payload;
+		size = _size;
+	}
+
+	Eigen::Array4f* rgba;
+	NerfPayload* payload;
+	size_t size;
 };
 
 

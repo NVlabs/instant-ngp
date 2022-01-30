@@ -75,7 +75,8 @@ public:
 	public:
 		SphereTracer() : m_hit_counter(1), m_alive_counter(1) {}
 
-		void init_rays_from_camera(uint32_t spp,
+		void init_rays_from_camera(
+			uint32_t spp,
 			const Eigen::Vector2i& resolution,
 			const Eigen::Vector2f& focal_length,
 			const Eigen::Matrix<float, 3, 4>& camera_matrix,
@@ -88,7 +89,8 @@ public:
 			const float* envmap_data,
 			const Eigen::Vector2i& envmap_resolution,
 			Eigen::Array4f* frame_buffer,
-			const TriangleOctree* octree, cudaStream_t stream);
+			const TriangleOctree* octree, cudaStream_t stream
+		);
 
 		void init_rays_from_data(uint32_t n_elements, const RaysSdfSoa& data, cudaStream_t stream);
 		uint32_t trace_bvh(TriangleBvh* bvh, const Triangle* triangles, cudaStream_t stream);
@@ -113,7 +115,9 @@ public:
 	public:
 		NerfTracer() : m_hit_counter(1), m_alive_counter(1) {}
 
-		void init_rays_from_camera(uint32_t spp,
+		void init_rays_from_camera(
+			tcnn::GPUMemory<char>& scratch_memory,
+			uint32_t spp,
 			uint32_t padded_output_width,
 			const Eigen::Vector2i& resolution,
 			const Eigen::Vector2f& focal_length,
@@ -158,7 +162,7 @@ public:
 			cudaStream_t stream
 		);
 
-		void enlarge(size_t n_elements, uint32_t padded_output_width);
+		void enlarge(tcnn::GPUMemory<char>& scratch_memory, size_t n_elements, uint32_t padded_output_width);
 		RaysNerfSoa& rays_hit() { return m_rays_hit; }
 		RaysNerfSoa& rays_init() { return m_rays[0]; }
 		uint32_t n_rays_initialized() const { return m_n_rays_initialized; }
@@ -166,8 +170,8 @@ public:
 	private:
 		RaysNerfSoa m_rays[2];
 		RaysNerfSoa m_rays_hit;
-		tcnn::GPUMemory<precision_t> m_network_output;
-		tcnn::GPUMemory<NerfCoordinate> m_network_input;
+		precision_t* m_network_output;
+		NerfCoordinate* m_network_input;
 		tcnn::GPUMemory<uint32_t> m_hit_counter;
 		tcnn::GPUMemory<uint32_t> m_alive_counter;
 		uint32_t m_n_rays_initialized = 0;
@@ -421,6 +425,8 @@ public:
 	std::vector<CudaRenderBuffer> m_render_surfaces;
 	std::unique_ptr<CudaRenderBuffer> m_pip_render_surface;
 
+	tcnn::GPUMemory<char> m_scratch_gpu_memory;
+
 	struct Nerf {
 		NerfTracer tracer;
 
@@ -464,21 +470,10 @@ public:
 			std::vector<RotationAdamOptimizer> cam_rot_offset;
 			AdamOptimizer<Eigen::Vector2f> cam_focal_length_offset = AdamOptimizer<Eigen::Vector2f>(0.f);
 
-			tcnn::GPUMemory<uint32_t> ray_indices;
-			tcnn::GPUMemory<Ray> rays;
-			tcnn::GPUMemory<uint32_t> numsteps; // number of steps each ray took
 			tcnn::GPUMemory<uint32_t> numsteps_counter; // number of steps each ray took
 			tcnn::GPUMemory<uint32_t> numsteps_counter_compacted; // number of steps each ray took
 			tcnn::GPUMemory<uint32_t> ray_counter;
-			tcnn::GPUMemory<NerfCoordinate> coords;
-			tcnn::GPUMemory<NerfCoordinate> coords_compacted;
-			tcnn::GPUMemory<NerfCoordinate> coords_gradient;
-			tcnn::GPUMemory<precision_t> mlp_out; // space for mlp to output into - half, padded output size
-			tcnn::GPUMemory<precision_t> mlp_out_trimmed;
-			tcnn::GPUMemory<precision_t> dloss_dmlp_out; // space for loss gradients - padded_output_width
 			tcnn::GPUMemory<float> loss;
-			tcnn::GPUMemory<float> max_level;
-			tcnn::GPUMemory<float> max_level_compacted;
 
 			uint32_t rays_per_batch = 1<<12;
 			uint32_t n_rays_total = 0;
@@ -515,11 +510,8 @@ public:
 		} training = {};
 
 		tcnn::GPUMemory<float> density_grid; // NERF_GRIDSIZE()^3 grid of EMA smoothed densities from the network
-		tcnn::GPUMemory<NerfPosition> density_grid_positions;
-		tcnn::GPUMemory<uint32_t> density_grid_indices;
 		tcnn::GPUMemory<uint8_t> density_grid_bitfield;
 		uint8_t* get_density_grid_bitfield_mip(uint32_t mip);
-		tcnn::GPUMemory<float> density_grid_tmp;
 		tcnn::GPUMemory<float> density_grid_mean;
 		uint32_t density_grid_ema_step = 0;
 

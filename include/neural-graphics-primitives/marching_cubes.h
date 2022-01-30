@@ -21,10 +21,10 @@ NGP_NAMESPACE_BEGIN
 
 Eigen::Vector3i get_marching_cubes_res(uint32_t res_1d, const BoundingBox &aabb);
 
-void marching_cubes_gpu(BoundingBox aabb, Eigen::Vector3i res_3d, float thresh, const tcnn::GPUMemory<float> &density, tcnn::GPUMemory<Eigen::Vector3f> &vert_out, tcnn::GPUMemory<uint32_t> &indices_out);
+void marching_cubes_gpu(tcnn::GPUMemory<char>& scratch_memory, BoundingBox aabb, Eigen::Vector3i res_3d, float thresh, const tcnn::GPUMemory<float>& density, tcnn::GPUMemory<Eigen::Vector3f>& vert_out, tcnn::GPUMemory<uint32_t>& indices_out);
 
 // computes the average of the 1ring of all verts, as homogenous coordinates
-void compute_mesh_1ring(const tcnn::GPUMemory<Eigen::Vector3f> &verts, const tcnn::GPUMemory<uint32_t> &indices, tcnn::GPUMemory<Eigen::Vector4f> &output_pos, tcnn::GPUMemory<Eigen::Vector3f> &output_normals);
+void compute_mesh_1ring(const tcnn::GPUMemory<Eigen::Vector3f>& verts, const tcnn::GPUMemory<uint32_t>& indices, tcnn::GPUMemory<Eigen::Vector4f>& output_pos, tcnn::GPUMemory<Eigen::Vector3f>& output_normals);
 
 void compute_mesh_opt_gradients(float thresh,
 	const tcnn::GPUMemory<Eigen::Vector3f>& verts, const tcnn::GPUMemory<Eigen::Vector3f>& vert_normals,
