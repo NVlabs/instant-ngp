@@ -743,15 +743,15 @@ void compute_mesh_opt_gradients(float thresh,
 	);
 }
 
-void marching_cubes_gpu(BoundingBox aabb, Eigen::Vector3i res_3d, float thresh, const tcnn::GPUMemory<float> &density, tcnn::GPUMemory<Eigen::Vector3f>& verts_out, tcnn::GPUMemory<uint32_t>& indices_out) {
+void marching_cubes_gpu(GPUMemory<char>& scratch_memory, BoundingBox aabb, Eigen::Vector3i res_3d, float thresh, const tcnn::GPUMemory<float>& density, tcnn::GPUMemory<Eigen::Vector3f>& verts_out, tcnn::GPUMemory<uint32_t>& indices_out) {
 	GPUMemory<uint32_t> counters;
 
 	counters.enlarge(4);
 	counters.memset(0);
 
-	GPUMemory<int> vertex_grid;
-	vertex_grid.enlarge(res_3d.x()*res_3d.y()*res_3d.z()*3);
-	vertex_grid.memset(-1);
+	scratch_memory.enlarge(res_3d.x() * res_3d.y() * res_3d.z() * 3 * sizeof(int));
+	scratch_memory.memset(-1);
+	int* vertex_grid = (int*)scratch_memory.data();
 
 	const dim3 threads = { 4, 4, 4 };
 	const dim3 blocks = { div_round_up((uint32_t)res_3d.x(), threads.x), div_round_up((uint32_t)res_3d.y(), threads.y), div_round_up((uint32_t)res_3d.z(), threads.z) };
@@ -767,8 +767,8 @@ void marching_cubes_gpu(BoundingBox aabb, Eigen::Vector3i res_3d, float thresh, 
 	verts_out.memset(0);
 	indices_out.resize(cpucounters[1]);
 	// actually generate verts
-	gen_vertices<<<blocks, threads, 0>>>(aabb, res_3d, density.data(), vertex_grid.data(), verts_out.data(), thresh, counters.data()+2);
-	gen_faces<<<blocks, threads, 0>>>(res_3d, density.data(), vertex_grid.data(), indices_out.data(), thresh, counters.data()+2);
+	gen_vertices<<<blocks, threads, 0>>>(aabb, res_3d, density.data(), vertex_grid, verts_out.data(), thresh, counters.data()+2);
+	gen_faces<<<blocks, threads, 0>>>(res_3d, density.data(), vertex_grid, indices_out.data(), thresh, counters.data()+2);
 }
 
 void save_mesh(
