@@ -1063,7 +1063,7 @@ __device__ LossAndGradient loss_and_gradient(const Vector3f& target, const Vecto
 		case ELossType::L1:          return l1_loss(target, prediction); break;
 		case ELossType::Mape:        return mape_loss(target, prediction); break;
 		case ELossType::Smape:       return smape_loss(target, prediction); break;
-		// Note: we multiply the huber loss by a factor of 5 such that its L2 region near zero
+		// Note: we divide the huber loss by a factor of 5 such that its L2 region near zero
 		// matches with the L2 loss and error numbers become more comparable. This allows reading
 		// off dB numbers of ~converged models and treating them as approximate PSNR to compare
 		// with other NeRF methods. Self-normalizing optimizers such as Adam are agnostic to such
