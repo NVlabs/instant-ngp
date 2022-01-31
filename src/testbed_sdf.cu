@@ -954,7 +954,7 @@ void Testbed::load_mesh() {
 	}
 
 	// Inflate AABB by 1% to give the network a little wiggle room.
-	m_raw_aabb.inflate(m_raw_aabb.diag().norm()*0.005f);
+	m_raw_aabb.inflate(m_raw_aabb.diag().norm() * 0.005f);
 	m_sdf.mesh_scale = m_raw_aabb.diag().maxCoeff();
 
 	// Normalize vertex coordinates to lie within [0,1]^3.

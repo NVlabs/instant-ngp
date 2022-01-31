@@ -179,11 +179,13 @@ struct BoundingBox {
 			return { std::numeric_limits<float>::max(), std::numeric_limits<float>::max() };
 		}
 
-		if (tymin > tmin)
+		if (tymin > tmin) {
 			tmin = tymin;
+		}
 
-		if (tymax < tmax)
+		if (tymax < tmax) {
 			tmax = tymax;
+		}
 
 		float tzmin = (min.z() - pos.z()) / dir.z();
 		float tzmax = (max.z() - pos.z()) / dir.z();

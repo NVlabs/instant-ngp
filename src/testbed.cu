@@ -436,8 +436,8 @@ void Testbed::imgui() {
 		float render_diam = (m_render_aabb.max-m_render_aabb.min).maxCoeff();
 		float old_render_diam = render_diam;
 		if (ImGui::SliderFloat("Crop size", &render_diam, 0.1f, max_diam, "%.3f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat)) {
-			accum_reset=true;
-			if (old_render_diam>0.f && render_diam>0.f) {
+			accum_reset = true;
+			if (old_render_diam > 0.f && render_diam > 0.f) {
 				auto center = (m_render_aabb.max + m_render_aabb.min) * 0.5f;
 				float scale = render_diam / old_render_diam;
 				m_render_aabb.max = ((m_render_aabb.max-center) * scale + center).cwiseMin(m_aabb.max);
@@ -1914,22 +1914,26 @@ void Testbed::render_frame(const Eigen::Matrix<float, 3, 4>& camera_matrix0, con
 	render_buffer.tonemap(m_exposure, m_background_color, to_srgb ? EColorSpace::SRGB : EColorSpace::Linear, m_inference_stream);
 
 	if (m_testbed_mode == ETestbedMode::Nerf) {
+		// Overlay the ground truth image if requested
 		if (m_render_ground_truth) {
 			float alpha=1.f;
-			render_buffer.copy_training_image(
+			render_buffer.overlay_image(
 				alpha,
 				Array3f::Constant(m_exposure) + m_nerf.training.cam_exposure[m_nerf.training.view].variable(),
 				m_background_color,
 				to_srgb ? EColorSpace::SRGB : EColorSpace::Linear,
-				m_nerf.training.dataset.images_data.data(), m_nerf.training.view,
-				m_nerf.training.dataset.image_resolution, m_fov_axis,
-				m_zoom, m_screen_center,
+				m_nerf.training.dataset.images_data.data() + m_nerf.training.view * (size_t)m_nerf.training.dataset.image_resolution.prod() * 4,
+				m_nerf.training.dataset.image_resolution,
+				m_fov_axis,
+				m_zoom,
+				m_screen_center,
 				m_inference_stream
 			);
 		}
 
-		if (m_nerf.training.render_error_overlay) { // viz error map!
-			const float *err_data = m_nerf.training.error_map.data.data();
+		// Visualize the accumulated error map if requested
+		if (m_nerf.training.render_error_overlay) {
+			const float* err_data = m_nerf.training.error_map.data.data();
 			Vector2i error_map_res = m_nerf.training.error_map.resolution;
 			if (m_render_ground_truth) {
 				err_data = m_nerf.training.dataset.sharpness_data.data();
@@ -1944,7 +1948,7 @@ void Testbed::render_frame(const Eigen::Matrix<float, 3, 4>& camera_matrix0, con
 			const float* aligned_err_data_e = (const float*)(((size_t)(err_data+emap_size))&~15);
 			size_t reduce_size = aligned_err_data_e - aligned_err_data_s;
 			reduce_sum(aligned_err_data_s, [reduce_size] __device__ (float val) { return max(val,0.f) / (reduce_size); }, average_error.data(), reduce_size, m_inference_stream);
-			render_buffer.viz_error_map(m_nerf.training.dataset.image_resolution, to_srgb, m_fov_axis, m_inference_stream, err_data, error_map_res, average_error.data(), m_nerf.training.error_overlay_brightness, m_render_ground_truth);
+			render_buffer.overlay_false_color(m_nerf.training.dataset.image_resolution, to_srgb, m_fov_axis, m_inference_stream, err_data, error_map_res, average_error.data(), m_nerf.training.error_overlay_brightness, m_render_ground_truth);
 		}
 	}
 

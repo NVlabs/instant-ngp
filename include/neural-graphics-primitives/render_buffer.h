@@ -195,9 +195,20 @@ public:
 
 	void tonemap(float exposure, const Eigen::Array4f& background_color, EColorSpace output_color_space, cudaStream_t stream);
 
-	void copy_training_image(float alpha, const Eigen::Array3f& exposure, const Eigen::Array4f& background_color, EColorSpace output_color_space, const __half* __restrict__ training_image, int image_idx, Eigen::Vector2i training_resolution, int fov_axis, float zoom, Eigen::Vector2f screen_center, cudaStream_t stream);
+	void overlay_image(
+		float alpha,
+		const Eigen::Array3f& exposure,
+		const Eigen::Array4f& background_color,
+		EColorSpace output_color_space,
+		const __half* __restrict__ image,
+		const Eigen::Vector2i& resolution,
+		int fov_axis,
+		float zoom,
+		const Eigen::Vector2f& screen_center,
+		cudaStream_t stream
+	);
 
-	void viz_error_map(Eigen::Vector2i training_resolution, bool to_srgb, int fov_axis, cudaStream_t stream, const float *error_map, Eigen::Vector2i error_map_resolution, const float *average, float brightness, bool viridis);
+	void overlay_false_color(Eigen::Vector2i training_resolution, bool to_srgb, int fov_axis, cudaStream_t stream, const float *error_map, Eigen::Vector2i error_map_resolution, const float *average, float brightness, bool viridis);
 
 	SurfaceProvider& surface_provider() {
 		return *m_surface_provider;

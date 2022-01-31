@@ -252,14 +252,94 @@ __global__ void accumulate_kernel(Vector2i resolution, Array4f* frame_buffer, Ar
 	accumulate_buffer[idx] = tmp;
 }
 
-__global__ void copy_training_image_kernel(
+__device__ Array3f tonemap(Array3f x, ETonemapCurve curve) {
+	if (curve == ETonemapCurve::Identity) {
+		return x;
+	}
+
+	x = x.cwiseMax(0.f);
+
+	float k0, k1, k2, k3, k4, k5;
+	if (curve == ETonemapCurve::ACES) {
+		// Source:  ACES approximation : https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
+		// Include pre - exposure cancelation in constants
+		k0 = 0.6f * 0.6f * 2.51f;
+		k1 = 0.6f * 0.03f;
+		k2 = 0.0f;
+		k3 = 0.6f * 0.6f * 2.43f;
+		k4 = 0.6f * 0.59f;
+		k5 = 0.14f;
+	} else if (curve == ETonemapCurve::Hable) {
+		// Source: https://64.github.io/tonemapping/
+		const float A = 0.15f;
+		const float B = 0.50f;
+		const float C = 0.10f;
+		const float D = 0.20f;
+		const float E = 0.02f;
+		const float F = 0.30f;
+		k0 = A * F - A * E;
+		k1 = C * B * F - B * E;
+		k2 = 0.0f;
+		k3 = A * F;
+		k4 = B * F;
+		k5 = D * F * F;
+
+		const float W = 11.2f;
+		const float nom = k0 * (W*W) + k1 * W + k2;
+		const float denom = k3 * (W*W) + k4 * W + k5;
+		const float white_scale = denom / nom;
+
+		// Include white scale and exposure bias in rational polynomial coefficients
+		k0 = 4.0f * k0 * white_scale;
+		k1 = 2.0f * k1 * white_scale;
+		k2 = k2 * white_scale;
+		k3 = 4.0f * k3;
+		k4 = 2.0f * k4;
+	} else { //if (curve == ETonemapCurve::Reinhard)
+		const Vector3f luminance_coefficients = Vector3f(0.2126f, 0.7152f, 0.0722f);
+		float Y = luminance_coefficients.dot(x.matrix());
+
+		return x * (1.f / (Y + 1.0f));
+	}
+
+	Array3f color_sq = x * x;
+	Array3f nom = color_sq * k0 + k1 * x + k2;
+	Array3f denom = k3 * color_sq + k4 * x + k5;
+
+	Array3f tonemapped_color = nom / denom;
+
+	return tonemapped_color;
+}
+
+__device__ Array3f tonemap(Array3f col, const Array3f& exposure, ETonemapCurve tonemap_curve, EColorSpace color_space, EColorSpace output_color_space) {
+	// Conversion to output by
+	// 1. converting to linear. (VisPosNeg is treated as linear red/green)
+	if (color_space == EColorSpace::SRGB) {
+		col = srgb_to_linear(col);
+	}
+
+	// 2. applying exposure in linear space
+	col *= Array3f::Constant(2.0f).pow(exposure);
+
+	// 3. tonemapping in linear space according to the specified curve
+	col = tonemap(col, tonemap_curve);
+
+	// 4. converting to output color space.
+	if (output_color_space == EColorSpace::SRGB) {
+		col = linear_to_srgb(col);
+	}
+
+	return col;
+}
+
+__global__ void overlay_image_kernel(
 	Vector2i resolution,
 	float alpha,
 	Array3f exposure,
 	Array4f background_color,
-	const __half* __restrict__ training_images,
-	int image_idx,
-	Vector2i training_resolution,
+	const __half* __restrict__ image,
+	Vector2i image_resolution,
+	ETonemapCurve tonemap_curve,
 	EColorSpace color_space,
 	EColorSpace output_color_space,
 	int fov_axis,
@@ -273,7 +353,7 @@ __global__ void copy_training_image_kernel(
 		return;
 	}
 
-	float scale = training_resolution[fov_axis] / float(resolution[fov_axis]);
+	float scale = image_resolution[fov_axis] / float(resolution[fov_axis]);
 
 	float fx = x+0.5f;
 	float fy = y+0.5f;
@@ -281,19 +361,19 @@ __global__ void copy_training_image_kernel(
 	fx-=resolution.x()*0.5f; fx/=zoom; fx+=screen_center.x() * resolution.x();
 	fy-=resolution.y()*0.5f; fy/=zoom; fy+=screen_center.y() * resolution.y();
 
-	float u = (fx-resolution.x()*0.5f) * scale  + training_resolution.x()*0.5f;
-	float v = (fy-resolution.y()*0.5f) * scale  + training_resolution.y()*0.5f;
+	float u = (fx-resolution.x()*0.5f) * scale  + image_resolution.x()*0.5f;
+	float v = (fy-resolution.y()*0.5f) * scale  + image_resolution.y()*0.5f;
 
 	int srcx = floorf(u);
 	int srcy = floorf(v);
 	uint32_t idx = x + resolution.x() * y;
-	uint32_t srcidx = srcx + training_resolution.x() * srcy;
+	uint32_t srcidx = srcx + image_resolution.x() * srcy;
 
 	__half val[4];
-	if (srcx >= training_resolution.x() || srcy >= training_resolution.y() || srcx<0 || srcy<0) {
+	if (srcx >= image_resolution.x() || srcy >= image_resolution.y() || srcx < 0 || srcy < 0) {
 		*(uint64_t*)&val[0] = 0;
 	} else {
-		*(uint64_t*)&val[0] = ((uint64_t*)training_images)[srcidx + image_idx * (size_t)training_resolution.prod()];
+		*(uint64_t*)&val[0] = ((uint64_t*)image)[srcidx];
 	}
 	Array4f color = {val[0], val[1], val[2], val[3]};
 
@@ -309,24 +389,11 @@ __global__ void copy_training_image_kernel(
 		}
 	}
 
-	Array3f exposure_scale = Array3f::Constant(2.0f).pow(exposure);
-	color.head<3>() *= exposure_scale;
 	float weight = (1 - color.w()) * background_color.w();
 	color.head<3>() += background_color.head<3>() * weight;
 	color.w() += weight;
 
-	if (color_space != output_color_space) {
-		// Conversion to output by
-		// 1. converting to linear. (VisPosNeg is treated as linear red/green)
-		if (color_space == EColorSpace::SRGB) {
-			color.head<3>() = srgb_to_linear(color.head<3>());
-		}
-
-		// 2. converting to output color space.
-		if (output_color_space == EColorSpace::SRGB) {
-			color.head<3>() = linear_to_srgb(color.head<3>());
-		}
-	}
+	color.head<3>() = tonemap(color.head<3>(), exposure, tonemap_curve, color_space, output_color_space);
 
 	Array4f prev_color;
 	surf2Dread((float4*)&prev_color, surface, x * sizeof(float4), y);
@@ -364,66 +431,7 @@ __device__ Array3f colormap_viridis(float x) {
 	return (c0+x*(c1+x*(c2+x*(c3+x*(c4+x*(c5+x*c6))))));
 }
 
-__device__ Array3f tonemap(Array3f x, ETonemapCurve curve) {
-	if (curve == ETonemapCurve::Identity) {
-		return x;
-	}
-
-	x = x.cwiseMax(0.f);
-
-	float k0, k1, k2, k3, k4, k5;
-	if (curve == ETonemapCurve::ACES) {
-		// Source:  ACES approximation : https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
-		// Include pre - exposure cancelation in constants
-		k0 = 0.6f * 0.6f * 2.51f;
-		k1 = 0.6f * 0.03f;
-		k2 = 0.0f;
-		k3 = 0.6f * 0.6f * 2.43f;
-		k4 = 0.6f * 0.59f;
-		k5 = 0.14f;
-	} else if (curve == ETonemapCurve::Hable) {
-		// Source: https://64.github.io/tonemapping/
-		const float A = 0.15f;
-		const float B = 0.50f;
-		const float C = 0.10f;
-		const float D = 0.20f;
-		const float E = 0.02f;
-		const float F = 0.30f;
-		k0 = A * F - A * E;
-		k1 = C * B * F - B * E;
-		k2 = 0.0f;
-		k3 = A * F;
-		k4 = B * F;
-		k5 = D * F * F;
-
-		const float W = 11.2f;
-		const float nom = k0 * (W*W) + k1 * W + k2;
-		const float denom = k3 * (W*W) + k4 * W + k5;
-		const float whiteScale = denom / nom;
-
-		// Include white scale and exposure bias in rational polynomial coefficients
-		k0 = 4.0f * k0 * whiteScale;
-		k1 = 2.0f * k1 * whiteScale;
-		k2 = k2 * whiteScale;
-		k3 = 4.0f * k3;
-		k4 = 2.0f * k4;
-	} else { //if (curve == ETonemapCurve::Reinhard)
-		const Vector3f luminanceCoefficients = Vector3f(0.2126f, 0.7152f, 0.0722f);
-		float Y = luminanceCoefficients.dot(x.matrix());
-
-		return x * (1.f/(Y + 1.0f));
-	}
-
-	Array3f colSq = x * x;
-	Array3f nom = colSq * k0 + k1 * x + k2;
-	Array3f denom = k3 * colSq + k4 * x + k5;
-
-	Array3f toneMappedCol = nom / denom;
-
-	return toneMappedCol;
-}
-
-__global__ void viz_error_map_kernel(Vector2i resolution, Vector2i training_resolution, bool to_srgb, int fov_axis, cudaSurfaceObject_t surface, const float *error_map, Vector2i error_map_resolution, const float *average, float brightness, bool viridis) {
+__global__ void overlay_false_color_kernel(Vector2i resolution, Vector2i training_resolution, bool to_srgb, int fov_axis, cudaSurfaceObject_t surface, const float *error_map, Vector2i error_map_resolution, const float *average, float brightness, bool viridis) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
 
@@ -434,10 +442,10 @@ __global__ void viz_error_map_kernel(Vector2i resolution, Vector2i training_reso
 	float error_map_scale = brightness/(0.0000001f+average[0]); // average maps to 1/16th
 
 	float scale = training_resolution[fov_axis] / float(resolution[fov_axis]);
-	float u=(x+0.5f-resolution.x()*0.5f) * scale + training_resolution.x()*0.5f;
-	float v=(y+0.5f-resolution.y()*0.5f) * scale + training_resolution.y()*0.5f;
-	int srcx = floorf(u * error_map_resolution.x() / float(max(1.f,(float)training_resolution.x())));
-	int srcy = floorf(v * error_map_resolution.y() / float(max(1.f,(float)training_resolution.y())));
+	float u = (x+0.5f-resolution.x()*0.5f) * scale + training_resolution.x()*0.5f;
+	float v = (y+0.5f-resolution.y()*0.5f) * scale + training_resolution.y()*0.5f;
+	int srcx = floorf(u * error_map_resolution.x() / float(max(1.f, (float)training_resolution.x())));
+	int srcy = floorf(v * error_map_resolution.y() / float(max(1.f, (float)training_resolution.y())));
 
 	uint32_t idx = x + resolution.x() * y;
 	uint32_t srcidx = srcx + error_map_resolution.x() * srcy;
@@ -446,15 +454,17 @@ __global__ void viz_error_map_kernel(Vector2i resolution, Vector2i training_reso
 		return;
 	}
 
-	float err=error_map[srcidx] * error_map_scale;
-	if (viridis) err*=1.f/(1.f+err);
+	float err = error_map[srcidx] * error_map_scale;
+	if (viridis) {
+		err *= 1.f / (1.f+err);
+	}
 	Array4f color;
 	surf2Dread((float4*)&color, surface, x * sizeof(float4), y);
 	Array3f c = viridis ? colormap_viridis(err) : colormap_turbo(err);
 	float grey = color.x() * 0.2126f + color.y() * 0.7152f + color.z() * 0.0722f;
-	color.x()=grey*__saturatef(c.x());
-	color.y()=grey*__saturatef(c.y());
-	color.z()=grey*__saturatef(c.z());
+	color.x() = grey*__saturatef(c.x());
+	color.y() = grey*__saturatef(c.y());
+	color.z() = grey*__saturatef(c.z());
 
 	surf2Dwrite(to_float4(color), surface, x * sizeof(float4), y);
 }
@@ -469,33 +479,18 @@ __global__ void tonemap_kernel(Vector2i resolution, float exposure, Array4f back
 
 	uint32_t idx = x + resolution.x() * y;
 
-	// The accumulate buffer is always linear
-	Array4f color = accumulate_buffer[idx];
-	float scale = powf(2.0f, exposure);
-	color.head<3>() *= scale;
-
 	// The background color is represented in SRGB, so convert
 	// to linear if that's not the space in which we're rendering.
 	if (color_space != EColorSpace::SRGB) {
 		background_color.head<3>() = srgb_to_linear(background_color.head<3>());
 	}
 
+	Array4f color = accumulate_buffer[idx];
 	float weight = (1 - color.w()) * background_color.w();
 	color.head<3>() += background_color.head<3>() * weight;
 	color.w() += weight;
 
-	// Conversion to output by
-	// 1. converting to linear. (VisPosNeg is treated as linear red/green)
-	if (color_space == EColorSpace::SRGB) {
-		color.head<3>() = srgb_to_linear(color.head<3>());
-	}
-
-	color.head<3>() = tonemap(color.head<3>(), tonemap_curve);
-
-	// 2. converting to output color space.
-	if (output_color_space == EColorSpace::SRGB) {
-		color.head<3>() = linear_to_srgb(color.head<3>());
-	}
+	color.head<3>() = tonemap(color.head<3>(), Array3f::Constant(exposure), tonemap_curve, color_space, output_color_space);
 
 	surf2Dwrite(to_float4(color), surface, x * sizeof(float4), y);
 }
@@ -555,32 +550,43 @@ void CudaRenderBuffer::tonemap(float exposure, const Array4f& background_color, 
 	);
 }
 
-void CudaRenderBuffer::copy_training_image(float alpha, const Eigen::Array3f& exposure, const Array4f& background_color, EColorSpace output_color_space, const __half* __restrict__ training_images, int image_idx,
-	Vector2i training_resolution, int fov_axis, float zoom, Eigen::Vector2f screen_center, cudaStream_t stream) {
+void CudaRenderBuffer::overlay_image(
+	float alpha,
+	const Eigen::Array3f& exposure,
+	const Array4f& background_color,
+	EColorSpace output_color_space,
+	const __half* __restrict__ image,
+	const Vector2i& image_resolution,
+	int fov_axis,
+	float zoom,
+	const Eigen::Vector2f& screen_center,
+	cudaStream_t stream
+) {
 	auto res = resolution();
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
-	copy_training_image_kernel<<<blocks, threads, 0, stream>>>(
+	overlay_image_kernel<<<blocks, threads, 0, stream>>>(
 		res,
 		alpha,
 		exposure,
 		background_color,
-		training_images,
-		image_idx,
-		training_resolution,
+		image,
+		image_resolution,
+		m_tonemap_curve,
 		m_color_space,
 		output_color_space,
 		fov_axis,
-		zoom, screen_center,
+		zoom,
+		screen_center,
 		surface()
 	);
 }
 
-void CudaRenderBuffer::viz_error_map(Vector2i training_resolution, bool to_srgb, int fov_axis, cudaStream_t stream, const float *error_map, Vector2i error_map_resolution, const float *average, float brightness, bool viridis) {
+void CudaRenderBuffer::overlay_false_color(Vector2i training_resolution, bool to_srgb, int fov_axis, cudaStream_t stream, const float* error_map, Vector2i error_map_resolution, const float* average, float brightness, bool viridis) {
 	auto res = resolution();
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
-	viz_error_map_kernel<<<blocks, threads, 0, stream>>>(
+	overlay_false_color_kernel<<<blocks, threads, 0, stream>>>(
 		res,
 		training_resolution,
 		to_srgb,

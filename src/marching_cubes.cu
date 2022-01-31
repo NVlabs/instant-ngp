@@ -44,8 +44,8 @@ namespace fs = filesystem;
 NGP_NAMESPACE_BEGIN
 
 Eigen::Vector3i get_marching_cubes_res(uint32_t res_1d, const BoundingBox &aabb) {
-	float scale = res_1d / (aabb.max-aabb.min).maxCoeff();
-	Vector3i res3d = ((aabb.max-aabb.min)*scale + Vector3f::Constant(0.5f)).cast<int>();
+	float scale = res_1d / (aabb.max - aabb.min).maxCoeff();
+	Vector3i res3d = ((aabb.max - aabb.min) * scale + Vector3f::Constant(0.5f)).cast<int>();
 	res3d.x() = next_multiple((unsigned int)res3d.x(), 16u);
 	res3d.y() = next_multiple((unsigned int)res3d.y(), 16u);
 	res3d.z() = next_multiple((unsigned int)res3d.z(), 16u);
