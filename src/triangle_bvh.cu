@@ -589,16 +589,8 @@ public:
 					}
 					var /= (float)std::distance(child.begin, child.end);
 
-					int axis = 0;
-
-					float max = var.maxCoeff();
-					if (var[0] == max) {
-						axis = 0;
-					} else if (var[1] == max) {
-						axis = 1;
-					} else if (var[2] == max) {
-						axis = 2;
-					}
+					Vector3f::Index axis;
+					var.maxCoeff(&axis);
 
 					auto m = child.begin + std::distance(child.begin, child.end)/2;
 					std::nth_element(child.begin, m, child.end, [&](const Triangle& tri1, const Triangle& tri2) { return tri1.centroid(axis) < tri2.centroid(axis); });
