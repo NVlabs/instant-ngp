@@ -387,6 +387,7 @@ void Testbed::imgui() {
 				ImGui::Combo("Loss", (int*)&m_nerf.training.loss_type, LossTypeStr);
 				ImGui::Combo("RGB activation", (int*)&m_nerf.rgb_activation, NerfActivationStr);
 				ImGui::Combo("Density activation", (int*)&m_nerf.density_activation, NerfActivationStr);
+				ImGui::SliderFloat("Cone angle", &m_nerf.cone_angle_constant, 0.0f, 1.0f/128.0f);
 
 				// Importance sampling options, but still related to training
 				ImGui::Checkbox("Sample focal plane ~error", &m_nerf.training.sample_focal_plane_proportional_to_error);

@@ -153,7 +153,10 @@ if __name__ == "__main__":
 		testbed.color_space = ngp.ColorSpace.SRGB
 
 		# No exponential cone tracing. Slightly increases
-		# quality at the cost of speed on synthetic scenes.
+		# quality at the cost of speed. This is done by
+		# default on scenes with AABB 1 (like the synthetic
+		# ones), but not on larger scenes. So force the
+		# setting here.
 		testbed.nerf.cone_angle_constant = 0
 
 		# Optionally match nerf paper behaviour and train on a

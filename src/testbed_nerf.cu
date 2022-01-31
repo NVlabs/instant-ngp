@@ -2155,6 +2155,10 @@ void Testbed::load_nerf() {
 		++m_nerf.max_cascade;
 	}
 
+	// Perform fixed-size stepping in unit-cube scenes (like original NeRF) and exponential
+	// stepping in larger scenes.
+	m_nerf.cone_angle_constant = m_nerf.training.dataset.aabb_scale <= 1 ? 0.0f : (1.0f / 256.0f);
+
 	m_up_dir = m_nerf.training.dataset.up;
 }
 
