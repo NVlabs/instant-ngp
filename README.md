@@ -123,7 +123,7 @@ instant-ngp$ ./build/testbed --scene data/image/tokyo.bin
 ```
 
 
-### Volume Renderer
+### Volume renderer
 
 Download the [nanovdb volume for the Disney cloud](https://drive.google.com/drive/folders/1SuycSAOSG64k2KLV7oWgyNWyCvZAkafK?usp=sharing), which is derived [from here](https://disneyanimation.com/data-sets/?drawer=/resources/clouds/) ([CC BY-SA 3.0](https://media.disneyanimation.com/uploads/production/data_set_asset/6/asset/License_Cloud.pdf)).
 

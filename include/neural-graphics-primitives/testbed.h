@@ -308,7 +308,6 @@ public:
 	void draw_visualizations(const Eigen::Matrix<float, 3, 4>& camera_matrix);
 	void draw_contents();
 	filesystem::path training_data_path() const;
-	static void glfw_error_callback(int error, const char* description){	fprintf(stderr, "Glfw Error %d: %s\n", error, description); }
 	void init_window(int resw, int resh, bool hidden = false);
 	void destroy_window();
 	void apply_camera_smoothing(float elapsed_ms);

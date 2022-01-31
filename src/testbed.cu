@@ -197,7 +197,6 @@ void Testbed::reset_accumulation() {
 	}
 }
 
-
 void Testbed::set_visualized_dim(int dim) {
 	m_visualized_dimension = dim;
 	reset_accumulation();
@@ -260,8 +259,9 @@ void Testbed::reset_camera() {
 }
 
 void Testbed::set_train(bool mtrain) {
-	if (m_train && !mtrain && m_max_level_rand_training)
+	if (m_train && !mtrain && m_max_level_rand_training) {
 		set_max_level(1.f);
+	}
 	m_train = mtrain;
 }
 
@@ -336,6 +336,7 @@ void Testbed::imgui() {
 	if (!m_training_data_available) {
 		ImGui::BeginDisabled();
 	}
+
 	if (ImGui::CollapsingHeader("Training", m_training_data_available ? ImGuiTreeNodeFlags_DefaultOpen : 0)) {
 		if (imgui_colored_button(m_train ? "Stop training" : "Start training", 0.4)) {
 			set_train(!m_train);
@@ -402,6 +403,7 @@ void Testbed::imgui() {
 			}
 		}
 	}
+
 	if (!m_training_data_available) {
 		ImGui::EndDisabled();
 	}
@@ -452,8 +454,6 @@ void Testbed::imgui() {
 			accum_reset |= ImGui::SliderFloat("Max z", ((float*)&m_render_aabb.max)+2, m_render_aabb.min.z(), m_aabb.max.z(), "%.3f");
 			ImGui::TreePop();
 		}
-
-
 
 		if (ImGui::TreeNode("Debug visualization")) {
 			ImGui::Checkbox("Visualize cameras", &m_nerf.visualize_cameras);
@@ -517,54 +517,55 @@ void Testbed::imgui() {
 			Vector3f u = m_up_dir;
 			Array4f b = m_background_color;
 			snprintf(buf, sizeof(buf),
-			"testbed.background_color = [%0.3f, %0.3f, %0.3f, %0.3f]\n"
-			"testbed.exposure = %0.3f\n"
-			"testbed.sun_dir=[%0.3f,%0.3f,%0.3f]\n"
-			"testbed.up_dir=[%0.3f,%0.3f,%0.3f]\n"
-			"testbed.view_dir=[%0.3f,%0.3f,%0.3f]\n"
-			"testbed.look_at=[%0.3f,%0.3f,%0.3f]\n"
-			"testbed.scale=%0.3f\n"
-			"testbed.fov,testbed.dof,testbed.slice_plane_z=%0.3f,%0.3f,%0.3f\n"
-			"testbed.autofocus_target=[%0.3f,%0.3f,%0.3f]\n"
-			"testbed.autofocus = %s\n\n"
-			, b.x(), b.y(), b.z(), b.w()
-			, m_exposure
-			, s.x(), s.y(), s.z()
-			, u.x(), u.y(), u.z()
-			, v.x(), v.y(), v.z()
-			, p.x(), p.y(), p.z()
-			, scale()
-			, fov(), m_dof, m_slice_plane_z
-			, m_autofocus_target.x(), m_autofocus_target.y(), m_autofocus_target.z()
-			, m_autofocus ? "True" : "False");
+				"testbed.background_color = [%0.3f, %0.3f, %0.3f, %0.3f]\n"
+				"testbed.exposure = %0.3f\n"
+				"testbed.sun_dir = [%0.3f,%0.3f,%0.3f]\n"
+				"testbed.up_dir = [%0.3f,%0.3f,%0.3f]\n"
+				"testbed.view_dir = [%0.3f,%0.3f,%0.3f]\n"
+				"testbed.look_at = [%0.3f,%0.3f,%0.3f]\n"
+				"testbed.scale = %0.3f\n"
+				"testbed.fov,testbed.dof,testbed.slice_plane_z = %0.3f,%0.3f,%0.3f\n"
+				"testbed.autofocus_target = [%0.3f,%0.3f,%0.3f]\n"
+				"testbed.autofocus = %s\n\n"
+				, b.x(), b.y(), b.z(), b.w()
+				, m_exposure
+				, s.x(), s.y(), s.z()
+				, u.x(), u.y(), u.z()
+				, v.x(), v.y(), v.z()
+				, p.x(), p.y(), p.z()
+				, scale()
+				, fov(), m_dof, m_slice_plane_z
+				, m_autofocus_target.x(), m_autofocus_target.y(), m_autofocus_target.z()
+				, m_autofocus ? "True" : "False"
+			);
 
 			if (m_testbed_mode == ETestbedMode::Sdf) {
-				size_t n=strlen(buf);
+				size_t n = strlen(buf);
 				snprintf(buf+n, sizeof(buf)-n,
-				"testbed.sdf.shadow_sharpness = %0.3f\n"
-				"testbed.sdf.analytic_normals = %s\n"
-				"testbed.sdf.use_triangle_octree = %s\n\n"
-				"testbed.sdf.brdf.metallic=%0.3f\n"
-				"testbed.sdf.brdf.subsurface=%0.3f\n"
-				"testbed.sdf.brdf.specular=%0.3f\n"
-				"testbed.sdf.brdf.roughness=%0.3f\n"
-				"testbed.sdf.brdf.sheen=%0.3f\n"
-				"testbed.sdf.brdf.clearcoat=%0.3f\n"
-				"testbed.sdf.brdf.clearcoat_gloss=%0.3f\n"
-				"testbed.sdf.brdf.basecolor=[%0.3f,%0.3f,%0.3f]\n"
-				, m_sdf.shadow_sharpness
-				, m_sdf.analytic_normals ? "True" : "False"
-				, m_sdf.use_triangle_octree ? "True" : "False"
-				, m_sdf.brdf.metallic
-				, m_sdf.brdf.subsurface
-				, m_sdf.brdf.specular
-				, m_sdf.brdf.roughness
-				, m_sdf.brdf.sheen
-				, m_sdf.brdf.clearcoat
-				, m_sdf.brdf.clearcoat_gloss
-				, m_sdf.brdf.basecolor.x()
-				, m_sdf.brdf.basecolor.y()
-				, m_sdf.brdf.basecolor.z()
+					"testbed.sdf.shadow_sharpness = %0.3f\n"
+					"testbed.sdf.analytic_normals = %s\n"
+					"testbed.sdf.use_triangle_octree = %s\n\n"
+					"testbed.sdf.brdf.metallic = %0.3f\n"
+					"testbed.sdf.brdf.subsurface = %0.3f\n"
+					"testbed.sdf.brdf.specular = %0.3f\n"
+					"testbed.sdf.brdf.roughness = %0.3f\n"
+					"testbed.sdf.brdf.sheen = %0.3f\n"
+					"testbed.sdf.brdf.clearcoat = %0.3f\n"
+					"testbed.sdf.brdf.clearcoat_gloss = %0.3f\n"
+					"testbed.sdf.brdf.basecolor = [%0.3f,%0.3f,%0.3f]\n\n"
+					, m_sdf.shadow_sharpness
+					, m_sdf.analytic_normals ? "True" : "False"
+					, m_sdf.use_triangle_octree ? "True" : "False"
+					, m_sdf.brdf.metallic
+					, m_sdf.brdf.subsurface
+					, m_sdf.brdf.specular
+					, m_sdf.brdf.roughness
+					, m_sdf.brdf.sheen
+					, m_sdf.brdf.clearcoat
+					, m_sdf.brdf.clearcoat_gloss
+					, m_sdf.brdf.basecolor.x()
+					, m_sdf.brdf.basecolor.y()
+					, m_sdf.brdf.basecolor.z()
 				);
 			}
 			ImGui::InputTextMultiline("Params", buf, sizeof(buf));
@@ -807,6 +808,10 @@ void drop_callback(GLFWwindow* window, int count, const char** paths) {
 			testbed->handle_file(paths[i]);
 		}
 	}
+}
+
+void glfw_error_callback(int error, const char* description) {
+	tlog::error() << "GLFW error #" << error << ": " << description;
 }
 
 bool Testbed::keyboard_event() {
@@ -1896,11 +1901,7 @@ void Testbed::render_frame(const Eigen::Matrix<float, 3, 4>& camera_matrix0, con
 			render_image(render_buffer, m_inference_stream);
 			break;
 		case ETestbedMode::Volume:
-			render_volume(render_buffer,
-				focal_length,
-				camera_matrix0,
-				screen_center,
-				m_inference_stream);
+			render_volume(render_buffer, focal_length, camera_matrix0, screen_center, m_inference_stream);
 			break;
 		default:
 			throw std::runtime_error{"Invalid render mode."};
@@ -1938,9 +1939,9 @@ void Testbed::render_frame(const Eigen::Matrix<float, 3, 4>& camera_matrix0, con
 			static GPUMemory<float> average_error;
 			average_error.enlarge(1);
 			average_error.memset(0);
-			const float *aligned_err_data_s = (const float *)(((size_t)err_data)&~15);
-			const float *aligned_err_data_e = (const float *)(((size_t)(err_data+emap_size))&~15);
-			size_t reduce_size=(aligned_err_data_e-aligned_err_data_s);
+			const float* aligned_err_data_s = (const float*)(((size_t)err_data)&~15);
+			const float* aligned_err_data_e = (const float*)(((size_t)(err_data+emap_size))&~15);
+			size_t reduce_size = aligned_err_data_e - aligned_err_data_s;
 			reduce_sum(aligned_err_data_s, [reduce_size] __device__ (float val) { return max(val,0.f) / (reduce_size); }, average_error.data(), reduce_size, m_inference_stream);
 			render_buffer.viz_error_map(m_nerf.training.dataset.image_resolution, to_srgb, m_fov_axis, m_inference_stream, err_data, error_map_res, average_error.data(), m_nerf.training.error_overlay_brightness, m_render_ground_truth);
 		}
@@ -2063,10 +2064,13 @@ void Testbed::gather_histograms() {
 			memset(m_histo, 0, sizeof(m_histo));
 			for (int i = 0; i < nperlevel; ++i) {
 				float v = *d++;
-				if (v == 0.f) continue;
+				if (v == 0.f) {
+					continue;
+				}
 				int bin = (int)floor(v * scale + 128.5f);
-				if (bin >= 0 && bin<=256)
+				if (bin >= 0 && bin <= 256) {
 					m_histo[bin]++;
+				}
 			}
 		}
 	}
