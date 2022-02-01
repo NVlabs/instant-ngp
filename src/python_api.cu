@@ -257,6 +257,22 @@ PYBIND11_MODULE(pyngp, m) {
 		.export_values();
 
 	py::class_<BoundingBox>(m, "BoundingBox")
+		.def(py::init<>())
+		.def(py::init<const Vector3f&, const Vector3f&>())
+		.def("center", &BoundingBox::center)
+		.def("contains", &BoundingBox::contains)
+		.def("diag", &BoundingBox::diag)
+		.def("distance", &BoundingBox::distance)
+		.def("distance_sq", &BoundingBox::distance_sq)
+		.def("enlarge", py::overload_cast<const Vector3f&>(&BoundingBox::enlarge))
+		.def("enlarge", py::overload_cast<const BoundingBox&>(&BoundingBox::enlarge))
+		.def("get_vertices", &BoundingBox::get_vertices)
+		.def("inflate", &BoundingBox::inflate)
+		.def("intersection", &BoundingBox::intersection)
+		.def("intersects", py::overload_cast<const BoundingBox&>(&BoundingBox::intersects, py::const_))
+		.def("ray_intersect", &BoundingBox::ray_intersect)
+		.def("relative_pos", &BoundingBox::relative_pos)
+		.def("signed_distance", &BoundingBox::signed_distance)
 		.def_readwrite("min", &BoundingBox::min)
 		.def_readwrite("max", &BoundingBox::max)
 		;
