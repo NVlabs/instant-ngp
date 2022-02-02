@@ -462,11 +462,23 @@ void Testbed::imgui() {
 			ImGui::Checkbox("Visualize unit cube", &m_visualize_unit_cube);
 			accum_reset |= ImGui::SliderInt("Show acceleration", &m_nerf.show_accel, -1, 7);
 
-			if (ImGui::SliderInt("Visualized dimension", &m_visualized_dimension, -1, (int)network_width(m_visualized_layer)-1))
+			if (!m_single_view) {
+				ImGui::BeginDisabled();
+			}
+			if (ImGui::SliderInt("Visualized dimension", &m_visualized_dimension, -1, (int)network_width(m_visualized_layer)-1)) {
 				set_visualized_dim(m_visualized_dimension);
-			if (ImGui::SliderInt("Visualized layer", &m_visualized_layer, 0, (int)network_num_forward_activations()-1))
-				set_visualized_dim(m_visualized_layer);
+			}
+			if (!m_single_view) {
+				ImGui::EndDisabled();
+			}
+
+			if (ImGui::SliderInt("Visualized layer", &m_visualized_layer, 0, (int)network_num_forward_activations()-1)) {
+				set_visualized_layer(m_visualized_layer);
+			}
 			if (ImGui::Checkbox("Single view", &m_single_view)) {
+				if (!m_single_view) {
+					set_visualized_dim(-1);
+				}
 				accum_reset = true;
 			}
 
@@ -477,12 +489,14 @@ void Testbed::imgui() {
 				}
 				ImGui::PlotLines("Training view error", m_nerf.training.error_map.pmf_img_cpu.data(), m_nerf.training.error_map.pmf_img_cpu.size(), 0, nullptr, 0.0f, FLT_MAX, ImVec2(0, 60.f));
 
-				std::vector<float> exposures(m_nerf.training.n_images);
-				for (uint32_t i = 0; i < m_nerf.training.n_images; ++i) {
-					exposures[i] = m_nerf.training.cam_exposure[i].variable().x();
-				}
+				if (m_nerf.training.optimize_exposure) {
+					std::vector<float> exposures(m_nerf.training.n_images);
+					for (uint32_t i = 0; i < m_nerf.training.n_images; ++i) {
+						exposures[i] = m_nerf.training.cam_exposure[i].variable().x();
+					}
 
-				ImGui::PlotLines("Training view exposures", exposures.data(), exposures.size(), 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(0, 60.f));
+					ImGui::PlotLines("Training view exposures", exposures.data(), exposures.size(), 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(0, 60.f));
+				}
 			}
 
 			ImGui::TreePop();
@@ -883,6 +897,9 @@ bool Testbed::keyboard_event() {
 	}
 	if (ImGui::IsKeyPressed('M')) {
 		m_single_view = !m_single_view;
+		if (m_single_view) {
+			set_visualized_dim(-1);
+		}
 		reset_accumulation();
 	}
 	if (ImGui::IsKeyPressed('T'))
@@ -1029,11 +1046,12 @@ bool Testbed::handle_user_input() {
 
 	if (m_testbed_mode == ETestbedMode::Nerf && (m_render_ground_truth || m_nerf.training.render_error_overlay)) {
 		// find nearest training view to current camera, and set it
-		int bestimage=find_best_training_view(-1);
-		if (bestimage>=0) {
+		int bestimage = find_best_training_view(-1);
+		if (bestimage >= 0) {
 			m_nerf.training.view = bestimage;
-			if (mb==0) // snap camera to ground truth view on mouse up
+			if (mb == 0) {// snap camera to ground truth view on mouse up
 				set_camera_to_training_view(m_nerf.training.view);
+			}
 		}
 	}
 
