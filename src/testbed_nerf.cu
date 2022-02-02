@@ -2345,8 +2345,10 @@ void Testbed::train_nerf(uint32_t target_batch_size, uint32_t n_training_steps, 
 
 	// Compute CDFs from the error map
 	m_nerf.training.n_steps_since_error_map_update += n_training_steps;
-	bool sample_proportional_to_error = m_nerf.training.sample_focal_plane_proportional_to_error || m_nerf.training.sample_image_proportional_to_error;
-	if (sample_proportional_to_error && m_nerf.training.n_steps_since_error_map_update >= m_nerf.training.n_steps_between_error_map_updates) {
+	// This is low-overhead enough to warrant always being on.
+	// It makes for useful visualizations of the training error.
+	bool accumulate_error = true;
+	if (accumulate_error && m_nerf.training.n_steps_since_error_map_update >= m_nerf.training.n_steps_between_error_map_updates) {
 		m_nerf.training.error_map.cdf_resolution = m_nerf.training.error_map.resolution;
 		m_nerf.training.error_map.cdf_x_cond_y.resize(m_nerf.training.error_map.cdf_resolution.prod() * m_nerf.training.dataset.n_images);
 		m_nerf.training.error_map.cdf_y.resize(m_nerf.training.error_map.cdf_resolution.y() * m_nerf.training.dataset.n_images);
@@ -2554,8 +2556,10 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 
 	bool sample_focal_plane_proportional_to_error = m_nerf.training.error_map.is_cdf_valid && m_nerf.training.sample_focal_plane_proportional_to_error;
 	bool sample_image_proportional_to_error = m_nerf.training.error_map.is_cdf_valid && m_nerf.training.sample_image_proportional_to_error;
-	bool accumulate_error = m_nerf.training.sample_image_proportional_to_error || m_nerf.training.sample_focal_plane_proportional_to_error;
 	bool include_sharpness_in_error = m_nerf.training.include_sharpness_in_error;
+	// This is low-overhead enough to warrant always being on.
+	// It makes for useful visualizations of the training error.
+	bool accumulate_error = true;
 
 	CUDA_CHECK_THROW(cudaMemsetAsync(m_nerf.training.ray_counter.data(), 0, sizeof(uint32_t), stream));
 
