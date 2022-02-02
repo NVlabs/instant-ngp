@@ -178,16 +178,6 @@ py::array_t<float> Testbed::screenshot(bool linear) const {
 #endif
 }
 
-//TODO: use this when magic_enum starts working with CUDA
-// template <typename E, typename T>
-// void register_enum(T& parent) {
-// 	py::enum_<E> e(parent, std::string{magic_enum::enum_type_name<E>()}.c_str());
-// 	for (auto [val, name] : magic_enum::enum_entries<E>()) {
-// 		e.value(std::string{name}.c_str(), val);
-// 	}
-// 	e.export_values();
-// }
-
 PYBIND11_MODULE(pyngp, m) {
 	m.doc() = "Instant neural graphics primitives";
 
