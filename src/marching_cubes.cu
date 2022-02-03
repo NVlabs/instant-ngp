@@ -43,7 +43,7 @@ namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
-Eigen::Vector3i get_marching_cubes_res(uint32_t res_1d, const BoundingBox &aabb) {
+Vector3i get_marching_cubes_res(uint32_t res_1d, const BoundingBox &aabb) {
 	float scale = res_1d / (aabb.max - aabb.min).maxCoeff();
 	Vector3i res3d = ((aabb.max - aabb.min) * scale + Vector3f::Constant(0.5f)).cast<int>();
 	res3d.x() = next_multiple((unsigned int)res3d.x(), 16u);
@@ -92,14 +92,14 @@ static GLuint compile_shader(bool pixel, const char* code) {
 }
 
 void draw_mesh_gl(
-	const GPUMemory<Eigen::Vector3f>& verts,
-	const GPUMemory<Eigen::Vector3f>& normals,
-	const GPUMemory<Eigen::Vector3f>& colors,
+	const GPUMemory<Vector3f>& verts,
+	const GPUMemory<Vector3f>& normals,
+	const GPUMemory<Vector3f>& colors,
 	const GPUMemory<uint32_t>& indices,
-	Eigen::Vector2i resolution,
-	Eigen::Vector2f focal_length,
-	Eigen::Matrix<float, 3, 4> camera_matrix,
-	Eigen::Vector2f screen_center,
+	const Vector2i& resolution,
+	const Vector2f& focal_length,
+	const Matrix<float, 3, 4>& camera_matrix,
+	const Vector2f& screen_center,
 	int mesh_render_mode
 ) {
 	if (verts.size() == 0 || indices.size() == 0 || mesh_render_mode == 0) {
@@ -119,7 +119,7 @@ void draw_mesh_gl(
 			glGenBuffers(1, &VBO[i]);
 			vbosize = verts.size();
 			glBindBuffer(GL_ARRAY_BUFFER, VBO[i]);
-			glBufferData(GL_ARRAY_BUFFER, vbosize * sizeof(Eigen::Vector3f), NULL, GL_DYNAMIC_COPY);
+			glBufferData(GL_ARRAY_BUFFER, vbosize * sizeof(Vector3f), NULL, GL_DYNAMIC_COPY);
 			cudaGLRegisterBufferObject(VBO[i]);
 		}
 	}
@@ -136,13 +136,13 @@ void draw_mesh_gl(
 	}
 	void *ptr=nullptr;
 	cudaGLMapBufferObject(&ptr, VBO[0]);
-	if (ptr) cudaMemcpy(ptr, verts.data(), vbosize * sizeof(Eigen::Vector3f), cudaMemcpyDeviceToDevice);
+	if (ptr) cudaMemcpy(ptr, verts.data(), vbosize * sizeof(Vector3f), cudaMemcpyDeviceToDevice);
 	cudaGLMapBufferObject(&ptr, VBO[1]);
-	if (ptr) cudaMemcpy(ptr, normals.data(), vbosize * sizeof(Eigen::Vector3f), cudaMemcpyDeviceToDevice);
+	if (ptr) cudaMemcpy(ptr, normals.data(), vbosize * sizeof(Vector3f), cudaMemcpyDeviceToDevice);
 	cudaGLMapBufferObject(&ptr, VBO[2]);
-	if (ptr) cudaMemcpy(ptr, colors.data(), vbosize * sizeof(Eigen::Vector3f), cudaMemcpyDeviceToDevice);
+	if (ptr) cudaMemcpy(ptr, colors.data(), vbosize * sizeof(Vector3f), cudaMemcpyDeviceToDevice);
 
-	//std::vector<Eigen::Vector3f> cpucols; cpucols.resize(verts.size());
+	//std::vector<Vector3f> cpucols; cpucols.resize(verts.size());
 	//colors.copy_to_host(cpucols);
 
 	cudaGLUnmapBufferObject(VBO[2]);
@@ -204,9 +204,9 @@ void main() {
 			program = 0;
 		}
 	}
-	Eigen::Matrix4f view2world=Eigen::Matrix4f::Identity();
+	Matrix4f view2world=Matrix4f::Identity();
 	view2world.block<3,4>(0,0) = camera_matrix;
-	Eigen::Matrix4f world2view = view2world.inverse();
+	Matrix4f world2view = view2world.inverse();
 	glBindVertexArray(VAO);
 	glUseProgram(program);
 	glUniformMatrix4fv(glGetUniformLocation(program, "camera"), 1, GL_FALSE, (GLfloat*)&world2view);
@@ -252,13 +252,13 @@ with z=1
 
 edges 8-11 go in +z direction from vertex 0-3
 */
-__global__ void gen_vertices(BoundingBox aabb, Eigen::Vector3i res_3d, const float* __restrict__ density, int*__restrict__ vertidx_grid, Eigen::Vector3f* verts_out, float thresh, uint32_t* __restrict__ counters) {
+__global__ void gen_vertices(BoundingBox aabb, Vector3i res_3d, const float* __restrict__ density, int*__restrict__ vertidx_grid, Vector3f* verts_out, float thresh, uint32_t* __restrict__ counters) {
 	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
 	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
 	uint32_t z = blockIdx.z * blockDim.z + threadIdx.z;
 	if (x>=res_3d.x() || y>=res_3d.y() || z>=res_3d.z()) return;
-	Eigen::Vector3f scale=(aabb.max-aabb.min).cwiseQuotient(res_3d.cast<float>());
-	Eigen::Vector3f offset=aabb.min;
+	Vector3f scale=(aabb.max-aabb.min).cwiseQuotient(res_3d.cast<float>());
+	Vector3f offset=aabb.min;
 	uint32_t res2=res_3d.x()*res_3d.y();
 	uint32_t res3=res_3d.x()*res_3d.y()*res_3d.z();
 	uint32_t idx=x+y*res_3d.x()+z*res2;
@@ -272,7 +272,7 @@ __global__ void gen_vertices(BoundingBox aabb, Eigen::Vector3i res_3d, const flo
 				vertidx_grid[idx]=vidx+1;
 				float prevf=f0,nextf=f1;
 				float dt=((thresh-prevf)/(nextf-prevf));
-				verts_out[vidx]=Eigen::Vector3f{float(x)+dt, float(y), float(z)}.cwiseProduct(scale) + offset;
+				verts_out[vidx]=Vector3f{float(x)+dt, float(y), float(z)}.cwiseProduct(scale) + offset;
 			}
 		}
 	}
@@ -284,7 +284,7 @@ __global__ void gen_vertices(BoundingBox aabb, Eigen::Vector3i res_3d, const flo
 				vertidx_grid[idx+res3]=vidx+1;
 				float prevf=f0,nextf=f1;
 				float dt=((thresh-prevf)/(nextf-prevf));
-				verts_out[vidx]=Eigen::Vector3f{float(x), float(y)+dt, float(z)}.cwiseProduct(scale) + offset;
+				verts_out[vidx]=Vector3f{float(x), float(y)+dt, float(z)}.cwiseProduct(scale) + offset;
 			}
 		}
 	}
@@ -296,21 +296,21 @@ __global__ void gen_vertices(BoundingBox aabb, Eigen::Vector3i res_3d, const flo
 				vertidx_grid[idx+res3*2]=vidx+1;
 				float prevf=f0,nextf=f1;
 				float dt=((thresh-prevf)/(nextf-prevf));
-				verts_out[vidx]=Eigen::Vector3f{float(x), float(y), float(z)+dt}.cwiseProduct(scale) + offset;
+				verts_out[vidx]=Vector3f{float(x), float(y), float(z)+dt}.cwiseProduct(scale) + offset;
 			}
 		}
 	}
 }
 
-__global__ void accumulate_1ring(uint32_t num_tris, const uint32_t* indices, const Eigen::Vector3f* verts_in, Eigen::Vector4f* verts_out, Eigen::Vector3f *normals_out) {
+__global__ void accumulate_1ring(uint32_t num_tris, const uint32_t* indices, const Vector3f* verts_in, Vector4f* verts_out, Vector3f *normals_out) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i>=num_tris) return;
 	uint32_t ia=indices[i*3+0];
 	uint32_t ib=indices[i*3+1];
 	uint32_t ic=indices[i*3+2];
-	Eigen::Vector3f pa=verts_in[ia];
-	Eigen::Vector3f pb=verts_in[ib];
-	Eigen::Vector3f pc=verts_in[ic];
+	Vector3f pa=verts_in[ia];
+	Vector3f pb=verts_in[ib];
+	Vector3f pc=verts_in[ic];
 
 	atomicAdd(&verts_out[ia][0], pb.x()+pc.x());
 	atomicAdd(&verts_out[ia][1], pb.y()+pc.y());
@@ -326,7 +326,7 @@ __global__ void accumulate_1ring(uint32_t num_tris, const uint32_t* indices, con
 	atomicAdd(&verts_out[ic][3], 2.f);
 
 	if (normals_out) {
-		Eigen::Vector3f n= (pb-pa).cross(pa-pc); // don't normalise so it's weighted by area
+		Vector3f n= (pb-pa).cross(pa-pc); // don't normalise so it's weighted by area
 		atomicAdd(&normals_out[ia][0], n.x());
 		atomicAdd(&normals_out[ia][1], n.y());
 		atomicAdd(&normals_out[ia][2], n.z());
@@ -339,16 +339,16 @@ __global__ void accumulate_1ring(uint32_t num_tris, const uint32_t* indices, con
 	}
 }
 
-__global__ void compute_centroids(uint32_t num_verts, Eigen::Vector3f* centroids_out, const Eigen::Vector4f* verts_in) {
+__global__ void compute_centroids(uint32_t num_verts, Vector3f* centroids_out, const Vector4f* verts_in) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i>=num_verts) return;
-	Eigen::Vector4f p = verts_in[i];
+	Vector4f p = verts_in[i];
 	if (p.w()<=0.f) return;
-	Eigen::Vector3f c=verts_in[i].head<3>() * (1.f/p.w());
+	Vector3f c=verts_in[i].head<3>() * (1.f/p.w());
 	centroids_out[i]=c;
 }
 
-__global__ void gen_faces(Eigen::Vector3i res_3d, const float* __restrict__ density, const int*__restrict__ vertidx_grid, uint32_t* indices_out, float thresh, uint32_t *__restrict__ counters) {
+__global__ void gen_faces(Vector3i res_3d, const float* __restrict__ density, const int*__restrict__ vertidx_grid, uint32_t* indices_out, float thresh, uint32_t *__restrict__ counters) {
 	// marching cubes tables from https://github.com/pmneila/PyMCubes/blob/master/mcubes/src/marchingcubes.cpp which in turn seems to be from https://web.archive.org/web/20181127124338/http://paulbourke.net/geometry/polygonise/
 	// License is BSD 3-clause, which can be found here: https://github.com/pmneila/PyMCubes/blob/master/LICENSE
 	/*
@@ -691,7 +691,7 @@ __global__ void gen_faces(Eigen::Vector3i res_3d, const float* __restrict__ dens
 	}
 }
 
-void compute_mesh_1ring(const tcnn::GPUMemory<Eigen::Vector3f> &verts, const tcnn::GPUMemory<uint32_t> &indices, tcnn::GPUMemory<Eigen::Vector4f> &output_pos, tcnn::GPUMemory<Eigen::Vector3f> &output_normals) { // computes the average of the 1ring of all verts, as homogenous coordinates
+void compute_mesh_1ring(const tcnn::GPUMemory<Vector3f> &verts, const tcnn::GPUMemory<uint32_t> &indices, tcnn::GPUMemory<Vector4f> &output_pos, tcnn::GPUMemory<Vector3f> &output_normals) { // computes the average of the 1ring of all verts, as homogenous coordinates
 	output_pos.resize(verts.size());
 	output_pos.memset(0);
 	output_normals.resize(verts.size());
@@ -700,37 +700,37 @@ void compute_mesh_1ring(const tcnn::GPUMemory<Eigen::Vector3f> &verts, const tcn
 }
 
 __global__ void compute_mesh_opt_gradients_kernel(
-	uint32_t n_verts, float thresh, const Eigen::Vector3f* verts, const Eigen::Vector3f* normals, const Eigen::Vector4f* verts_smoothed,
+	uint32_t n_verts, float thresh, const Vector3f* verts, const Vector3f* normals, const Vector4f* verts_smoothed,
 	uint32_t padded_output_width, const network_precision_t* densities,
-	uint32_t input_gradient_width, const float* input_gradients, Eigen::Vector3f* verts_gradient_out,
+	uint32_t input_gradient_width, const float* input_gradients, Vector3f* verts_gradient_out,
 	float k_smooth_amount,	float k_density_amount,	float k_inflate_amount
 ) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i >= n_verts) return;
 
-	Eigen::Vector3f src = verts[i];
-	Eigen::Vector4f p = verts_smoothed[i];
+	Vector3f src = verts[i];
+	Vector4f p = verts_smoothed[i];
 
 	if (p.w() <= 0.f) {
 		p.w() = 1.f;
 	}
 
-	Eigen::Vector3f target=p.head<3>() * (1.f/p.w());
-	Eigen::Vector3f smoothing_grad = src - target; // negative...
+	Vector3f target=p.head<3>() * (1.f/p.w());
+	Vector3f smoothing_grad = src - target; // negative...
 
-	Eigen::Vector3f input_gradient = *(const Eigen::Vector3f *)(input_gradients + i * input_gradient_width);
+	Vector3f input_gradient = *(const Vector3f *)(input_gradients + i * input_gradient_width);
 
-	Eigen::Vector3f n = input_gradient.normalized();
+	Vector3f n = input_gradient.normalized();
 	float density = densities[i * padded_output_width];
 	verts_gradient_out[i] = n * sign(density - thresh) * k_density_amount + smoothing_grad * k_smooth_amount - normals[i].normalized() * k_inflate_amount;
 }
 
 void compute_mesh_opt_gradients(float thresh,
-	const tcnn::GPUMemory<Eigen::Vector3f> &verts, const tcnn::GPUMemory<Eigen::Vector3f> &normals,
-	const tcnn::GPUMemory<Eigen::Vector4f> &verts_smoothed,
+	const tcnn::GPUMemory<Vector3f> &verts, const tcnn::GPUMemory<Vector3f> &normals,
+	const tcnn::GPUMemory<Vector4f> &verts_smoothed,
 	uint32_t padded_output_width, const network_precision_t* densities,
 	uint32_t input_gradients_width, const float *input_gradients,
-	GPUMemory<Eigen::Vector3f> &verts_gradient_out,
+	GPUMemory<Vector3f> &verts_gradient_out,
 	float k_smooth_amount,	float k_density_amount,	float k_inflate_amount
 ) {
 	linear_kernel(
@@ -753,7 +753,7 @@ void compute_mesh_opt_gradients(float thresh,
 	);
 }
 
-void marching_cubes_gpu(GPUMemory<char>& scratch_memory, BoundingBox aabb, Eigen::Vector3i res_3d, float thresh, const tcnn::GPUMemory<float>& density, tcnn::GPUMemory<Eigen::Vector3f>& verts_out, tcnn::GPUMemory<uint32_t>& indices_out) {
+void marching_cubes_gpu(GPUMemory<char>& scratch_memory, BoundingBox aabb, Vector3i res_3d, float thresh, const tcnn::GPUMemory<float>& density, tcnn::GPUMemory<Vector3f>& verts_out, tcnn::GPUMemory<uint32_t>& indices_out) {
 	GPUMemory<uint32_t> counters;
 
 	counters.enlarge(4);
@@ -782,18 +782,18 @@ void marching_cubes_gpu(GPUMemory<char>& scratch_memory, BoundingBox aabb, Eigen
 }
 
 void save_mesh(
-	GPUMemory<Eigen::Vector3f>& verts,
-	GPUMemory<Eigen::Vector3f>& normals,
-	GPUMemory<Eigen::Vector3f>& colors,
+	GPUMemory<Vector3f>& verts,
+	GPUMemory<Vector3f>& normals,
+	GPUMemory<Vector3f>& colors,
 	GPUMemory<uint32_t>& indices,
 	const char* outputname,
 	bool unwrap_it,
 	float nerf_scale,
-	Eigen::Vector3f nerf_offset
+	Vector3f nerf_offset
 ) {
-	std::vector<Eigen::Vector3f> cpuverts; cpuverts.resize(verts.size());
-	std::vector<Eigen::Vector3f> cpunormals; cpunormals.resize(normals.size());
-	std::vector<Eigen::Vector3f> cpucolors; cpucolors.resize(colors.size());
+	std::vector<Vector3f> cpuverts; cpuverts.resize(verts.size());
+	std::vector<Vector3f> cpunormals; cpunormals.resize(normals.size());
+	std::vector<Vector3f> cpucolors; cpucolors.resize(colors.size());
 	std::vector<uint32_t> cpuindices; cpuindices.resize(indices.size());
 	verts.copy_to_host(cpuverts);
 	normals.copy_to_host(cpunormals);
@@ -861,9 +861,9 @@ void save_mesh(
 			, (unsigned int)cpuindices.size()/3
 		);
 		for (size_t i=0;i<cpuverts.size();++i) {
-			Eigen::Vector3f p=(cpuverts[i]-nerf_offset)/nerf_scale;
-			Eigen::Vector3f c=cpucolors[i];
-			Eigen::Vector3f n=cpunormals[i].normalized();
+			Vector3f p=(cpuverts[i]-nerf_offset)/nerf_scale;
+			Vector3f c=cpucolors[i];
+			Vector3f n=cpunormals[i].normalized();
 			unsigned char c8[3]={(unsigned char)tcnn::clamp(c.x()*255.f,0.f,255.f),(unsigned char)tcnn::clamp(c.y()*255.f,0.f,255.f),(unsigned char)tcnn::clamp(c.z()*255.f,0.f,255.f)};
 			fprintf(f,"%0.5f %0.5f %0.5f %0.3f %0.3f %0.3f %d %d %d\n", p.x(), p.y(), p.z(), n.x(), n.y(), n.z(), c8[0], c8[1], c8[2]);
 		}
@@ -876,8 +876,8 @@ void save_mesh(
 			fprintf(f, "mtllib nerf.mtl\n");
 		}
 		for (size_t i = 0; i < cpuverts.size(); ++i) {
-			Eigen::Vector3f p = (cpuverts[i]-nerf_offset)/nerf_scale;
-			Eigen::Vector3f c = cpucolors[i];
+			Vector3f p = (cpuverts[i]-nerf_offset)/nerf_scale;
+			Vector3f c = cpucolors[i];
 			fprintf(f,"v %0.5f %0.5f %0.5f %0.3f %0.3f %0.3f\n", p.x(), p.y(), p.z(), tcnn::clamp(c.x(), 0.f, 1.f), tcnn::clamp(c.y(), 0.f, 1.f), tcnn::clamp(c.z(), 0.f, 1.f));
 		}
 		for (auto &v: cpunormals) {
@@ -919,15 +919,15 @@ void save_mesh(
 	fclose(f);
 }
 
-void save_density_grid_to_png(const GPUMemory<float> &density, const char *filename, Vector3i res3d, float thresh, bool swap_y_z) {
+void save_density_grid_to_png(const GPUMemory<float>& density, const char* filename, Vector3i res3d, float thresh, bool swap_y_z) {
 	std::vector<float> density_cpu;
 	density_cpu.resize(density.size());
 	density.copy_to_host(density_cpu);
-	uint32_t num_voxels=0;
-	uint32_t num_lattice_points_near_zero_crossing=0;
-	for (int z=1;z<res3d.z()-1;++z) {
-		for (int y=1;y<res3d.y()-1;++y) {
-			for (int x=1;x<res3d.z()-1;++x) {
+	uint32_t num_voxels = 0;
+	uint32_t num_lattice_points_near_zero_crossing = 0;
+	for (int z = 1; z < res3d.z() - 1; ++z) {
+		for (int y = 1; y < res3d.y() - 1; ++y) {
+			for (int x = 1; x < res3d.z() - 1; ++x) {
 				int count = 0;
 				count += density_cpu[(x+0)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh;
 				count += density_cpu[(x+1)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh;
@@ -943,41 +943,40 @@ void save_density_grid_to_png(const GPUMemory<float> &density, const char *filen
 
 				bool mysign = density_cpu[(x+0)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh;
 				bool near_zero_crossing=false;
-				near_zero_crossing|=(density_cpu[(x+1)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh) != mysign;
-				near_zero_crossing|=(density_cpu[(x-1)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh) != mysign;
-				near_zero_crossing|=(density_cpu[(x+0)+(y+1)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh) != mysign;
-				near_zero_crossing|=(density_cpu[(x+0)+(y-1)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh) != mysign;
-				near_zero_crossing|=(density_cpu[(x+0)+(y+0)*res3d.x()+(z+1)*res3d.x()*res3d.z()] < thresh) != mysign;
-				near_zero_crossing|=(density_cpu[(x+0)+(y+0)*res3d.x()+(z-1)*res3d.x()*res3d.z()] < thresh) != mysign;
-				if (near_zero_crossing)
+				near_zero_crossing |= (density_cpu[(x+1)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh) != mysign;
+				near_zero_crossing |= (density_cpu[(x-1)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh) != mysign;
+				near_zero_crossing |= (density_cpu[(x+0)+(y+1)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh) != mysign;
+				near_zero_crossing |= (density_cpu[(x+0)+(y-1)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh) != mysign;
+				near_zero_crossing |= (density_cpu[(x+0)+(y+0)*res3d.x()+(z+1)*res3d.x()*res3d.z()] < thresh) != mysign;
+				near_zero_crossing |= (density_cpu[(x+0)+(y+0)*res3d.x()+(z-1)*res3d.x()*res3d.z()] < thresh) != mysign;
+				if (near_zero_crossing) {
 					num_lattice_points_near_zero_crossing++;
+				}
 			}
 		}
 	}
 	uint32_t N = res3d.x()*res3d.y()*res3d.z();
-	tlog::info() << "#lattice points=" << N;
-	tlog::info() << num_voxels << " (" << ((num_voxels*100.0)/N) << "%%) voxels have a zero crossing";
-	tlog::info() << num_lattice_points_near_zero_crossing << " (" << ((num_lattice_points_near_zero_crossing*100.0)/N) << "%%) lattice points are near a zero crossing";
 
 	if (swap_y_z) {
 		res3d = {res3d.x(), res3d.z(), res3d.y()};
 	}
+
 	uint32_t ndown = uint32_t(sqrtf(res3d.z()));
 	uint32_t nacross = (res3d.z()+ndown-1)/ndown;
-	uint32_t w=res3d.x() * nacross;
-	uint32_t h=res3d.y() * ndown;
-	uint8_t *pngpixels = (uint8_t *)malloc(size_t(w)*size_t(h));
-	uint8_t *dst=pngpixels;
-	for (int v=0;v<h;++v) {
-		for (int u=0;u<w;++u) {
-			int x=u%res3d.x();
-			int y=v%res3d.y();
-			int z=(u/res3d.x()) + (v/res3d.y()) * nacross;
-			if (z<res3d.z()) {
+	uint32_t w = res3d.x() * nacross;
+	uint32_t h = res3d.y() * ndown;
+	uint8_t* pngpixels = (uint8_t *)malloc(size_t(w)*size_t(h));
+	uint8_t* dst = pngpixels;
+	for (int v = 0; v < h; ++v) {
+		for (int u = 0; u < w; ++u) {
+			int x = u % res3d.x();
+			int y = v % res3d.y();
+			int z = (u / res3d.x()) + (v / res3d.y()) * nacross;
+			if (z < res3d.z()) {
 				if (swap_y_z) {
-					*dst++ = (uint8_t)tcnn::clamp((density_cpu[x+z*res3d.x()+y*res3d.x()*res3d.z()]-thresh)*32.f + 128.5f, 0.f, 255.f);
+					*dst++ = (uint8_t)tcnn::clamp((density_cpu[x + z*res3d.x() + y*res3d.x()*res3d.z()]-thresh)*32.f + 128.5f, 0.f, 255.f);
 				} else {
-					*dst++ = (uint8_t)tcnn::clamp((density_cpu[x+(res3d.y()-1-y)*res3d.x()+z*res3d.x()*res3d.y()]-thresh)*32.f + 128.5f, 0.f, 255.f);
+					*dst++ = (uint8_t)tcnn::clamp((density_cpu[x + (res3d.y()-1-y)*res3d.x() + z*res3d.x()*res3d.y()]-thresh)*32.f + 128.5f, 0.f, 255.f);
 				}
 			} else {
 				*dst++ = 0;
@@ -985,12 +984,21 @@ void save_density_grid_to_png(const GPUMemory<float> &density, const char *filen
 		}
 	}
 	stbi_write_png(filename, w, h, 1, pngpixels, w);
+
+	tlog::success() << "Wrote density PNG to " << filename;
+	tlog::info()
+		<< "  #lattice points=" << N
+		<< " #zero-x voxels=" << num_voxels << " (" << ((num_voxels*100.0)/N) << "%%)"
+		<< " #lattice near zero-x=" << num_lattice_points_near_zero_crossing << " (" << ((num_lattice_points_near_zero_crossing*100.0)/N) << "%%)";
+
 	free(pngpixels);
 }
 
-// save RGBA grid as sequence of PNG files
-void save_rgba_grid_to_png(const GPUMemory<Eigen::Array4f> &rgba, const char *path, Vector3i res3d, bool swap_y_z) {
-	std::vector<Eigen::Array4f> rgba_cpu;
+// Distinct from `save_density_grid_to_png` not just in that is writes RGBA, but also
+// in that it writes a sequence of PNGs rather than a single large PNG.
+// TODO: make both methods configurable to do either single PNG or PNG sequence.
+void save_rgba_grid_to_png_sequence(const GPUMemory<Array4f>& rgba, const char* path, Vector3i res3d, bool swap_y_z) {
+	std::vector<Array4f> rgba_cpu;
 	rgba_cpu.resize(rgba.size());
 	rgba.copy_to_host(rgba_cpu);
 
@@ -1000,13 +1008,14 @@ void save_rgba_grid_to_png(const GPUMemory<Eigen::Array4f> &rgba, const char *pa
 
 	uint32_t w = res3d.x();
 	uint32_t h = res3d.y();
-	uint8_t *pngpixels = (uint8_t *)malloc(size_t(w)*size_t(h)*4);
+	uint8_t* pngpixels = (uint8_t*)malloc(size_t(w) * size_t(h) * 4);
 
-	for(int z=0; z<res3d.z();++z) {
-		uint8_t *dst=pngpixels;
-		for (int y=0;y<h;++y) {
-			for (int x=0;x<w;++x) {
-				size_t i = swap_y_z ? (x + z*res3d.x() + y*res3d.x()*res3d.z()) : ( x + y*res3d.x() + z*res3d.x()*res3d.y());
+	auto progress = tlog::progress(res3d.z());
+
+	for (int z = 0; z < res3d.z(); ++z) {
+		uint8_t* dst = pngpixels;
+		for (int y = 0; y < h; ++y) {
+			for (int x = 0; x < w; ++x) {
 				size_t i = swap_y_z ? (x + z*res3d.x() + y*res3d.x()*res3d.z()) : (x + (res3d.y()-1-y)*res3d.x() + z*res3d.x()*res3d.y());
 				*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].x() * 255.f, 0.f, 255.f);
 				*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].y() * 255.f, 0.f, 255.f);
@@ -1016,10 +1025,12 @@ void save_rgba_grid_to_png(const GPUMemory<Eigen::Array4f> &rgba, const char *pa
 		}
 		// write slice
 		char filename[256];
-		snprintf(filename, sizeof(filename), "%s/slice_%04d.png", path, z);
+		snprintf(filename, sizeof(filename), "%s/z_%04d.png", path, z);
 		stbi_write_png(filename, w, h, 4, pngpixels, w*4);
-		printf("Wrote '%s'\n", filename);
+
+		progress.update(z + 1);
 	}
+	tlog::success() << "Wrote RGBA PNG sequence to " << path;
 	free(pngpixels);
 }
 

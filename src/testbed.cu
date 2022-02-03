@@ -207,15 +207,15 @@ void Testbed::translate_camera(const Vector3f& rel) {
 	reset_accumulation();
 }
 
-void Testbed::set_nerf_camera_matrix(const Eigen::Matrix<float, 3, 4>& cam) {
+void Testbed::set_nerf_camera_matrix(const Matrix<float, 3, 4>& cam) {
 	m_camera = m_nerf.training.dataset.nerf_matrix_to_ngp(cam);
 }
 
-Eigen::Vector3f Testbed::look_at() const {
+Vector3f Testbed::look_at() const {
 	return view_pos() + view_dir() * m_scale;
 }
 
-void Testbed::set_look_at(const Eigen::Vector3f& pos) {
+void Testbed::set_look_at(const Vector3f& pos) {
 	m_camera.col(3) += pos - look_at();
 }
 
@@ -225,7 +225,7 @@ void Testbed::set_scale(float scale) {
 	m_scale = scale;
 }
 
-void Testbed::set_view_dir(const Eigen::Vector3f& dir) {
+void Testbed::set_view_dir(const Vector3f& dir) {
 	auto old_look_at = look_at();
 	m_camera.col(0) = dir.cross(m_up_dir).normalized();
 	m_camera.col(1) = dir.cross(m_camera.col(0)).normalized();
@@ -307,7 +307,7 @@ void Testbed::imgui() {
 			snprintf(path_filename_buf, sizeof(path_filename_buf), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, "_cam.json").c_str());
 		}
 		if (m_camera_path.imgui(path_filename_buf, m_frame_milliseconds, m_camera, m_slice_plane_z, m_scale, fov(), m_dof, m_bounding_radius,
-					!m_nerf.training.dataset.xforms.empty() ? m_nerf.training.dataset.xforms[0] : Eigen::Matrix<float, 3, 4>::Identity())) {
+					!m_nerf.training.dataset.xforms.empty() ? m_nerf.training.dataset.xforms[0] : Matrix<float, 3, 4>::Identity())) {
 			if (m_camera_path.m_update_cam_from_path) {
 				set_camera_from_time(m_camera_path.m_playtime);
 				if (read>1) m_smoothed_camera=m_camera;
@@ -646,9 +646,13 @@ void Testbed::imgui() {
 
 			if (m_testbed_mode == ETestbedMode::Nerf) {
 				ImGui::SameLine();
-				if (imgui_colored_button("Save RGBA PNGs", 0.2f)) {
-					GPUMemory<Eigen::Array4f> rgba = get_rgba_on_grid(res3d, view_dir());
-					save_rgba_grid_to_png(rgba, m_data_path.str().c_str(), res3d, false);
+				if (imgui_colored_button("Save RGBA PNG sequence", 0.2f)) {
+					GPUMemory<Array4f> rgba = get_rgba_on_grid(res3d, view_dir());
+					auto dir = m_data_path / "rgba_slices";
+					if (!dir.exists()) {
+						fs::create_directory(dir);
+					}
+					save_rgba_grid_to_png_sequence(rgba, dir.str().c_str(), res3d, false);
 				}
 			}
 
@@ -788,7 +792,7 @@ void Testbed::visualize_nerf_cameras(const Matrix<float, 4, 4>& world2proj) {
 	}
 }
 
-void Testbed::draw_visualizations(const Eigen::Matrix<float, 3, 4>& camera_matrix) {
+void Testbed::draw_visualizations(const Matrix<float, 3, 4>& camera_matrix) {
 	// Visualize 3D cameras for SDF or NeRF use cases
 	if (m_testbed_mode != ETestbedMode::Image) {
 		Matrix<float, 4, 4> world2view, view2world, view2proj, world2proj;
@@ -927,7 +931,7 @@ bool Testbed::keyboard_event() {
 	}
 
 	// WASD camera movement
-	Eigen::Vector3f translate_vec = Eigen::Vector3f::Zero();
+	Vector3f translate_vec = Vector3f::Zero();
 	if (ImGui::IsKeyDown('W')) {
 		translate_vec.z() += 1.0f;
 	}
@@ -950,7 +954,7 @@ bool Testbed::keyboard_event() {
 	if (shift) {
 		translate_vec *= 5;
 	}
-	if (translate_vec != Eigen::Vector3f::Zero()) {
+	if (translate_vec != Vector3f::Zero()) {
 		m_fps_camera = true;
 		translate_camera(translate_vec);
 	}
@@ -1860,7 +1864,7 @@ Vector2f Testbed::render_screen_center() const {
 	return {(0.5f-screen_center.x())*m_zoom + 0.5f, (0.5-screen_center.y())*m_zoom + 0.5f};
 }
 
-void Testbed::render_frame(const Eigen::Matrix<float, 3, 4>& camera_matrix0, const Eigen::Matrix<float, 3, 4>& camera_matrix1, CudaRenderBuffer& render_buffer, bool to_srgb) {
+void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matrix<float, 3, 4>& camera_matrix1, CudaRenderBuffer& render_buffer, bool to_srgb) {
 	Vector2i max_res = m_window_res.cwiseMax(render_buffer.resolution());
 
 	render_buffer.clear_frame_buffer(m_inference_stream);
@@ -2171,7 +2175,7 @@ void Testbed::load_snapshot(const std::string& filepath_string) {
 }
 
 void Testbed::load_camera_path(const std::string& filepath_string) {
-	m_camera_path.load(filepath_string, Eigen::Matrix<float, 3, 4>::Identity());
+	m_camera_path.load(filepath_string, Matrix<float, 3, 4>::Identity());
 }
 
 NGP_NAMESPACE_END
