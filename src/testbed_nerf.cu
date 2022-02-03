@@ -406,6 +406,20 @@ __global__ void generate_grid_samples_nerf_uniform(Eigen::Vector3i res_3d, const
 	out[i] = { warp_position(pos, train_aabb), warp_dt(MIN_CONE_STEPSIZE()) };
 }
 
+// generate samples for uniform grid including constant ray direction
+__global__ void generate_grid_samples_nerf_uniform_dir(Eigen::Vector3i res_3d, const uint32_t step, BoundingBox render_aabb, BoundingBox train_aabb, Eigen::Vector3f ray_dir, NerfCoordinate* __restrict__ network_input) {
+	// check grid_in for negative values -> must be negative on output
+	uint32_t x = threadIdx.x + blockIdx.x * blockDim.x;
+	uint32_t y = threadIdx.y + blockIdx.y * blockDim.y;
+	uint32_t z = threadIdx.z + blockIdx.z * blockDim.z;
+	if (x>=res_3d.x() || y>=res_3d.y() || z>=res_3d.z())
+		return;
+	uint32_t i = x+ y*res_3d.x() + z*res_3d.x()*res_3d.y();
+	Vector3f pos = Array3f{(float)x, (float)y, (float)z} * Array3f{1.f/res_3d.x(),1.f/res_3d.y(),1.f/res_3d.z()};
+	pos = pos.cwiseProduct(render_aabb.max - render_aabb.min) + render_aabb.min;
+	network_input[i] = { warp_position(pos, train_aabb), warp_direction(ray_dir), warp_dt(MIN_CONE_STEPSIZE()) };
+}
+
 inline __device__ int mip_from_pos(const Vector3f& pos) {
 	int exponent;
 	float maxval = (pos - Vector3f::Constant(0.5f)).cwiseAbs().maxCoeff();
@@ -2825,6 +2839,32 @@ GPUMemory<float> Testbed::get_density_on_grid(Vector3i res3d, const BoundingBox&
 	}
 
 	return density;
+}
+
+GPUMemory<Eigen::Array4f> Testbed::get_rgba_on_grid(Vector3i res3d, Eigen::Vector3f ray_dir) {
+	const uint32_t n_elements = (res3d.x()*res3d.y()*res3d.z());
+	GPUMemory<Eigen::Array4f> rgba(n_elements);
+	GPUMemory<NerfCoordinate> positions(n_elements);
+	const uint32_t batch_size = std::min(n_elements, 1u<<20);
+
+	// generate inputs
+	const dim3 threads = { 16, 8, 1 };
+	const dim3 blocks = { div_round_up((uint32_t)res3d.x(), threads.x), div_round_up((uint32_t)res3d.y(), threads.y), div_round_up((uint32_t)res3d.z(), threads.z) };
+	generate_grid_samples_nerf_uniform_dir<<<blocks, threads, 0, m_inference_stream>>>(res3d, m_nerf.density_grid_ema_step, m_render_aabb, m_aabb, ray_dir, positions.data());
+
+	// Only process 1m elements at a time
+	for (uint32_t offset = 0; offset < n_elements; offset += batch_size) {
+		uint32_t local_batch_size = std::min(n_elements - offset, batch_size);
+
+		// run network
+		GPUMatrix<float> positions_matrix((float*) (positions.data() + offset), sizeof(NerfCoordinate)/sizeof(float), local_batch_size);
+		GPUMatrix<float> rgbsigma_matrix((float*) (rgba.data() + offset), 4, local_batch_size);
+		m_network->inference(m_inference_stream, positions_matrix, rgbsigma_matrix);
+
+		// convert network output to RGBA (in place)
+		linear_kernel(compute_nerf_density, 0, m_inference_stream, local_batch_size, rgba.data() + offset, m_nerf.rgb_activation, m_nerf.density_activation);
+	}
+	return rgba;
 }
 
 int Testbed::marching_cubes(Vector3i res3d, const BoundingBox& aabb, float thresh) {

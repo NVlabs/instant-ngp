@@ -108,7 +108,7 @@ void save_exr(const float* data, int width, int height, int nChannels, int chann
 		FreeEXRErrorMessage(err); // free's buffer for an error message
 		throw std::runtime_error(error_message);
 	}
-	printf("Saved exr file. [ %s ] \n", outfilename);
+	tlog::info() << "Saved exr file: " << outfilename;
 
 	free(header.channels);
 	free(header.pixel_types);

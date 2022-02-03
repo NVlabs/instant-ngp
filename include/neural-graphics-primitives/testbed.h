@@ -288,7 +288,9 @@ public:
 	void optimise_mesh_step(uint32_t N_STEPS);
 	void compute_mesh_vertex_colors();
 	tcnn::GPUMemory<float> get_density_on_grid(Eigen::Vector3i res3d, const BoundingBox& aabb);
+	tcnn::GPUMemory<Eigen::Array4f> get_rgba_on_grid(Eigen::Vector3i res3d, Eigen::Vector3f ray_dir);
 	int marching_cubes(Eigen::Vector3i res3d, const BoundingBox& aabb, float thresh);
+
 	// Determines the 3d focus point by rendering a little 16x16 depth image around
 	// the mouse cursor and picking the median depth.
 	void determine_autofocus_target_from_pixel(const Eigen::Vector2i& focus_pixel);
