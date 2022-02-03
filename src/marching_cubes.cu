@@ -16,6 +16,7 @@
 #include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/bounding_box.cuh>
 #include <neural-graphics-primitives/random_val.cuh> // helpers to generate random values, directions
+#include <neural-graphics-primitives/thread_pool.h>
 
 #include <tiny-cuda-nn/gpu_memory.h>
 #include <filesystem/path.h>
@@ -1008,11 +1009,12 @@ void save_rgba_grid_to_png_sequence(const GPUMemory<Array4f>& rgba, const char* 
 
 	uint32_t w = res3d.x();
 	uint32_t h = res3d.y();
-	uint8_t* pngpixels = (uint8_t*)malloc(size_t(w) * size_t(h) * 4);
 
 	auto progress = tlog::progress(res3d.z());
 
-	for (int z = 0; z < res3d.z(); ++z) {
+	std::atomic<int> n_saved{0};
+	ThreadPool{}.parallelFor<int>(0, res3d.z(), [&](int z) {
+		uint8_t* pngpixels = (uint8_t*)malloc(size_t(w) * size_t(h) * 4);
 		uint8_t* dst = pngpixels;
 		for (int y = 0; y < h; ++y) {
 			for (int x = 0; x < w; ++x) {
@@ -1027,11 +1029,11 @@ void save_rgba_grid_to_png_sequence(const GPUMemory<Array4f>& rgba, const char* 
 		char filename[256];
 		snprintf(filename, sizeof(filename), "%s/%04d_%dx%d.png", path, z, w, h);
 		stbi_write_png(filename, w, h, 4, pngpixels, w*4);
+		free(pngpixels);
 
-		progress.update(z + 1);
-	}
+		progress.update(++n_saved);
+	});
 	tlog::success() << "Wrote RGBA PNG sequence to " << path;
-	free(pngpixels);
 }
 
 NGP_NAMESPACE_END
