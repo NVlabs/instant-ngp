@@ -14,7 +14,6 @@
 
 #pragma once
 
-
 #include <neural-graphics-primitives/adam_optimizer.h>
 #include <neural-graphics-primitives/camera_path.h>
 #include <neural-graphics-primitives/common.h>

@@ -2914,5 +2914,4 @@ int Testbed::find_best_training_view(int default_view) {
 	return bestimage;
 }
 
-
 NGP_NAMESPACE_END

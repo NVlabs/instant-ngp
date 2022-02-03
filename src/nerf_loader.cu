@@ -13,7 +13,6 @@
  *  @brief  Loads a NeRF data set from NeRF's original format
  */
 
-
 #include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/nerf_loader.h>
