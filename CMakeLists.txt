@@ -231,7 +231,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR})
 
 get_filename_component(CUDA_COMPILER_BIN "${CMAKE_CUDA_COMPILER}" DIRECTORY)
 
-if (OptiX_FOUND)
+if (OptiX_FOUND OR OptiX_INCLUDE)
 	add_library(optix_program OBJECT
 		src/optix/pathescape.cu
 		src/optix/raystab.cu
