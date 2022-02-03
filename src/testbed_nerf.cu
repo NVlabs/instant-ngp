@@ -417,7 +417,7 @@ __global__ void generate_grid_samples_nerf_uniform_dir(Eigen::Vector3i res_3d, c
 	uint32_t i = x+ y*res_3d.x() + z*res_3d.x()*res_3d.y();
 	Vector3f pos = Array3f{(float)x, (float)y, (float)z} * Array3f{1.f/res_3d.x(),1.f/res_3d.y(),1.f/res_3d.z()};
 	pos = pos.cwiseProduct(render_aabb.max - render_aabb.min) + render_aabb.min;
-	network_input[i] = { warp_position(pos, train_aabb), warp_direction(ray_dir), warp_dt(MIN_CONE_STEPSIZE) };
+	network_input[i] = { warp_position(pos, train_aabb), warp_direction(ray_dir), warp_dt(MIN_CONE_STEPSIZE()) };
 }
 
 inline __device__ int mip_from_pos(const Vector3f& pos) {

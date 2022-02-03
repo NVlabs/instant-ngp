@@ -621,57 +621,61 @@ void Testbed::imgui() {
 		ImGui::InputText("File", snapshot_filename_buf, sizeof(snapshot_filename_buf));
 	}
 
-	if (ImGui::CollapsingHeader("Marching Cubes Mesh Output")) {
-		BoundingBox aabb = (m_testbed_mode==ETestbedMode::Nerf) ? m_render_aabb : m_aabb;
-		auto res3d = get_marching_cubes_res(m_mesh.res, aabb);
-		if (imgui_colored_button("Mesh it!", 0.4f)) {
-			marching_cubes(res3d, aabb, m_mesh.thresh);
-			m_nerf.render_with_camera_distortion=false;
-		}
-		if (m_mesh.indices.size()>0) {
-			ImGui::SameLine();
-			if (imgui_colored_button("Clear Mesh", 0.f)) {
-				m_mesh.clear();
+	if (m_testbed_mode == ETestbedMode::Nerf || m_testbed_mode == ETestbedMode::Sdf) {
+		if (ImGui::CollapsingHeader("Marching Cubes Mesh Output")) {
+			BoundingBox aabb = (m_testbed_mode==ETestbedMode::Nerf) ? m_render_aabb : m_aabb;
+			auto res3d = get_marching_cubes_res(m_mesh.res, aabb);
+			if (imgui_colored_button("Mesh it!", 0.4f)) {
+				marching_cubes(res3d, aabb, m_mesh.thresh);
+				m_nerf.render_with_camera_distortion=false;
 			}
-		}
-		ImGui::SameLine();
-
-		if (imgui_colored_button("Save density PNG",-0.4f)) {
-			char fname[128];
-			snprintf(fname, sizeof(fname), "%s_%d_%d_%d.png", m_data_path.stem().str().c_str(), res3d.x(), res3d.y(), res3d.z());
-			GPUMemory<float> density = get_density_on_grid(res3d, aabb);
-			save_density_grid_to_png(density, fname, res3d, m_mesh.thresh);
-		}
-		ImGui::SameLine();
-		if (ColoredButton("Save RGBA PNGs", 0.2f)) {
-			auto r = get_marching_cubes_res(mc_res);
-			GPUMemory<Eigen::Array4f> rgba = get_rgba_on_grid(r, Eigen::Vector3f(0.0f, 0.0f, 1.0f));
-			save_rgba_grid_to_png(rgba, m_data_path.str().c_str(), r, false);
-		}
-
-		static char obj_filename_buf[128] = "";
-		ImGui::SliderInt("Res:", &m_mesh.res, 16, 1024, "%d", ImGuiSliderFlags_Logarithmic);
-		ImGui::SameLine();
-
-		ImGui::Text("%dx%dx%d", res3d.x(), res3d.y(), res3d.z());
-		if (obj_filename_buf[0] == '\0') {
-			snprintf(obj_filename_buf, sizeof(obj_filename_buf), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, ".obj").c_str());
-		}
-		float thresh_range = (m_testbed_mode == ETestbedMode::Sdf) ? 0.5f : 10.f;
-		ImGui::SliderFloat("MC density threshold",&m_mesh.thresh, -thresh_range, thresh_range);
-		ImGui::Combo("Mesh render mode", (int*)&m_mesh_render_mode, "Off\0Vertex Colors\0Vertex Normals\0Face IDs\0");
-		ImGui::Checkbox("Unwrap mesh", &m_mesh.unwrap);
-		if (uint32_t tricount = m_mesh.indices.size()/3) {
-			ImGui::InputText("##OBJFile", obj_filename_buf, sizeof(obj_filename_buf));
-			if (ImGui::Button("Save it!")) {
-				save_mesh(m_mesh.verts, m_mesh.vert_normals, m_mesh.vert_colors, m_mesh.indices, obj_filename_buf, m_mesh.unwrap, m_nerf.training.dataset.scale, m_nerf.training.dataset.offset);
+			if (m_mesh.indices.size()>0) {
+				ImGui::SameLine();
+				if (imgui_colored_button("Clear Mesh", 0.f)) {
+					m_mesh.clear();
+				}
 			}
 			ImGui::SameLine();
-			ImGui::Text("Mesh has %d triangles\n", tricount);
-			ImGui::Checkbox("Optimize mesh", &m_mesh.optimize_mesh);
-			ImGui::SliderFloat("Laplacian smoothing", &m_mesh.smooth_amount, 0.f, 2048.f);
-			ImGui::SliderFloat("Density push", &m_mesh.density_amount, 0.f, 128.f);
-			ImGui::SliderFloat("Inflate", &m_mesh.inflate_amount, 0.f, 128.f);
+
+			if (imgui_colored_button("Save density PNG",-0.4f)) {
+				char fname[128];
+				snprintf(fname, sizeof(fname), "%s_%d_%d_%d.png", m_data_path.stem().str().c_str(), res3d.x(), res3d.y(), res3d.z());
+				GPUMemory<float> density = get_density_on_grid(res3d, aabb);
+				save_density_grid_to_png(density, fname, res3d, m_mesh.thresh);
+			}
+
+			if (m_testbed_mode == ETestbedMode::Nerf) {
+				ImGui::SameLine();
+				if (imgui_colored_button("Save RGBA PNGs", 0.2f)) {
+					GPUMemory<Eigen::Array4f> rgba = get_rgba_on_grid(res3d, view_dir());
+					save_rgba_grid_to_png(rgba, m_data_path.str().c_str(), res3d, false);
+				}
+			}
+
+			static char obj_filename_buf[128] = "";
+			ImGui::SliderInt("Res:", &m_mesh.res, 16, 1024, "%d", ImGuiSliderFlags_Logarithmic);
+			ImGui::SameLine();
+
+			ImGui::Text("%dx%dx%d", res3d.x(), res3d.y(), res3d.z());
+			if (obj_filename_buf[0] == '\0') {
+				snprintf(obj_filename_buf, sizeof(obj_filename_buf), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, ".obj").c_str());
+			}
+			float thresh_range = (m_testbed_mode == ETestbedMode::Sdf) ? 0.5f : 10.f;
+			ImGui::SliderFloat("MC density threshold",&m_mesh.thresh, -thresh_range, thresh_range);
+			ImGui::Combo("Mesh render mode", (int*)&m_mesh_render_mode, "Off\0Vertex Colors\0Vertex Normals\0Face IDs\0");
+			ImGui::Checkbox("Unwrap mesh", &m_mesh.unwrap);
+			if (uint32_t tricount = m_mesh.indices.size()/3) {
+				ImGui::InputText("##OBJFile", obj_filename_buf, sizeof(obj_filename_buf));
+				if (ImGui::Button("Save it!")) {
+					save_mesh(m_mesh.verts, m_mesh.vert_normals, m_mesh.vert_colors, m_mesh.indices, obj_filename_buf, m_mesh.unwrap, m_nerf.training.dataset.scale, m_nerf.training.dataset.offset);
+				}
+				ImGui::SameLine();
+				ImGui::Text("Mesh has %d triangles\n", tricount);
+				ImGui::Checkbox("Optimize mesh", &m_mesh.optimize_mesh);
+				ImGui::SliderFloat("Laplacian smoothing", &m_mesh.smooth_amount, 0.f, 2048.f);
+				ImGui::SliderFloat("Density push", &m_mesh.density_amount, 0.f, 128.f);
+				ImGui::SliderFloat("Inflate", &m_mesh.inflate_amount, 0.f, 128.f);
+			}
 		}
 	}
 
