@@ -640,7 +640,7 @@ void Testbed::imgui() {
 			static bool flip_y_and_z_axes = false;
 			if (imgui_colored_button("Save density PNG",-0.4f)) {
 				char fname[128];
-				snprintf(fname, sizeof(fname), "%d_%d_%d.png", res3d.x(), res3d.y(), res3d.z());
+				snprintf(fname, sizeof(fname), "density_slices_%dx%dx%d.png", res3d.x(), res3d.y(), res3d.z());
 				GPUMemory<float> density = get_density_on_grid(res3d, aabb);
 				save_density_grid_to_png(density, (m_data_path / fname).str().c_str(), res3d, m_mesh.thresh, flip_y_and_z_axes);
 			}
@@ -648,7 +648,8 @@ void Testbed::imgui() {
 			if (m_testbed_mode == ETestbedMode::Nerf) {
 				ImGui::SameLine();
 				if (imgui_colored_button("Save RGBA PNG sequence", 0.2f)) {
-					GPUMemory<Array4f> rgba = get_rgba_on_grid(res3d, view_dir());
+					auto effective_view_dir = flip_y_and_z_axes ? Vector3f{0.0f, 0.0f, 1.0f} : Vector3f{0.0f, 1.0f, 0.0f};
+					GPUMemory<Array4f> rgba = get_rgba_on_grid(res3d, effective_view_dir);
 					auto dir = m_data_path / "rgba_slices";
 					if (!dir.exists()) {
 						fs::create_directory(dir);

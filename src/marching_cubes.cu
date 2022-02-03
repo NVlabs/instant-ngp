@@ -1025,7 +1025,7 @@ void save_rgba_grid_to_png_sequence(const GPUMemory<Array4f>& rgba, const char* 
 		}
 		// write slice
 		char filename[256];
-		snprintf(filename, sizeof(filename), "%s/z_%04d.png", path, z);
+		snprintf(filename, sizeof(filename), "%s/%04d_%dx%d.png", path, z, w, h);
 		stbi_write_png(filename, w, h, 4, pngpixels, w*4);
 
 		progress.update(z + 1);
