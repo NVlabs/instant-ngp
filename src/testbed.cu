@@ -637,11 +637,12 @@ void Testbed::imgui() {
 			}
 			ImGui::SameLine();
 
+			static bool flip_y_and_z_axes = false;
 			if (imgui_colored_button("Save density PNG",-0.4f)) {
 				char fname[128];
-				snprintf(fname, sizeof(fname), "%s_%d_%d_%d.png", m_data_path.stem().str().c_str(), res3d.x(), res3d.y(), res3d.z());
+				snprintf(fname, sizeof(fname), "%d_%d_%d.png", res3d.x(), res3d.y(), res3d.z());
 				GPUMemory<float> density = get_density_on_grid(res3d, aabb);
-				save_density_grid_to_png(density, fname, res3d, m_mesh.thresh);
+				save_density_grid_to_png(density, (m_data_path / fname).str().c_str(), res3d, m_mesh.thresh, flip_y_and_z_axes);
 			}
 
 			if (m_testbed_mode == ETestbedMode::Nerf) {
@@ -652,9 +653,12 @@ void Testbed::imgui() {
 					if (!dir.exists()) {
 						fs::create_directory(dir);
 					}
-					save_rgba_grid_to_png_sequence(rgba, dir.str().c_str(), res3d, false);
+					save_rgba_grid_to_png_sequence(rgba, dir.str().c_str(), res3d, flip_y_and_z_axes);
 				}
 			}
+
+			ImGui::SameLine();
+			ImGui::Checkbox("Swap Y&Z", &flip_y_and_z_axes);
 
 			static char obj_filename_buf[128] = "";
 			ImGui::SliderInt("Res:", &m_mesh.res, 16, 1024, "%d", ImGuiSliderFlags_Logarithmic);
