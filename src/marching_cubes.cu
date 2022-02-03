@@ -1007,6 +1007,7 @@ void save_rgba_grid_to_png(const GPUMemory<Eigen::Array4f> &rgba, const char *pa
 		for (int y=0;y<h;++y) {
 			for (int x=0;x<w;++x) {
 				size_t i = swap_y_z ? (x + z*res3d.x() + y*res3d.x()*res3d.z()) : ( x + y*res3d.x() + z*res3d.x()*res3d.y());
+				size_t i = swap_y_z ? (x + z*res3d.x() + y*res3d.x()*res3d.z()) : (x + (res3d.y()-1-y)*res3d.x() + z*res3d.x()*res3d.y());
 				*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].x() * 255.f, 0.f, 255.f);
 				*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].y() * 255.f, 0.f, 255.f);
 				*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].z() * 255.f, 0.f, 255.f);
