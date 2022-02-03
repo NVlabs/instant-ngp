@@ -293,6 +293,11 @@ public:
 		if (N_FEATURES_PER_LEVEL != 1 && N_FEATURES_PER_LEVEL != 2 && N_FEATURES_PER_LEVEL != 4 && N_FEATURES_PER_LEVEL != 8) {
 			throw std::runtime_error{"Number of features per level must be 1, 2, 4, or 8."};
 		}
+
+		// Only needs temporary storage if gradients are computed with different precision from T.
+		if (!std::is_same<grad_t, T>::value) {
+			m_params_gradient_tmp.resize(n_params());
+		}
 	}
 
 	virtual ~TakikawaEncoding() { }
@@ -413,11 +418,6 @@ public:
 
 		// Initialize the encoding from the GPU, because the number of parameters can be quite large.
 		tcnn::generate_random_uniform<float>(rnd, n_params(), params_full_precision, -1e-4f, 1e-4f);
-
-		// Only needs temporary storage if gradients are computed with different precision from T.
-		if (!std::is_same<grad_t, T>::value) {
-			m_params_gradient_tmp.resize(n_params());
-		}
 	}
 
 	size_t n_params() const override {

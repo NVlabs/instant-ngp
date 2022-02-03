@@ -32,7 +32,9 @@ class TrainableBuffer : public tcnn::DifferentiableObject<float, T, T> {
 	using ResVector = Eigen::Matrix<int, RANK, 1>;
 
 public:
-	TrainableBuffer(const ResVector& resolution) : m_resolution{resolution} {}
+	TrainableBuffer(const ResVector& resolution) : m_resolution{resolution} {
+		m_params_gradient_weight.resize(n_params());
+	}
 
 	virtual ~TrainableBuffer() { }
 
@@ -67,8 +69,6 @@ public:
 
 		// Initialize the buffer to zero from the GPU
 		CUDA_CHECK_THROW(cudaMemset(params_full_precision, 0, n_params()*sizeof(float)));
-
-		m_params_gradient_weight.resize(n_params());
 	}
 
 	size_t n_params() const override {
