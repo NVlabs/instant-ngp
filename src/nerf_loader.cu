@@ -583,7 +583,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 		);
 	}
 	if (sharpen_amount > 0.f) {
-		printf("sharpen = %0.2f\n", sharpen_amount);
+		tlog::info() << "sharpen=" << sharpen_amount;
 		tcnn::GPUMemory<__half> images_data_2;
 		images_data_2.resize(img_size * result.n_images);
 		float center_w = 4.f + 1.f / sharpen_amount; // center_w ranges from 5 (strong sharpening) to infinite (no sharpening)
