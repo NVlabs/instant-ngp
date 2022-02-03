@@ -285,6 +285,7 @@ public:
 	void compute_mesh_vertex_colors();
 	Eigen::Vector3i get_marching_cubes_res(uint32_t res_1d);
 	tcnn::GPUMemory<float> get_density_on_grid(Eigen::Vector3i res3d);
+	tcnn::GPUMemory<Eigen::Array4f> get_rgba_on_grid(Eigen::Vector3i res3d, Eigen::Vector3f ray_dir);
 	int marching_cubes(Eigen::Vector3i res3d, float thresh);
 	// Determines the 3d focus point by rendering a little 16x16 depth image around
 	// the mouse cursor and picking the median depth.

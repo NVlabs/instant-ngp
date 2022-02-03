@@ -693,6 +693,13 @@ void Testbed::imgui() {
 			GPUMemory<float> density = get_density_on_grid(r);
 			save_density_grid_to_png(density, fname, r, mc_thresh);
 		}
+		ImGui::SameLine();
+		if (ColoredButton("Save RGBA PNGs", 0.2f)) {
+			auto r = get_marching_cubes_res(mc_res);
+			GPUMemory<Eigen::Array4f> rgba = get_rgba_on_grid(r, Eigen::Vector3f(0.0f, 0.0f, 1.0f));
+			save_rgba_grid_to_png(rgba, m_data_path.str().c_str(), r, false);
+		}
+
 		static char obj_filename_buf[128] = "";
 		ImGui::SliderInt("Res:", &mc_res, 16, 1024, "%d", ImGuiSliderFlags_Logarithmic);
 		ImGui::SameLine();

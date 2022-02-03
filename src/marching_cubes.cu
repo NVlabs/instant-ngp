@@ -910,5 +910,38 @@ void save_density_grid_to_png(const GPUMemory<float> &density, const char *filen
 	free(pngpixels);
 }
 
-NGP_NAMESPACE_END
+// save RGBA grid as sequence of PNG files
+void save_rgba_grid_to_png(const GPUMemory<Eigen::Array4f> &rgba, const char *path, Vector3i res3d, bool swap_y_z) {
+	std::vector<Eigen::Array4f> rgba_cpu;
+	rgba_cpu.resize(rgba.size());
+	rgba.copy_to_host(rgba_cpu);
 
+	if (swap_y_z) {
+		res3d = {res3d.x(), res3d.z(), res3d.y()};
+	}
+
+	uint32_t w = res3d.x();
+	uint32_t h = res3d.y();
+	uint8_t *pngpixels = (uint8_t *)malloc(size_t(w)*size_t(h)*4);
+
+	for(int z=0; z<res3d.z();++z) {
+		uint8_t *dst=pngpixels;
+		for (int y=0;y<h;++y) {
+			for (int x=0;x<w;++x) {
+				size_t i = swap_y_z ? (x + z*res3d.x() + y*res3d.x()*res3d.z()) : ( x + y*res3d.x() + z*res3d.x()*res3d.y());
+				*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].x() * 255.f, 0.f, 255.f);
+				*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].y() * 255.f, 0.f, 255.f);
+				*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].z() * 255.f, 0.f, 255.f);
+				*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].w() * 255.f, 0.f, 255.f);
+			}
+		}
+		// write slice
+		char filename[256];
+		snprintf(filename, sizeof(filename), "%s/slice_%04d.png", path, z);
+		stbi_write_png(filename, w, h, 4, pngpixels, w*4);
+		printf("Wrote '%s'\n", filename);
+	}
+	free(pngpixels);
+}
+
+NGP_NAMESPACE_END
