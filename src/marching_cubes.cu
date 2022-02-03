@@ -58,22 +58,22 @@ static bool check_shader(GLuint handle, const char* desc, bool program) {
 	if (program) {
 		glGetProgramiv(handle, GL_LINK_STATUS, &status);
 		glGetProgramiv(handle, GL_INFO_LOG_LENGTH, &log_length);
-	}
-	else {
+	} else {
 		glGetShaderiv(handle, GL_COMPILE_STATUS, &status);
 		glGetShaderiv(handle, GL_INFO_LOG_LENGTH, &log_length);
 	}
-	if ((GLboolean)status == GL_FALSE)
-		fprintf(stderr, "failed to compile %s!\n", desc);
-	if (log_length > 1)
-	{
+	if ((GLboolean)status == GL_FALSE) {
+		tlog::error() << "Failed to compile shader: " << desc;
+	}
+	if (log_length > 1) {
 		std::vector<char> log; log.resize(log_length+1);
-		if (program)
+		if (program) {
 			glGetProgramInfoLog(handle, log_length, NULL, (GLchar*)log.data());
-		else
+		} else {
 			glGetShaderInfoLog(handle, log_length, NULL, (GLchar*)log.data());
+		}
 		log.back() = 0;
-		fprintf(stderr, "%s\n", log.data());
+		tlog::error() << log.data();
 	}
 	return (GLboolean)status == GL_TRUE;
 }
@@ -91,38 +91,48 @@ static GLuint compile_shader(bool pixel, const char* code) {
 	return g_VertHandle;
 }
 
-void draw_mesh_gl(const GPUMemory<Eigen::Vector3f> &verts, const GPUMemory<Eigen::Vector3f> &normals, const GPUMemory<Eigen::Vector3f> &colors,const GPUMemory<uint32_t> &indices, Eigen::Vector2i resolution,	Eigen::Vector2f focal_length, Eigen::Matrix<float, 3, 4> camera_matrix,	Eigen::Vector2f screen_center, int mesh_render_mode) {
-	// my god the horror
-	if (verts.size()==0 || indices.size()==0 || mesh_render_mode==0)
+void draw_mesh_gl(
+	const GPUMemory<Eigen::Vector3f>& verts,
+	const GPUMemory<Eigen::Vector3f>& normals,
+	const GPUMemory<Eigen::Vector3f>& colors,
+	const GPUMemory<uint32_t>& indices,
+	Eigen::Vector2i resolution,
+	Eigen::Vector2f focal_length,
+	Eigen::Matrix<float, 3, 4> camera_matrix,
+	Eigen::Vector2f screen_center,
+	int mesh_render_mode
+) {
+	if (verts.size() == 0 || indices.size() == 0 || mesh_render_mode == 0) {
 		return;
-	static GLuint vs = 0, ps = 0, program = 0, VAO=0, VBO[3]={}, els=0, vbosize=0, elssize=0;
+	}
+	static GLuint vs = 0, ps = 0, program = 0, VAO = 0, VBO[3] = {}, els = 0, vbosize = 0, elssize = 0;
 	if (!VAO) {
 		glGenVertexArrays(1, &VAO);
 		glBindVertexArray(VAO);
 	}
-	if (vbosize!=verts.size()) {
-		for (int i=0;i<3;++i) {
+	if (vbosize != verts.size()) {
+		for (int i= 0; i < 3; ++i) {
 			if (VBO[i]) {
-				cudaGLUnregisterBufferObject( VBO[i] );
+				cudaGLUnregisterBufferObject(VBO[i]);
 				glDeleteBuffers(1, &VBO[i]);
 			}
 			glGenBuffers(1, &VBO[i]);
-			vbosize=verts.size();
-			glBindBuffer( GL_ARRAY_BUFFER, VBO[i]);
-			glBufferData( GL_ARRAY_BUFFER, vbosize * sizeof(Eigen::Vector3f), NULL, GL_DYNAMIC_COPY );
-			cudaGLRegisterBufferObject( VBO[i] );
+			vbosize = verts.size();
+			glBindBuffer(GL_ARRAY_BUFFER, VBO[i]);
+			glBufferData(GL_ARRAY_BUFFER, vbosize * sizeof(Eigen::Vector3f), NULL, GL_DYNAMIC_COPY);
+			cudaGLRegisterBufferObject(VBO[i]);
 		}
 	}
 	if (elssize!=indices.size()) {
 		if (els) {
-			cudaGLUnregisterBufferObject( els );
+			cudaGLUnregisterBufferObject(els);
 			glDeleteBuffers(1, &els);
 		}
 		glGenBuffers(1, &els);
-		elssize=indices.size();
+		elssize = indices.size();
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, els);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, elssize * sizeof(int), NULL, GL_STREAM_DRAW);
-		cudaGLRegisterBufferObject( els );
+		cudaGLRegisterBufferObject(els);
 	}
 	void *ptr=nullptr;
 	cudaGLMapBufferObject(&ptr, VBO[0]);
@@ -200,9 +210,9 @@ void main() {
 	glBindVertexArray(VAO);
 	glUseProgram(program);
 	glUniformMatrix4fv(glGetUniformLocation(program, "camera"), 1, GL_FALSE, (GLfloat*)&world2view);
-	glUniform2f(glGetUniformLocation(program, "f"), focal_length.x(),focal_length.y());
-	glUniform2f(glGetUniformLocation(program, "cen"), screen_center.x(),screen_center.y());
-	glUniform2i(glGetUniformLocation(program, "res"), resolution.x(),resolution.y());
+	glUniform2f(glGetUniformLocation(program, "f"), focal_length.x(), focal_length.y());
+	glUniform2f(glGetUniformLocation(program, "cen"), screen_center.x(), screen_center.y());
+	glUniform2i(glGetUniformLocation(program, "res"), resolution.x(), resolution.y());
 	glUniform1i(glGetUniformLocation(program, "mode"), mesh_render_mode);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, els);
 	GLuint posat = (GLuint)glGetAttribLocation(program, "pos");
@@ -674,7 +684,7 @@ __global__ void gen_faces(Eigen::Vector3i res_3d, const float* __restrict__ dens
 			int j = triangles[i];
 			if (j<0) break;
 			if (!local_edges[j]) {
-				printf("WAT - at %d %d %d, mask is %d, j is %d, local_edges is 0\n", x,y,z,mask,j);
+				printf("at %d %d %d, mask is %d, j is %d, local_edges is 0\n", x,y,z,mask,j);
 			}
 			indices_out[tidx+i]=local_edges[j]-1;
 		}
@@ -760,7 +770,7 @@ void marching_cubes_gpu(GPUMemory<char>& scratch_memory, BoundingBox aabb, Eigen
 	gen_faces<<<blocks, threads, 0>>>(res_3d, density.data(), nullptr, nullptr, thresh, counters.data());
 	std::vector<uint32_t> cpucounters; cpucounters.resize(4);
 	counters.copy_to_host(cpucounters);
-	printf("%d vertices, %d triangles\n",cpucounters[0], cpucounters[1]/3);
+	tlog::info() << "#vertices=" << cpucounters[0] << " #triangles=" << (cpucounters[1]/3);
 
 	uint32_t n_verts=(cpucounters[0]+127)&~127; // round for later nn stuff
 	verts_out.resize(n_verts);
@@ -945,9 +955,9 @@ void save_density_grid_to_png(const GPUMemory<float> &density, const char *filen
 		}
 	}
 	uint32_t N = res3d.x()*res3d.y()*res3d.z();
-	printf("%u lattice points\n", N);
-	printf("%u (%0.2f%%) voxels have a zero crossing\n", num_voxels, (num_voxels*100.0)/N);
-	printf("%u (%0.2f%%) lattice points are near a zero crossing\n", num_lattice_points_near_zero_crossing, (num_lattice_points_near_zero_crossing*100.0)/N );
+	tlog::info() << "#lattice points=" << N;
+	tlog::info() << num_voxels << " (" << ((num_voxels*100.0)/N) << "%%) voxels have a zero crossing";
+	tlog::info() << num_lattice_points_near_zero_crossing << " (" << ((num_lattice_points_near_zero_crossing*100.0)/N) << "%%) lattice points are near a zero crossing";
 
 	if (swap_y_z) {
 		res3d = {res3d.x(), res3d.z(), res3d.y()};

@@ -1480,7 +1480,6 @@ uint32_t Testbed::network_num_forward_activations() const {
 void Testbed::set_max_level(float maxlevel) {
 	if (!m_network) return;
 	auto hg_enc = dynamic_cast<GridEncoding<network_precision_t>*>(m_encoding.get());
-	printf("set max level %p ...\n", hg_enc);
 	if (hg_enc) {
 		hg_enc->set_max_level(maxlevel);
 	}
