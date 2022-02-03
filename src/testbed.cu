@@ -648,7 +648,7 @@ void Testbed::imgui() {
 			if (m_testbed_mode == ETestbedMode::Nerf) {
 				ImGui::SameLine();
 				if (imgui_colored_button("Save RGBA PNG sequence", 0.2f)) {
-					auto effective_view_dir = flip_y_and_z_axes ? Vector3f{0.0f, 0.0f, 1.0f} : Vector3f{0.0f, 1.0f, 0.0f};
+					auto effective_view_dir = flip_y_and_z_axes ? Vector3f{0.0f, 1.0f, 0.0f} : Vector3f{0.0f, 0.0f, 1.0f};
 					GPUMemory<Array4f> rgba = get_rgba_on_grid(res3d, effective_view_dir);
 					auto dir = m_data_path / "rgba_slices";
 					if (!dir.exists()) {
