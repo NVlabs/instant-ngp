@@ -37,20 +37,20 @@ public:
 
 	virtual ~TrainableBuffer() { }
 
-	void inference(cudaStream_t stream, const tcnn::GPUMatrix<float>& input, tcnn::GPUMatrix<float>& output) override {
+	void inference(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<float>& output) override {
 		throw std::runtime_error{"The trainable buffer does not support inference(). Its content is meant to be used externally."};
 	}
 
-	void forward(cudaStream_t stream, const tcnn::GPUMatrix<float>& input, tcnn::GPUMatrixDynamic<T>* output = nullptr, bool use_inference_matrices = false, bool prepare_input_gradients = false) override {
+	void forward(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<T>* output = nullptr, bool use_inference_matrices = false, bool prepare_input_gradients = false) override {
 		throw std::runtime_error{"The trainable buffer does not support forward(). Its content is meant to be used externally."};
 	}
 
 	void backward(
 		cudaStream_t stream,
-		const tcnn::GPUMatrix<float>& input,
+		const tcnn::GPUMatrixDynamic<float>& input,
 		const tcnn::GPUMatrixDynamic<T>& output,
 		const tcnn::GPUMatrixDynamic<T>& dL_doutput,
-		tcnn::GPUMatrix<float>* dL_dinput = nullptr,
+		tcnn::GPUMatrixDynamic<float>* dL_dinput = nullptr,
 		bool use_inference_matrices = false,
 		bool compute_param_gradients = true
 	) override {

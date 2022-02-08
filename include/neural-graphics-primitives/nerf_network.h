@@ -183,7 +183,7 @@ public:
 
 	virtual ~NerfNetwork() { }
 
-	void inference(cudaStream_t stream, const tcnn::GPUMatrix<float>& input, tcnn::GPUMatrix<float>& output) override {
+	void inference(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<float>& output) override {
 		// Make sure our teporary buffers have the correct size for the given batch size
 		uint32_t batch_size = input.n();
 		if (m_inference_density_network_input.n() != batch_size) {
@@ -194,9 +194,9 @@ public:
 		tcnn::linear_kernel(tcnn::cast_from<T>, 0, stream, m_inference_network_output.n_elements(), m_inference_network_output.data(), output.data());
 	}
 
-	void inference_mixed_precision(cudaStream_t stream, const tcnn::GPUMatrix<float>& input, tcnn::GPUMatrixDynamic<T>& output, bool use_inference_matrices = true) {
-		if (output.layout() != tcnn::CM) {
-			throw std::runtime_error("NerfNetwork::inference_mixed_precision output must be in column major format.");
+	void inference_mixed_precision(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<T>& output, bool use_inference_matrices = true) override {
+		if (input.layout() != tcnn::CM || output.layout() != tcnn::CM) {
+			throw std::runtime_error("NerfNetwork::inference_mixed_precision input and output must be in column major format.");
 		}
 
 		// Make sure our teporary buffers have the correct size for the given batch size
@@ -258,7 +258,11 @@ public:
 		m_density_network->inference_mixed_precision(stream, m_inference_density_network_input, output, use_inference_matrices);
 	}
 
-	void density(cudaStream_t stream, const tcnn::GPUMatrix<float>& input, tcnn::GPUMatrixDynamic<T>& output, bool use_inference_matrices = true) {
+	void density(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<T>& output, bool use_inference_matrices = true) {
+		if (input.layout() != tcnn::CM) {
+			throw std::runtime_error("NerfNetwork::density input must be in column major format.");
+		}
+
 		density(stream, {input.data(), input.m()}, output, use_inference_matrices);
 	}
 
@@ -270,9 +274,9 @@ public:
 		return m_pos_encoding->num_encoded_dims();
 	}
 
-	void forward(cudaStream_t stream, const tcnn::GPUMatrix<float>& input, tcnn::GPUMatrixDynamic<T>* output = nullptr, bool use_inference_matrices = false, bool prepare_input_gradients = false) override {
-		if (output && output->layout() != tcnn::CM) {
-			throw std::runtime_error("NerfNetwork::forward output must be in column major format.");
+	void forward(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<T>* output = nullptr, bool use_inference_matrices = false, bool prepare_input_gradients = false) override {
+		if (input.layout() != tcnn::CM || (output && output->layout() != tcnn::CM)) {
+			throw std::runtime_error("NerfNetwork::forward input and output must be in column major format.");
 		}
 
 		// Make sure our temporary buffers have the correct size for the given batch size
@@ -320,15 +324,15 @@ public:
 
 	void backward(
 		cudaStream_t stream,
-		const tcnn::GPUMatrix<float>& input,
+		const tcnn::GPUMatrixDynamic<float>& input,
 		const tcnn::GPUMatrixDynamic<T>& output,
 		const tcnn::GPUMatrixDynamic<T>& dL_doutput,
-		tcnn::GPUMatrix<float>* dL_dinput = nullptr,
+		tcnn::GPUMatrixDynamic<float>* dL_dinput = nullptr,
 		bool use_inference_matrices = false,
 		bool compute_param_gradients = true
 	) override {
-		if (output.layout() != tcnn::CM || dL_doutput.layout() != tcnn::CM) {
-			throw std::runtime_error("NerfNetwork::backward output must be in column major format.");
+		if (input.layout() != tcnn::CM || output.layout() != tcnn::CM || dL_doutput.layout() != tcnn::CM || (dL_dinput && dL_dinput->layout() != tcnn::CM)) {
+			throw std::runtime_error("NerfNetwork::backward input and output must be in column major format.");
 		}
 
 		// Make sure our teporary buffers have the correct size for the given batch size
