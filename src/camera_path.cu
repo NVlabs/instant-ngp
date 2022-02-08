@@ -23,11 +23,10 @@
 #include <json/json.hpp>
 #include <fstream>
 
-
-NGP_NAMESPACE_BEGIN
-
 using namespace Eigen;
 using namespace nlohmann;
+
+NGP_NAMESPACE_BEGIN
 
 CameraKeyframe lerp(const CameraKeyframe& p0, const CameraKeyframe& p1, float t, float t0, float t1) {
 	t = (t - t0) / (t1 - t0);

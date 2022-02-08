@@ -11,6 +11,7 @@
 /** @file   program.h
  *  @author Thomas Müller, NVIDIA
  */
+
 #pragma once
 
 NGP_NAMESPACE_BEGIN

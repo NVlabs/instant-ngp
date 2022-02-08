@@ -43,7 +43,6 @@ namespace optix_ptx {
 using namespace Eigen;
 using namespace tcnn;
 
-
 NGP_NAMESPACE_BEGIN
 
 constexpr float MAX_DIST = 10.0f;

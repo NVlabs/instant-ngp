@@ -23,7 +23,6 @@
 
 #include <Eigen/Dense>
 
-
 NGP_NAMESPACE_BEGIN
 
 using precision_t = tcnn::network_precision_t;

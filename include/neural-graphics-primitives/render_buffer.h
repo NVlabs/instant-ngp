@@ -21,7 +21,6 @@
 #include <memory>
 #include <vector>
 
-
 NGP_NAMESPACE_BEGIN
 
 typedef unsigned int GLenum;

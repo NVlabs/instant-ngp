@@ -24,7 +24,6 @@
 #include <tiny-cuda-nn/gpu_memory.h>
 #include <tiny-cuda-nn/network.h>
 
-
 NGP_NAMESPACE_BEGIN
 
 template <uint32_t N_DIMS, uint32_t RANK, typename T>

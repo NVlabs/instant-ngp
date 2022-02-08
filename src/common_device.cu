@@ -23,7 +23,6 @@
 using namespace Eigen;
 using namespace tcnn;
 
-
 NGP_NAMESPACE_BEGIN
 
 Matrix<float, 3, 4> log_space_lerp(const Matrix<float, 3, 4>& begin, const Matrix<float, 3, 4>& end, float t) {

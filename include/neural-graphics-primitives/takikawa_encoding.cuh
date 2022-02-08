@@ -23,7 +23,6 @@
 #include <tiny-cuda-nn/encoding.h>
 #include <tiny-cuda-nn/random.h>
 
-
 NGP_NAMESPACE_BEGIN
 
 template <typename T, uint32_t N_FEATURES_PER_LEVEL>

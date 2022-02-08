@@ -34,7 +34,6 @@
 using namespace Eigen;
 using namespace tcnn;
 
-
 NGP_NAMESPACE_BEGIN
 
 __device__ Array4f proc_envmap(const Vector3f& dir, const Vector3f& up_dir, const Vector3f& sun_dir, const Array3f& skycol) {

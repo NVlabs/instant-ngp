@@ -51,7 +51,6 @@
 
 #include <functional>
 
-
 NGP_NAMESPACE_BEGIN
 
 using Vector2i32 = Eigen::Matrix<uint32_t, 2, 1>;

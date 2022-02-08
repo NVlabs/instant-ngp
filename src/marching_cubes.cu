@@ -41,7 +41,6 @@ using namespace Eigen;
 using namespace tcnn;
 namespace fs = filesystem;
 
-
 NGP_NAMESPACE_BEGIN
 
 Vector3i get_marching_cubes_res(uint32_t res_1d, const BoundingBox &aabb) {
@@ -124,7 +123,7 @@ void draw_mesh_gl(
 			cudaGLRegisterBufferObject(VBO[i]);
 		}
 	}
-	if (elssize!=indices.size()) {
+	if (elssize != indices.size()) {
 		if (els) {
 			cudaGLUnregisterBufferObject(els);
 			glDeleteBuffers(1, &els);
@@ -154,7 +153,7 @@ void draw_mesh_gl(
 	cudaGLUnmapBufferObject(els);
 
 	if (!program) {
-		vs = compile_shader(false,R"foo(
+		vs = compile_shader(false, R"foo(
 layout (location = 0) in vec3 pos;
 layout (location = 1) in vec3 nor;
 layout (location = 2) in vec3 col;
@@ -166,34 +165,35 @@ uniform vec2 cen;
 uniform int mode;
 void main()
 {
-	vec4 p = camera * vec4(pos,1.) ;
-	p.xy*=vec2(2.,-2.)*f.xy/vec2(res.xy);
-	p.w=p.z;
-	p.z=p.z-0.1;
-	if (mode==2)
-		vtxcol= normalize(nor)*0.5+vec3(0.5); // visualize vertex normals
-	else
-		vtxcol= col;
+	vec4 p = camera * vec4(pos, 1.0);
+	p.xy *= vec2(2.0, -2.0) * f.xy / vec2(res.xy);
+	p.w = p.z;
+	p.z = p.z - 0.1;
+	if (mode == 2) {
+		vtxcol = normalize(nor) * 0.5 + vec3(0.5); // visualize vertex normals
+	} else {
+		vtxcol = col;
+	}
 	gl_Position = p;
 }
 )foo");
-		ps = compile_shader(true,R"foo(
+		ps = compile_shader(true, R"foo(
 #extension GL_NV_fragment_shader_barycentric : enable
 layout (location = 0) out vec4 o;
 in vec3 vtxcol;
 uniform int mode;
 void main() {
-	if (mode==3) {
-		vec3 tricol=vec3((ivec3(923,3572,5423)*gl_PrimitiveID)&255)*(1./255.);
-		o=vec4(tricol,1.0);
+	if (mode == 3) {
+		vec3 tricol = vec3((ivec3(923, 3572, 5423) * gl_PrimitiveID) & 255) * (1.0 / 255.0);
+		o = vec4(tricol, 1.0);
 	} else {
-		o=vec4(vtxcol,1.0);
+		o = vec4(vtxcol, 1.0);
 	}
 	float aa, edge;
-	aa=fwidth(gl_BaryCoordNV.x); edge = smoothstep(0.f,aa, gl_BaryCoordNV.x);
-	aa=fwidth(gl_BaryCoordNV.y); edge = min(edge, smoothstep(0.f,aa, gl_BaryCoordNV.y));
-	aa=fwidth(gl_BaryCoordNV.z); edge = min(edge, smoothstep(0.f,aa, gl_BaryCoordNV.z));
-	o.xyz*=sqrt(edge*0.5+0.5);
+	aa = fwidth(gl_BaryCoordNV.x); edge = smoothstep(0.0, aa, gl_BaryCoordNV.x);
+	aa = fwidth(gl_BaryCoordNV.y); edge = min(edge, smoothstep(0.0, aa, gl_BaryCoordNV.y));
+	aa = fwidth(gl_BaryCoordNV.z); edge = min(edge, smoothstep(0.0, aa, gl_BaryCoordNV.z));
+	o.xyz *= sqrt(edge * 0.5 + 0.5);
 }
 )foo");
 		program = glCreateProgram();

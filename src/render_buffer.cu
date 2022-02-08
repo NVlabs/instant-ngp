@@ -35,7 +35,6 @@
 using namespace Eigen;
 using namespace tcnn;
 
-
 NGP_NAMESPACE_BEGIN
 
 extern std::atomic<size_t> g_total_n_bytes_allocated;

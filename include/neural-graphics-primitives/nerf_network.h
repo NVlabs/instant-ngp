@@ -26,7 +26,6 @@
 
 #include <tiny-cuda-nn/network_with_input_encoding.h>
 
-
 NGP_NAMESPACE_BEGIN
 
 template <typename T>
@@ -156,7 +155,6 @@ __global__ void extract_dir_gradient(
 
 	density_out[i] = rgb_in[offset + elem_idx*stride + dim_idx];
 }
-
 
 template <typename T>
 class NerfNetwork : public tcnn::Network<float, T> {

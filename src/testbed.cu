@@ -67,7 +67,6 @@ using namespace Eigen;
 using namespace tcnn;
 namespace fs = filesystem;
 
-
 NGP_NAMESPACE_BEGIN
 
 std::atomic<size_t> g_total_n_bytes_allocated{0};

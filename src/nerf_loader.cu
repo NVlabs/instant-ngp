@@ -54,12 +54,10 @@ using namespace std::literals;
 using namespace Eigen;
 namespace fs = filesystem;
 
-
 NGP_NAMESPACE_BEGIN
 
 // how much to scale the scene by vs the original nerf dataset; we want to fit the thing in the unit cube
 static constexpr float NERF_SCALE = 0.33f;
-
 
 __global__ void from_fullp(const uint64_t num_elements, const float* __restrict__ pixels, __half* __restrict__ out) {
 	const uint64_t i = threadIdx.x + blockIdx.x * blockDim.x;

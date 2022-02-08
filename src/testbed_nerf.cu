@@ -12,7 +12,6 @@
  *  @author Thomas Müller & Alex Evans, NVIDIA
  */
 
-
 #include <neural-graphics-primitives/adam_optimizer.h>
 #include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/common_device.cuh>
@@ -41,7 +40,6 @@
 using namespace Eigen;
 using namespace tcnn;
 namespace fs = filesystem;
-
 
 NGP_NAMESPACE_BEGIN
 

@@ -33,7 +33,6 @@
 #define TINYEXR_IMPLEMENTATION
 #include <tinyexr/tinyexr.h>
 
-
 using namespace tcnn;
 
 NGP_NAMESPACE_BEGIN

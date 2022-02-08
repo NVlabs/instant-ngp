@@ -36,7 +36,6 @@
 #include <pybind11/numpy.h>
 #endif
 
-
 struct GLFWwindow;
 
 TCNN_NAMESPACE_BEGIN
@@ -47,7 +46,6 @@ template <typename T, typename PARAMS_T> class Network;
 template <typename T, typename PARAMS_T, typename COMPUTE_T> class Trainer;
 template <uint32_t N_DIMS, uint32_t RANK, typename T> class TrainableBuffer;
 TCNN_NAMESPACE_END
-
 
 NGP_NAMESPACE_BEGIN
 

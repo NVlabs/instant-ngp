@@ -16,7 +16,6 @@
 
 #include <tiny-cuda-nn/common.h>
 
-
 NGP_NAMESPACE_BEGIN
 
 Eigen::Vector3i get_marching_cubes_res(uint32_t res_1d, const BoundingBox &aabb);

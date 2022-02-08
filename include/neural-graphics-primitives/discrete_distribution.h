@@ -12,7 +12,7 @@
  *  @author Thomas Müller, NVIDIA
  */
 
- #pragma once
+#pragma once
 
 NGP_NAMESPACE_BEGIN
 

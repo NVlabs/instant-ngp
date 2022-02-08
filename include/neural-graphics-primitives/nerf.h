@@ -12,17 +12,18 @@
  *  @author Thomas Müller & Alex Evans, NVIDIA
  */
 
-
 #pragma once
 
 #include <neural-graphics-primitives/common.h>
 
 #include <tiny-cuda-nn/gpu_memory.h>
 
-
 NGP_NAMESPACE_BEGIN
 
-inline constexpr __device__ uint32_t NERF_GRIDSIZE() { return 128; } // size of the density/occupancy grid.
+// size of the density/occupancy grid in number of cells along an axis.
+inline constexpr __device__ uint32_t NERF_GRIDSIZE() {
+	return 128;
+}
 
 struct NerfPayload {
 	Eigen::Vector3f origin;

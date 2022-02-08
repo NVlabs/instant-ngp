@@ -13,6 +13,8 @@
  *  @brief  Conversion between eigen
  */
 
+#pragma once
+
 #include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/nerf_loader.h>
 

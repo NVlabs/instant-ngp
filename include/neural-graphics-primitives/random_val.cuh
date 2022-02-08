@@ -23,7 +23,6 @@
 
 #include <Eigen/Dense>
 
-
 NGP_NAMESPACE_BEGIN
 
 using default_rng_t = tcnn::default_rng_t;

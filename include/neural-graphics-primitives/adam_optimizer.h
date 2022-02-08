@@ -16,7 +16,6 @@
 
 #include <neural-graphics-primitives/common.h>
 
-
 NGP_NAMESPACE_BEGIN
 
 template <typename T>

@@ -12,7 +12,6 @@
  *  @author Thomas Müller & Alex Evans, NVIDIA
  */
 
-
 #include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/discrete_distribution.h>
@@ -33,7 +32,6 @@
 
 using namespace Eigen;
 using namespace tcnn;
-
 
 NGP_NAMESPACE_BEGIN
 

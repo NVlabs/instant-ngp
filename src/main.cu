@@ -12,7 +12,6 @@
  *  @author Thomas Müller, NVIDIA
  */
 
-
 #include <neural-graphics-primitives/testbed.h>
 
 #include <tiny-cuda-nn/common.h>
@@ -26,7 +25,6 @@ using namespace ngp;
 using namespace std;
 using namespace tcnn;
 namespace fs = filesystem;
-
 
 int main(int argc, char** argv) {
 	ArgumentParser parser{

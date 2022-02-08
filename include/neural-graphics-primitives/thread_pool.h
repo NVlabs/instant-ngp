@@ -13,7 +13,6 @@
 
 #pragma once
 
-
 #include <neural-graphics-primitives/common.h>
 
 #include <atomic>
@@ -22,7 +21,6 @@
 #include <future>
 #include <thread>
 #include <vector>
-
 
 NGP_NAMESPACE_BEGIN
 
