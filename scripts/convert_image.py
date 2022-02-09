@@ -20,23 +20,23 @@ import struct
 from common import read_image, write_image
 
 def parse_args():
-	parser = argparse.ArgumentParser(description="Convert image into testbed binary fp16 format (helps quickly load super large images).")
-	parser.add_argument("--image", default="", help="Path to the image to train from.")
-	parser.add_argument("--exr_out", action="store_true", help="output half precision exr")
+	parser = argparse.ArgumentParser(description="Convert image into a different format. By default, converts to our binary fp16 '.bin' format, which helps quickly load large images.")
+	parser.add_argument("--input", default="", help="Path to the image to convert.")
+	parser.add_argument("--output", default="", help="Path to the output. Defaults to <input>.bin")
 	args = parser.parse_args()
 	return args
 
 if __name__ == "__main__":
 	args = parse_args()
 	Image.MAX_IMAGE_PIXELS = 10000000000
-	print(f"loading {args.image}...")
-	img = common.read_image(args.image)
-	print(f"{img.shape[1]} x {img.shape[0]} pixels, {img.shape[2]} channels")
-	if args.exr_out:
-		outpath = os.path.splitext(args.image)[0] + ".exr"
-		print(f"writing {outpath}...")
-		common.write_image(outpath, img.astype(np.float16))
-		exit()
+	print(f"Loading {args.input}")
+	img = common.read_image(args.input)
+	print(f"{img.shape[1]}x{img.shape[0]} pixels, {img.shape[2]} channels")
 
-	img = read_image(args.image)
-	write_image(os.path.splitext(args.image)[0] + ".bin", img)
+	if not args.output:
+		output = os.path.splitext(args.input)[0] + ".bin"
+	else:
+		output = args.output
+
+	print(f"Writing {output}")
+	common.write_image(output, img.astype(np.float16))
