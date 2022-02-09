@@ -169,8 +169,8 @@ public:
 		// Assume that row-major/SoA operation will be faster, so use it if supported.
 		// This assumption is valid mostly for the (hash-)grid encoding, which is
 		// typically used for the position.
-		if (m_pos_encoding->supports_output_layout(RM)) {
-			m_pos_encoding->set_output_layout(RM);
+		if (m_pos_encoding->supports_output_layout(tcnn::RM)) {
+			m_pos_encoding->set_output_layout(tcnn::RM);
 		}
 
 		m_inference_density_network_input.set_layout(m_pos_encoding->output_layout());
