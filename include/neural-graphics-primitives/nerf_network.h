@@ -166,6 +166,15 @@ public:
 		uint32_t rgb_alignment = rgb_network.contains("otype") && (tcnn::equals_case_insensitive(rgb_network["otype"], "FullyFusedMLP") || tcnn::equals_case_insensitive(rgb_network["otype"], "MegakernelMLP")) ? 16u : 8u;
 		m_dir_encoding.reset(tcnn::create_encoding<T>(n_dir_dims, dir_encoding, rgb_alignment));
 
+		// Assume that row-major/SoA operations will be faster, so use it if supported.
+		if (m_pos_encoding->supports_output_layout(tcnn::RM)) {
+			m_pos_encoding->set_output_layout(tcnn::RM);
+		}
+
+		m_inference_density_network_input.set_layout(m_pos_encoding->output_layout());
+		m_forward_density_network_input.set_layout(m_pos_encoding->output_layout());
+		m_backward_dL_ddensity_network_input.set_layout(m_pos_encoding->output_layout());
+
 		json local_density_network_config = density_network;
 		local_density_network_config["n_input_dims"] = m_pos_encoding->num_encoded_dims();
 		if (!density_network.contains("n_output_dims")) {
@@ -375,7 +384,7 @@ public:
 			m_backward_dL_ddensity_network_output.data()
 		);
 
-		tcnn::GPUMatrix<T>* dL_ddensity_network_input = nullptr;
+		tcnn::GPUMatrixDynamic<T>* dL_ddensity_network_input = nullptr;
 		if (m_pos_encoding->n_params() > 0 || dL_dinput) {
 			dL_ddensity_network_input = &m_backward_dL_ddensity_network_input;
 		}
@@ -637,7 +646,7 @@ private:
 
 	// Temporary buffers to hold inference data
 	tcnn::GPUMemory<char> m_inference_buffer;
-	tcnn::GPUMatrix<T> m_inference_density_network_input;
+	tcnn::GPUMatrixDynamic<T> m_inference_density_network_input;
 	tcnn::GPUMatrix<T> m_inference_density_network_output;
 	tcnn::GPUMatrix<T> m_inference_rgb_network_input;
 	tcnn::GPUMatrix<T> m_inference_rgb_network_output;
@@ -645,7 +654,7 @@ private:
 
 	// Temporary buffers to hold forward data
 	tcnn::GPUMemory<char> m_forward_buffer;
-	tcnn::GPUMatrix<T> m_forward_density_network_input;
+	tcnn::GPUMatrixDynamic<T> m_forward_density_network_input;
 	tcnn::GPUMatrix<T> m_forward_density_network_output;
 	tcnn::GPUMatrix<T> m_forward_rgb_network_input;
 	tcnn::GPUMatrix<T> m_forward_rgb_network_output;
@@ -659,7 +668,7 @@ private:
 	tcnn::GPUMatrix<T> m_backward_dL_drgb_network_input;
 	tcnn::GPUMatrix<T> m_backward_dL_ddensity_network_output;
 	tcnn::GPUMatrix<T> m_backward_dL_ddir_encoding_output; // Only needed when training the dir encoding or computing input gradients
-	tcnn::GPUMatrix<T> m_backward_dL_ddensity_network_input;
+	tcnn::GPUMatrixDynamic<T> m_backward_dL_ddensity_network_input;
 	tcnn::GPUMatrix<float> m_backward_dL_dpos; // Only needed when computing input gradients
 	tcnn::GPUMatrix<float> m_backward_dL_ddir; // Only needed when computing input gradients
 };
