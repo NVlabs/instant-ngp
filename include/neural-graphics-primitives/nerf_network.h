@@ -166,9 +166,11 @@ public:
 		uint32_t rgb_alignment = rgb_network.contains("otype") && (tcnn::equals_case_insensitive(rgb_network["otype"], "FullyFusedMLP") || tcnn::equals_case_insensitive(rgb_network["otype"], "MegakernelMLP")) ? 16u : 8u;
 		m_dir_encoding.reset(tcnn::create_encoding<T>(n_dir_dims, dir_encoding, rgb_alignment));
 
-		// Assume that row-major/SoA operations will be faster, so use it if supported.
-		if (m_pos_encoding->supports_output_layout(tcnn::RM)) {
-			m_pos_encoding->set_output_layout(tcnn::RM);
+		// Assume that row-major/SoA operation will be faster, so use it if supported.
+		// This assumption is valid mostly for the (hash-)grid encoding, which is
+		// typically used for the position.
+		if (m_pos_encoding->supports_output_layout(RM)) {
+			m_pos_encoding->set_output_layout(RM);
 		}
 
 		m_inference_density_network_input.set_layout(m_pos_encoding->output_layout());
