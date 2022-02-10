@@ -113,7 +113,6 @@ public:
 		NerfTracer() : m_hit_counter(1), m_alive_counter(1) {}
 
 		void init_rays_from_camera(
-			tcnn::GPUMemory<char>& scratch_memory,
 			uint32_t spp,
 			uint32_t padded_output_width,
 			const Eigen::Vector2i& resolution,
@@ -159,10 +158,14 @@ public:
 			cudaStream_t stream
 		);
 
-		void enlarge(tcnn::GPUMemory<char>& scratch_memory, size_t n_elements, uint32_t padded_output_width);
+		void enlarge(size_t n_elements, uint32_t padded_output_width, cudaStream_t stream);
 		RaysNerfSoa& rays_hit() { return m_rays_hit; }
 		RaysNerfSoa& rays_init() { return m_rays[0]; }
 		uint32_t n_rays_initialized() const { return m_n_rays_initialized; }
+
+		void clear() {
+			m_scratch_alloc = {};
+		}
 
 	private:
 		RaysNerfSoa m_rays[2];
@@ -172,6 +175,7 @@ public:
 		tcnn::GPUMemory<uint32_t> m_hit_counter;
 		tcnn::GPUMemory<uint32_t> m_alive_counter;
 		uint32_t m_n_rays_initialized = 0;
+		tcnn::GPUMemoryArena::Allocation m_scratch_alloc;
 	};
 
 	class FiniteDifferenceNormalsApproximator {
@@ -422,8 +426,6 @@ public:
 
 	std::vector<CudaRenderBuffer> m_render_surfaces;
 	std::unique_ptr<CudaRenderBuffer> m_pip_render_surface;
-
-	tcnn::GPUMemory<char> m_scratch_gpu_memory;
 
 	struct Nerf {
 		NerfTracer tracer;
