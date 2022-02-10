@@ -1743,7 +1743,6 @@ __global__ void safe_divide(const uint32_t num_elements, float* __restrict__ ino
 }
 
 void Testbed::NerfTracer::init_rays_from_camera(
-	GPUMemory<char>& scratch_memory,
 	uint32_t spp,
 	uint32_t padded_output_width,
 	const Vector2i& resolution,
@@ -1769,7 +1768,7 @@ void Testbed::NerfTracer::init_rays_from_camera(
 ) {
 	// Make sure we have enough memory reserved to render at the requested resolution
 	size_t n_pixels = (size_t)resolution.x() * resolution.y();
-	enlarge(scratch_memory, n_pixels, padded_output_width);
+	enlarge(n_pixels, padded_output_width, stream);
 
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)resolution.x(), threads.x), div_round_up((uint32_t)resolution.y(), threads.y), 1 };
@@ -1923,10 +1922,10 @@ uint32_t Testbed::NerfTracer::trace(
 	return n_hit;
 }
 
-void Testbed::NerfTracer::enlarge(tcnn::GPUMemory<char>& scratch_memory, size_t n_elements, uint32_t padded_output_width) {
+void Testbed::NerfTracer::enlarge(size_t n_elements, uint32_t padded_output_width, cudaStream_t stream) {
 	n_elements = next_multiple(n_elements, size_t(BATCH_SIZE_MULTIPLE)); // network inference rounds n_elements up to 256, and uses these arrays, so we must do so also.
 
-	auto scratch = scratch_memory.enlarge_and_distribute<
+	auto scratch = allocate_workspace_and_distribute<
 		Array4f, NerfPayload, // m_rays[0]
 		Array4f, NerfPayload, // m_rays[1]
 		Array4f, NerfPayload, // m_rays_hit
@@ -1934,6 +1933,7 @@ void Testbed::NerfTracer::enlarge(tcnn::GPUMemory<char>& scratch_memory, size_t 
 		network_precision_t,
 		NerfCoordinate
 	>(
+		stream, &m_scratch_alloc,
 		n_elements, n_elements,
 		n_elements, n_elements,
 		n_elements, n_elements,
@@ -1950,9 +1950,6 @@ void Testbed::NerfTracer::enlarge(tcnn::GPUMemory<char>& scratch_memory, size_t 
 }
 
 void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_res, const Vector2f& focal_length, const Matrix<float, 3, 4>& camera_matrix0, const Matrix<float, 3, 4>& camera_matrix1, const Vector2f& screen_center, cudaStream_t stream) {
-	// Reserve the memory for max-res rendering to prevent stuttering
-	m_nerf.tracer.enlarge(m_scratch_gpu_memory, max_res.x() * max_res.y(), m_network->padded_output_width());
-
 	float plane_z = m_slice_plane_z + m_scale;
 	if (m_render_mode == ERenderMode::Slice) {
 		plane_z = -plane_z;
@@ -1960,8 +1957,11 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 
 	ERenderMode render_mode = m_visualized_dimension > -1 ? ERenderMode::EncodingVis : m_render_mode;
 
+	ScopeGuard tmp_memory_guard{[&]() {
+		m_nerf.tracer.clear();
+	}};
+
 	m_nerf.tracer.init_rays_from_camera(
-		m_scratch_gpu_memory,
 		render_buffer.spp(),
 		m_network->padded_output_width(),
 		render_buffer.resolution(),
@@ -2183,12 +2183,13 @@ void Testbed::update_density_grid_nerf(float decay, uint32_t n_uniform_density_g
 
 	const uint32_t padded_output_width = m_nerf_network->padded_density_output_width();
 
-	auto scratch = m_scratch_gpu_memory.enlarge_and_distribute<
+	GPUMemoryArena::Allocation alloc;
+	auto scratch = allocate_workspace_and_distribute<
 		NerfPosition,       // positions at which the NN will be queried for density evaluation
 		uint32_t,           // indices of corresponding density grid cells
 		float,              // the resulting densities `density_grid_tmp` to be merged with the running estimate of the grid
 		network_precision_t // output of the MLP before being converted to densities.
-	>(n_density_grid_samples, n_elements, n_elements, n_density_grid_samples * padded_output_width);
+	>(stream, &alloc, n_density_grid_samples, n_elements, n_elements, n_density_grid_samples * padded_output_width);
 
 	NerfPosition* density_grid_positions = std::get<0>(scratch);
 	uint32_t* density_grid_indices = std::get<1>(scratch);
@@ -2501,7 +2502,8 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 
 	m_nerf.training.ray_counter.enlarge(1);
 
-	auto scratch = m_scratch_gpu_memory.enlarge_and_distribute<
+	GPUMemoryArena::Allocation alloc;
+	auto scratch = allocate_workspace_and_distribute<
 		uint32_t, // ray_indices
 		Ray, // rays
 		uint32_t, // numsteps
@@ -2514,6 +2516,7 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 		NerfCoordinate, // coords_gradient
 		float // max_level_compacted
 	>(
+		stream, &alloc,
 		n_rays_per_batch,
 		n_rays_per_batch,
 		n_rays_per_batch * 2,
@@ -2799,10 +2802,11 @@ GPUMemory<float> Testbed::get_density_on_grid(Vector3i res3d, const BoundingBox&
 
 	const uint32_t padded_output_width = nerf_mode ? m_nerf_network->padded_density_output_width() : m_network->padded_output_width();
 
-	auto scratch = m_scratch_gpu_memory.enlarge_and_distribute<
+	GPUMemoryArena::Allocation alloc;
+	auto scratch = allocate_workspace_and_distribute<
 		NerfPosition,
 		network_precision_t
-	>(n_elements, batch_size * padded_output_width);
+	>(m_inference_stream, &alloc, n_elements, batch_size * padded_output_width);
 
 	NerfPosition* positions = std::get<0>(scratch);
 	network_precision_t* mlp_out = std::get<1>(scratch);
@@ -2871,7 +2875,7 @@ int Testbed::marching_cubes(Vector3i res3d, const BoundingBox& aabb, float thres
 	res3d.z() = next_multiple((unsigned int)res3d.z(), 16u);
 
 	GPUMemory<float> density = get_density_on_grid(res3d, aabb);
-	marching_cubes_gpu(m_scratch_gpu_memory, m_render_aabb, res3d, thresh, density, m_mesh.verts, m_mesh.indices);
+	marching_cubes_gpu(m_inference_stream, m_render_aabb, res3d, thresh, density, m_mesh.verts, m_mesh.indices);
 
 	uint32_t n_verts = (uint32_t)m_mesh.verts.size();
 	m_mesh.verts_gradient.resize(n_verts);

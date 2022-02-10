@@ -754,15 +754,17 @@ void compute_mesh_opt_gradients(float thresh,
 	);
 }
 
-void marching_cubes_gpu(GPUMemory<char>& scratch_memory, BoundingBox aabb, Vector3i res_3d, float thresh, const tcnn::GPUMemory<float>& density, tcnn::GPUMemory<Vector3f>& verts_out, tcnn::GPUMemory<uint32_t>& indices_out) {
+void marching_cubes_gpu(cudaStream_t stream, BoundingBox aabb, Vector3i res_3d, float thresh, const tcnn::GPUMemory<float>& density, tcnn::GPUMemory<Vector3f>& verts_out, tcnn::GPUMemory<uint32_t>& indices_out) {
 	GPUMemory<uint32_t> counters;
 
 	counters.enlarge(4);
 	counters.memset(0);
 
-	scratch_memory.enlarge(res_3d.x() * res_3d.y() * res_3d.z() * 3 * sizeof(int));
-	scratch_memory.memset(-1);
-	int* vertex_grid = (int*)scratch_memory.data();
+	size_t n_bytes = res_3d.x() * res_3d.y() * res_3d.z() * 3 * sizeof(int);
+	auto workspace = allocate_workspace(stream, n_bytes);
+	CUDA_CHECK_THROW(cudaMemsetAsync(workspace.data(), -1, n_bytes, stream));
+
+	int* vertex_grid = (int*)workspace.data();
 
 	const dim3 threads = { 4, 4, 4 };
 	const dim3 blocks = { div_round_up((uint32_t)res_3d.x(), threads.x), div_round_up((uint32_t)res_3d.y(), threads.y), div_round_up((uint32_t)res_3d.z(), threads.z) };
