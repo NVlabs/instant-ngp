@@ -843,7 +843,7 @@ void Testbed::render_sdf(
 	if (m_render_mode == ERenderMode::Slice) {
 		if (m_visualized_dimension == -1) {
 			distance_function(n_hit, rays_hit.pos, rays_hit.distance, stream);
-			extract_dimension_pos_neg_kernel<float><<<n_blocks_linear(n_hit*3), n_threads_linear, 0, stream>>>(n_hit*3, 0, 1, 3, rays_hit.distance.data(), (float*)rays_hit.normal.data());
+			extract_dimension_pos_neg_kernel<float><<<n_blocks_linear(n_hit*3), n_threads_linear, 0, stream>>>(n_hit*3, 0, 1, 3, rays_hit.distance.data(), CM, (float*)rays_hit.normal.data());
 		} else {
 			// Store colors in the normal buffer
 			uint32_t n_elements = next_multiple(n_hit, BATCH_SIZE_MULTIPLE);

@@ -180,7 +180,7 @@ public:
 		}
 		m_density_network.reset(tcnn::create_network<T>(local_density_network_config));
 
-		m_rgb_network_input_width = tcnn::next_multiple(m_dir_encoding->num_encoded_dims() + m_density_network->padded_output_width() - 1, rgb_alignment);
+		m_rgb_network_input_width = tcnn::next_multiple(m_dir_encoding->num_encoded_dims() + m_density_network->padded_output_width(), rgb_alignment);
 
 		json local_rgb_network_config = rgb_network;
 		local_rgb_network_config["n_input_dims"] = m_rgb_network_input_width;
@@ -509,11 +509,11 @@ public:
 
 	uint32_t width(uint32_t layer) const override {
 		if (layer == 0) {
-			return m_forward.density_network_input.m();
+			return m_pos_encoding->num_encoded_dims();
 		} else if (layer < m_density_network->num_forward_activations() + 1) {
 			return m_density_network->width(layer - 1);
 		} else if (layer == m_density_network->num_forward_activations() + 1) {
-			return m_forward.rgb_network_input.m();
+			return m_rgb_network_input_width;
 		} else {
 			return m_rgb_network->width(layer - 2 - m_density_network->num_forward_activations());
 		}
@@ -523,17 +523,17 @@ public:
 		return m_density_network->num_forward_activations() + m_rgb_network->num_forward_activations() + 2;
 	}
 
-	const T* forward_activations(uint32_t layer) const override {
+	std::pair<const T*, tcnn::MatrixLayout> forward_activations(uint32_t layer) const override {
 		if (!m_forward.density_network_input.data()) {
 			throw std::runtime_error{"Must call forward() before accessing activations."};
 		}
 
 		if (layer == 0) {
-			return m_forward.density_network_input.data();
+			return {m_forward.density_network_input.data(), m_pos_encoding->output_layout()};
 		} else if (layer < m_density_network->num_forward_activations() + 1) {
 			return m_density_network->forward_activations(layer - 1);
 		} else if (layer == m_density_network->num_forward_activations() + 1) {
-			return m_forward.rgb_network_input.data();
+			return {m_forward.rgb_network_input.data(), m_dir_encoding->output_layout()};
 		} else {
 			return m_rgb_network->forward_activations(layer - 2 - m_density_network->num_forward_activations());
 		}
