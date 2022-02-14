@@ -326,7 +326,7 @@ void Testbed::imgui() {
 	}
 	ImGui::End();
 
-	ImGui::Begin("tiny-cuda-nn");
+	ImGui::Begin("instant-ngp v" NGP_VERSION);
 
 	size_t n_bytes = tcnn::total_n_bytes_allocated() + g_total_n_bytes_allocated;
 	ImGui::Text("Frame: %.3f ms (%.1f FPS); Mem: %s", m_gui_elapsed_ms, 1000.0f / m_gui_elapsed_ms, bytes_to_string(n_bytes).c_str());

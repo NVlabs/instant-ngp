@@ -15,7 +15,7 @@ PROJECT(instant-ngp
 )
 set(NGP_VERSION "${CMAKE_PROJECT_VERSION}")
 
-if (NOT TEV_DEPLOY)
+if (NOT NGP_DEPLOY)
     set(NGP_VERSION "${NGP_VERSION}dev")
 endif()
 
