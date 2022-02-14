@@ -2154,6 +2154,19 @@ void Testbed::load_nerf() {
 
 	update_nerf_transforms();
 
+	if (!is_pot(m_nerf.training.dataset.aabb_scale)) {
+		throw std::runtime_error{std::string{"NeRF dataset's `aabb_scale` must be a power of two, but is "} + std::to_string(m_nerf.training.dataset.aabb_scale)};
+	}
+
+	int max_aabb_scale = 1 << (NERF_CASCADES()-1);
+	if (m_nerf.training.dataset.aabb_scale > max_aabb_scale) {
+		throw std::runtime_error{
+			std::string{"NeRF dataset must have `aabb_scale <= "} + std::to_string(max_aabb_scale) +
+			"`, but is " + std::to_string(m_nerf.training.dataset.aabb_scale) +
+			". You can increase this limit by factors of 2 by incrementing `NERF_CASCADES()` and re-compiling."
+		};
+	}
+
 	m_aabb = BoundingBox{Vector3f::Constant(0.5f), Vector3f::Constant(0.5f)};
 	m_aabb.inflate(0.5f * std::min(1 << (NERF_CASCADES()-1), m_nerf.training.dataset.aabb_scale));
 	m_raw_aabb = m_aabb;
