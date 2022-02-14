@@ -10,7 +10,7 @@ In each case, we train and render a MLP with multiresolution hash input encoding
 > __Instant Neural Graphics Primitives with a Multiresolution Hash Encoding__  
 > [Thomas Müller](https://tom94.net), [Alex Evans](https://research.nvidia.com/person/alex-evans), [Christoph Schied](https://research.nvidia.com/person/christoph-schied), [Alexander Keller](https://research.nvidia.com/person/alex-keller)  
 > _[arXiv:2201.05989 [cs.CV]](https://arxiv.org/abs/2201.05989), Jan 2022_  
-> __[&nbsp;[Project page](https://nvlabs.github.io/instant-ngp)&nbsp;] [&nbsp;[Paper](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.pdf)&nbsp;] [&nbsp;[Video](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.mp4)&nbsp;] [&nbsp;[BibTeX](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.bib)&nbsp;]__
+> __[Project page](https://nvlabs.github.io/instant-ngp)&nbsp;/ [Paper](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.pdf)&nbsp;/ [Video](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.mp4)&nbsp;/ [BibTeX](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.bib)__
 
 For business inquiries, please visit our website and submit the form: [NVIDIA Research Licensing](https://www.nvidia.com/en-us/research/inquiries/)
 
