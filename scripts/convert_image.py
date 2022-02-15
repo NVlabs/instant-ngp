@@ -9,15 +9,9 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 import argparse
-import os
 import common
-from PIL import Image
-import pyexr as exr
 import numpy as np
-
-import struct
-
-from common import read_image, write_image
+import os
 
 def parse_args():
 	parser = argparse.ArgumentParser(description="Convert image into a different format. By default, converts to our binary fp16 '.bin' format, which helps quickly load large images.")
