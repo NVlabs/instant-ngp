@@ -2702,10 +2702,12 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 	);
 
 	bool train_camera = m_nerf.training.optimize_extrinsics || m_nerf.training.optimize_distortion || m_nerf.training.optimize_focal_length;
-	m_network->forward(stream, compacted_coords_matrix, &compacted_rgbsigma_matrix, false, train_camera);
-
 	GPUMatrix<float> coords_gradient_matrix((float*)coords_gradient, sizeof(NerfCoordinate)/sizeof(float), target_batch_size);
-	m_network->backward(stream, compacted_coords_matrix, compacted_rgbsigma_matrix, gradient_matrix, train_camera ? &coords_gradient_matrix : nullptr);
+
+	{
+		auto ctx = m_network->forward(stream, compacted_coords_matrix, &compacted_rgbsigma_matrix, false, train_camera);
+		m_network->backward(stream, *ctx, compacted_coords_matrix, compacted_rgbsigma_matrix, gradient_matrix, train_camera ? &coords_gradient_matrix : nullptr);
+	}
 
 	if (train_camera) {
 		// Compute camera gradients

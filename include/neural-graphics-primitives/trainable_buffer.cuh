@@ -41,12 +41,13 @@ public:
 		throw std::runtime_error{"The trainable buffer does not support inference(). Its content is meant to be used externally."};
 	}
 
-	void forward(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<T>* output = nullptr, bool use_inference_matrices = false, bool prepare_input_gradients = false) override {
+	std::unique_ptr<tcnn::Context> forward(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<T>* output = nullptr, bool use_inference_matrices = false, bool prepare_input_gradients = false) override {
 		throw std::runtime_error{"The trainable buffer does not support forward(). Its content is meant to be used externally."};
 	}
 
 	void backward(
 		cudaStream_t stream,
+		const tcnn::Context& ctx,
 		const tcnn::GPUMatrixDynamic<float>& input,
 		const tcnn::GPUMatrixDynamic<T>& output,
 		const tcnn::GPUMatrixDynamic<T>& dL_doutput,
