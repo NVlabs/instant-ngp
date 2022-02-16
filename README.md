@@ -176,6 +176,11 @@ __Q:__ Can this codebase use multiple GPUs at the same time?
 __A:__ No. To select a specific GPU to run on, use the [CUDA_VISIBLE_DEVICES](https://stackoverflow.com/questions/39649102/how-do-i-select-which-gpu-to-run-a-job-on) environment variable. To optimize the _compilation_ for that specific GPU use the [TCNN_CUDA_ARCHITECTURES](https://github.com/NVlabs/instant-ngp#compilation-windows--linux) environment variable.
 
 ##
+__Q:__ What is the coordinate system convention?
+
+__A:__ See [this helpful diagram](https://github.com/NVlabs/instant-ngp/discussions/153?converting=1#discussioncomment-2187652) by user @jc211.
+
+##
 __Q:__ The NeRF reconstruction of my custom dataset looks bad, what can I do?
 
 __A:__ There could be multiple issues:
