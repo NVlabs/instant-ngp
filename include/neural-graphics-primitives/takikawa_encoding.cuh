@@ -330,13 +330,14 @@ public:
 		const float* dy_dx, // encoded output dims x num_elements
 		tcnn::PitchedPtr<float> dL_dx, // Same shape as inputs
 		tcnn::PitchedPtr<const float> inputs,
-		bool accumulate_param_gradients = false // whether to accumulate parameter gradients on top of the last backward() call
+		bool accumulate_param_gradients, // whether to accumulate parameter gradients on top of the last backward() call
+		bool compute_param_gradients
 	) override {
 		if (m_n_padded_output_dims == 0) {
 			return;
 		}
 
-		{
+		if (compute_param_gradients) {
 			// We accumulate gradients with grad_t precision, which, for performance reasons, is not always T.
 			// If not, accumulate in a temporary buffer and cast later.
 			grad_t* params_gradient;
