@@ -149,6 +149,16 @@ __Question:__ How can I run __instant-ngp__ in headless mode?
 __Answer:__ Use `./build/testbed --no-gui` or `python scripts/run.py`. You can also compile without GUI via `cmake -DNGP_BUILD_WITH_GUI=off ...`
 
 ##
+__Q:__ Does this codebase run on [Google Colab](https://colab.research.google.com/)?
+
+__A:__ Yes. See [this example](https://colab.research.google.com/drive/10TgQ4gyVejlHiinrmm5XOvQQmgVziK3i?usp=sharing) by user [@myagues](https://github.com/NVlabs/instant-ngp/issues/6#issuecomment-1016397579). Caveat: this codebase requires large amounts of GPU RAM and might not fit on your assigned GPU. It will also run slower on older GPUs.
+
+##
+__Q:__ Is there a [Docker container](https://www.docker.com/)?
+
+__A:__ Yes. We bundle a [Visual Studio Code development container](https://code.visualstudio.com/docs/remote/containers), the `.devcontainer/Dockerfile` of which you can also use stand-alone.
+
+##
 __Q:__ How can I edit and train the underlying hash encoding or neural network for a new task.
 
 __A:__ Use [__tiny-cuda-nn__'s PyTorch extension](https://github.com/nvlabs/tiny-cuda-nn#pytorch-extension).
@@ -172,8 +182,7 @@ __A:__ There could be multiple issues:
 - COLMAP might have been unable to reconstruct camera poses.
 - There might have been movement or blur during capture. Don't treat capture as an artistic task; treat it as photogrammetry. You want _\*as little blur as possible\*_ in your dataset (motion, defocus, or otherwise) and all objects must be _\*static\*_ during the entire capture. Bonus points if you are using a wide-angle lens (iPhone wide angle works well), because it covers more space than narrow lenses.
 - The dataset parameters (in particular `aabb_scale`) might have been tuned suboptimally. We recommend starting with `aabb_scale=16` and then decreasing it to `8`, `4`, `2`, and `1` until you get optimal quality.
-- Carefully read [our NeRF training & dataset tips](https://github.com/NVlabs/instant-ngp/blob/master/docs/nerf_dataset_tips.md)
-.
+- Carefully read [our NeRF training & dataset tips](https://github.com/NVlabs/instant-ngp/blob/master/docs/nerf_dataset_tips.md).
 
 ## Troubleshooting compile errors
 
