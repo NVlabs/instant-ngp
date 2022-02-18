@@ -144,9 +144,9 @@ Happy hacking!
 
 ## Frequently asked questions (FAQ)
 
-__Question:__ How can I run __instant-ngp__ in headless mode?
+__Q:__ How can I run __instant-ngp__ in headless mode?
 
-__Answer:__ Use `./build/testbed --no-gui` or `python scripts/run.py`. You can also compile without GUI via `cmake -DNGP_BUILD_WITH_GUI=off ...`
+__A:__ Use `./build/testbed --no-gui` or `python scripts/run.py`. You can also compile without GUI via `cmake -DNGP_BUILD_WITH_GUI=off ...`
 
 ##
 __Q:__ Does this codebase run on [Google Colab](https://colab.research.google.com/)?
@@ -159,7 +159,7 @@ __Q:__ Is there a [Docker container](https://www.docker.com/)?
 __A:__ Yes. We bundle a [Visual Studio Code development container](https://code.visualstudio.com/docs/remote/containers), the `.devcontainer/Dockerfile` of which you can also use stand-alone.
 
 ##
-__Q:__ How can I edit and train the underlying hash encoding or neural network for a new task.
+__Q:__ How can I edit and train the underlying hash encoding or neural network on a new task?
 
 __A:__ Use [__tiny-cuda-nn__'s PyTorch extension](https://github.com/nvlabs/tiny-cuda-nn#pytorch-extension).
 
@@ -181,7 +181,7 @@ __Q:__ What is the coordinate system convention?
 __A:__ See [this helpful diagram](https://github.com/NVlabs/instant-ngp/discussions/153?converting=1#discussioncomment-2187652) by user @jc211.
 
 ##
-__Q:__ The NeRF reconstruction of my custom dataset looks bad, what can I do?
+__Q:__ The NeRF reconstruction of my custom dataset looks bad; what can I do?
 
 __A:__ There could be multiple issues:
 - COLMAP might have been unable to reconstruct camera poses.
@@ -216,7 +216,7 @@ Many thanks to [Jonathan Tremblay](https://research.nvidia.com/person/jonathan-t
 We also thank [Andrew Webb](https://github.com/grey-area) for noticing that one of the prime numbers in the spatial hash was not actually prime; this has been fixed since.
 
 This project makes use of a number of awesome open source libraries, including:
-* [tiny-cuda-nn](https://github.com/NVlabs/tiny-cuda-nn) for fast CUDA MLP networks
+* [tiny-cuda-nn](https://github.com/NVlabs/tiny-cuda-nn) for fast CUDA networks and input encodings
 * [tinyexr](https://github.com/syoyo/tinyexr) for EXR format support
 * [tinyobjloader](https://github.com/tinyobjloader/tinyobjloader) for OBJ format support
 * [stb_image](https://github.com/nothings/stb) for PNG and JPEG support
