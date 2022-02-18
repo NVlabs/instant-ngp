@@ -190,7 +190,13 @@ __A:__ There could be multiple issues:
 - Carefully read [our NeRF training & dataset tips](https://github.com/NVlabs/instant-ngp/blob/master/docs/nerf_dataset_tips.md).
 
 ##
-__Q:__ How can I mask away dynamic objects for NeRF training?
+__Q:__ Why are background colors randomized during NeRF training?
+
+__A:__ Transparency in the training data indicates a desire for transparency in the learned model. Using solid background colors, the model can minimize its loss by simply predicting the background colors, rather than transparency (zero density). By randomizing the background colors, the model is _forced_ to learn zero density to let the randomized colors "shine through".
+
+
+##
+__Q:__ How to mask away NeRF training pixels (e.g. for dynamic object removal)?
 
 __A:__ For any training image `xyz.*` with dynamic objects, you can provide a `dynamic_mask_xyz.png` in the same folder. This file must be in PNG format, where _non-zero_ pixel values indicate masked-away regions.
 
