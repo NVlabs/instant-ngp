@@ -554,6 +554,10 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 		result.rays_data.resize(n_pixels * images.size());
 	}
 
+	if (mask_color != 0) {
+		tlog::success() << "Loaded dynamic masks.";
+	}
+
 	uint8_t* dst = image_type == ImageDataType::Half ? (uint8_t*)result.images_data.data() : (uint8_t*)images_data_gpu_tmp.data();
 	pool.parallelFor<size_t>(0, result.n_images, [&](size_t i) {
 		CUDA_CHECK_THROW(cudaMemcpy(dst + img_size * i * bytes_per_channel, images[i], img_size * bytes_per_channel, image_data_on_gpu ? cudaMemcpyDeviceToDevice : cudaMemcpyHostToDevice));
