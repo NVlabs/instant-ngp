@@ -1585,7 +1585,7 @@ void Testbed::reset_network() {
 
 		const uint32_t n_features_per_level = encoding_config.value("n_features_per_level", 2u);
 
-		if (encoding_config.contains("n_features") && encoding_config["n_features"]>0) {
+		if (encoding_config.contains("n_features") && encoding_config["n_features"] > 0) {
 			m_num_levels = (uint32_t)encoding_config["n_features"] / n_features_per_level;
 		} else {
 			m_num_levels = encoding_config.value("n_levels", 16u);
@@ -1629,9 +1629,9 @@ void Testbed::reset_network() {
 	size_t n_encoding_params = 0;
 	if (m_testbed_mode == ETestbedMode::Nerf) {
 		m_nerf.training.cam_exposure.resize(m_nerf.training.n_images, AdamOptimizer<Array3f>(1e-3f));
-		m_nerf.training.cam_pos_offset.resize(m_nerf.training.n_images, AdamOptimizer<Vector3f>(1e-4f));
-		m_nerf.training.cam_rot_offset.resize(m_nerf.training.n_images, RotationAdamOptimizer(1e-4f));
-		m_nerf.training.cam_focal_length_offset = AdamOptimizer<Vector2f>(1e-4f);
+		m_nerf.training.cam_pos_offset.resize(m_nerf.training.n_images, AdamOptimizer<Vector3f>(1e-5f));
+		m_nerf.training.cam_rot_offset.resize(m_nerf.training.n_images, RotationAdamOptimizer(1e-5f));
+		m_nerf.training.cam_focal_length_offset = AdamOptimizer<Vector2f>(1e-5f);
 
 		json& dir_encoding_config = config["dir_encoding"];
 		json& rgb_network_config = config["rgb_network"];
