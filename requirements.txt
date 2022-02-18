@@ -6,3 +6,4 @@ numpy==1.21.2
 pybind11==2.7.1
 scipy==1.7.1
 tqdm==4.62.2
+opencv-python~=4.5.5.62
