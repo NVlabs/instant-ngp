@@ -545,6 +545,18 @@ public:
 		return m_dir_encoding;
 	}
 
+	tcnn::json hyperparams() const override {
+		json density_network_hyperparams = m_density_network->hyperparams();
+		density_network_hyperparams["n_output_dims"] = m_density_network->padded_output_width();
+		return {
+			{"otype", "NerfNetwork"},
+			{"pos_encoding", m_pos_encoding->hyperparams()},
+			{"dir_encoding", m_dir_encoding->hyperparams()},
+			{"density_network", density_network_hyperparams},
+			{"rgb_network", m_rgb_network->hyperparams()},
+		};
+	}
+
 private:
 	std::unique_ptr<tcnn::Network<T>> m_density_network;
 	std::unique_ptr<tcnn::Network<T>> m_rgb_network;

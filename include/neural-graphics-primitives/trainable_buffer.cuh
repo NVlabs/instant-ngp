@@ -107,6 +107,12 @@ public:
 		return m_params_inference;
 	}
 
+	tcnn::json hyperparams() const override {
+		return {
+			{"otype", "TrainableBuffer"},
+		};
+	}
+
 private:
 	ResVector m_resolution;
 

@@ -434,11 +434,18 @@ public:
 		return {};
 	}
 
+	tcnn::json hyperparams() const override {
+		return {
+			{"otype", "Takikawa"},
+			{"starting_level", m_starting_level},
+			{"sum_instead_of_concat", m_sum_instead_of_concat},
+			{"n_levels", m_octree->depth()},
+		};
+	}
+
 private:
 	uint32_t m_starting_level;
 	bool m_sum_instead_of_concat;
-
-	uint32_t m_n_dims_to_pass_through;
 
 	// derived sizes
 	uint32_t m_n_input_dims;
