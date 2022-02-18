@@ -189,6 +189,11 @@ __A:__ There could be multiple issues:
 - The dataset parameters (in particular `aabb_scale`) might have been tuned suboptimally. We recommend starting with `aabb_scale=16` and then decreasing it to `8`, `4`, `2`, and `1` until you get optimal quality.
 - Carefully read [our NeRF training & dataset tips](https://github.com/NVlabs/instant-ngp/blob/master/docs/nerf_dataset_tips.md).
 
+##
+__Q:__ How can I mask away dynamic objects for NeRF training?
+
+__A:__ For any training image `xyz.*` with dynamic objects, you can provide a `dynamic_mask_xyz.png` in the same folder. This file must be in PNG format, where _non-zero_ pixel values indicate masked-away regions.
+
 ## Troubleshooting compile errors
 
 Before investigating further, make sure all submodules are up-to-date and try compiling again.
