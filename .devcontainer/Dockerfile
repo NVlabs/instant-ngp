@@ -60,7 +60,7 @@ RUN echo "Installing Python ver. ${PYTHON_VERSION}..." \
 	&& make \
 	&& checkinstall
 
-COPY ./requirements.txt ./
+COPY ../requirements.txt ./
 
 RUN echo "Installing pip packages..." \
 	&& python3 -m pip install -U pip \
