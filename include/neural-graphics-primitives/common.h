@@ -60,17 +60,6 @@ using Vector4i32 = Eigen::Matrix<uint32_t, 4, 1>;
 
 static constexpr uint32_t BATCH_SIZE_MULTIPLE = 256;
 
-class ScopeGuard {
-public:
-    ScopeGuard(const std::function<void()>& callback) : mCallback{callback} {}
-    ScopeGuard(std::function<void()>&& callback) : mCallback{std::move(callback)} {}
-    ScopeGuard(const ScopeGuard& other) = delete;
-    ScopeGuard(ScopeGuard&& other) { mCallback = std::move(other.mCallback); other.mCallback = {}; }
-    ~ScopeGuard() { mCallback(); }
-private:
-    std::function<void()> mCallback;
-};
-
 enum class EMeshRenderMode : int {
 	Off,
 	VertexColors,

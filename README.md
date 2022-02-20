@@ -192,7 +192,7 @@ __A:__ There could be multiple issues:
 ##
 __Q:__ Why are background colors randomized during NeRF training?
 
-__A:__ Transparency in the training data indicates a desire for transparency in the learned model. Using solid background colors, the model can minimize its loss by simply predicting the background colors, rather than transparency (zero density). By randomizing the background colors, the model is _forced_ to learn zero density to let the randomized colors "shine through".
+__A:__ Transparency in the training data indicates a desire for transparency in the learned model. Using a solid background color, the model can minimize its loss by simply predicting that background color, rather than transparency (zero density). By randomizing the background colors, the model is _forced_ to learn zero density to let the randomized colors "shine through".
 
 
 ##
