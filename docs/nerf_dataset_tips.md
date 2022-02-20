@@ -62,7 +62,8 @@ data-folder$ python [path-to-instant-ngp]/scripts/colmap2nerf.py --video_in <fil
 
 The above assumes a single video file as input, which then has frames extracted at the specified framerate (2). It is recommended to choose a frame rate that leads to around 50-150 images. So for a one minute video, `--video_fps 2` is ideal.
 
-For training from images, place them in a subfolder called `images` and then use suitable options such as the ones below:
+For training from images, place them in a subfolder called `images`. Ensure that the image filenames are named as `0001.jpg`, `0002.jpg` et cetera, otherwise the filenames can't be read.
+Then, use suitable options such as the ones below:
 
 ```sh
 data-folder$ python [path-to-instant-ngp]/scripts/colmap2nerf.py --colmap_matcher exhaustive --run_colmap --aabb_scale 16
