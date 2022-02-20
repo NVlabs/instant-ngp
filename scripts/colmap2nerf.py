@@ -224,11 +224,16 @@ if __name__ == "__main__":
 			if i < SKIP_EARLY*2:
 				continue
 			if  i%2==1 :
-				elems=line.split(" ") # 1-4 is quat, 5-7 is trans, 9 is filename
+				elems=line.split(" ") # 1-4 is quat, 5-7 is trans, 9ff is filename (9, if filename contains no spaces)
 				#name = str(PurePosixPath(Path(IMAGE_FOLDER, elems[9])))
 				# why is this requireing a relitive path while using ^
+
+				# Determine the part that does not belong to the filename
+				filename_splitter = " ".join(elems[0:9])+" "
 				image_rel = os.path.relpath(IMAGE_FOLDER)
-				name = str(f"./{image_rel}/{elems[9]}")
+
+				# Take the part from 'line' that is the filename
+				name = str(f"./{image_rel}/{line.split(filename_splitter)[1]}")
 				b=sharpness(name)
 				print(name, "sharpness=",b)
 				image_id = int(elems[0])
