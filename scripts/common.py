@@ -123,6 +123,8 @@ def write_image_imageio(img_file, img, quality):
 	img = (np.clip(img, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
 	kwargs = {}
 	if os.path.splitext(img_file)[1].lower() in [".jpg", ".jpeg"]:
+		if img.ndim >= 3 and img.shape[2] > 3:
+			img = img[:,:,:3]
 		kwargs["quality"] = quality
 		kwargs["subsampling"] = 0
 	imageio.imwrite(img_file, img, **kwargs)
