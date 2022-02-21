@@ -121,7 +121,11 @@ def diagonally_combine_images(images, x_thresholds, angle, gap=0, color=1):
 
 def write_image_imageio(img_file, img, quality):
 	img = (np.clip(img, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
-	imageio.imwrite(img_file, img, quality=quality, subsampling=0)
+	kwargs = {}
+	if os.path.splitext(img_file)[1].lower() in [".jpg", ".jpeg"]:
+		kwargs["quality"] = quality
+		kwargs["subsampling"] = 0
+	imageio.imwrite(img_file, img, **kwargs)
 
 def read_image_imageio(img_file):
 	img = imageio.imread(img_file)
