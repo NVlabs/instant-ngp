@@ -304,7 +304,7 @@ void Testbed::render_image(CudaRenderBuffer& render_buffer, cudaStream_t stream)
 
 	// Make sure we have enough memory reserved to render at the requested resolution
 	size_t n_pixels = (size_t)res.x() * res.y();
-	uint32_t n_elements = next_multiple((uint32_t)n_pixels, BATCH_SIZE_MULTIPLE);
+	uint32_t n_elements = next_multiple((uint32_t)n_pixels, tcnn::batch_size_granularity);
 	m_image.render_coords.enlarge(n_elements);
 	m_image.render_out.enlarge(n_elements);
 

@@ -1879,7 +1879,7 @@ uint32_t Testbed::NerfTracer::trace(
 			(show_accel>=0) ? show_accel : 0,
 			cone_angle_constant
 		);
-		uint32_t n_elements = next_multiple(n_alive*n_steps_between_compaction, BATCH_SIZE_MULTIPLE);
+		uint32_t n_elements = next_multiple(n_alive*n_steps_between_compaction, tcnn::batch_size_granularity);
 		GPUMatrix<float> positions_matrix((float*)m_network_input, sizeof(NerfCoordinate)/sizeof(float), n_elements);
 		GPUMatrix<network_precision_t> rgbsigma_matrix((network_precision_t*)m_network_output, network.padded_output_width(), n_elements);
 		network.inference_mixed_precision(stream, positions_matrix, rgbsigma_matrix);
@@ -1923,7 +1923,7 @@ uint32_t Testbed::NerfTracer::trace(
 }
 
 void Testbed::NerfTracer::enlarge(size_t n_elements, uint32_t padded_output_width, cudaStream_t stream) {
-	n_elements = next_multiple(n_elements, size_t(BATCH_SIZE_MULTIPLE)); // network inference rounds n_elements up to 256, and uses these arrays, so we must do so also.
+	n_elements = next_multiple(n_elements, size_t(tcnn::batch_size_granularity));
 
 	auto scratch = allocate_workspace_and_distribute<
 		Array4f, NerfPayload, // m_rays[0]
@@ -2009,7 +2009,7 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 
 	if (m_render_mode == ERenderMode::Slice) {
 		// Store colors in the normal buffer
-		uint32_t n_elements = next_multiple(n_hit, BATCH_SIZE_MULTIPLE);
+		uint32_t n_elements = next_multiple(n_hit, tcnn::batch_size_granularity);
 
 		m_nerf.vis_input.enlarge(n_elements);
 		m_nerf.vis_rgba.enlarge(n_elements);
@@ -2367,7 +2367,7 @@ void Testbed::train_nerf(uint32_t target_batch_size, uint32_t n_training_steps, 
 	update_loss_graph();
 
 	m_nerf.training.rays_per_batch = (uint32_t)((float)m_nerf.training.rays_per_batch * (float)target_batch_size / (float)m_nerf.training.measured_batch_size);
-	m_nerf.training.rays_per_batch = std::min(next_multiple(m_nerf.training.rays_per_batch, BATCH_SIZE_MULTIPLE), 1u << 18);
+	m_nerf.training.rays_per_batch = std::min(next_multiple(m_nerf.training.rays_per_batch, tcnn::batch_size_granularity), 1u << 18);
 
 	// Compute CDFs from the error map
 	m_nerf.training.n_steps_since_error_map_update += n_training_steps;
@@ -2560,7 +2560,7 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 	if (m_nerf.training.measured_batch_size_before_compaction == 0) {
 		m_nerf.training.measured_batch_size_before_compaction = max_inference = max_samples;
 	} else {
-		max_inference = next_multiple(std::min(m_nerf.training.measured_batch_size_before_compaction, max_samples), BATCH_SIZE_MULTIPLE);
+		max_inference = next_multiple(std::min(m_nerf.training.measured_batch_size_before_compaction, max_samples), tcnn::batch_size_granularity);
 	}
 
 	GPUMatrix<float> coords_matrix((float*)coords, sizeof(NerfCoordinate)/sizeof(float), max_inference);

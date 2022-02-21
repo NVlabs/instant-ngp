@@ -1900,7 +1900,7 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 							return;
 						}
 
-						n_elements = next_multiple(n_elements, BATCH_SIZE_MULTIPLE);
+						n_elements = next_multiple(n_elements, tcnn::batch_size_granularity);
 
 						GPUMatrix<float> positions_matrix((float*)positions.data(), 3, n_elements);
 						GPUMatrix<float> distances_matrix(distances.data(), 1, n_elements);
@@ -1915,7 +1915,7 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 							return;
 						}
 
-						n_elements = next_multiple(n_elements, BATCH_SIZE_MULTIPLE);
+						n_elements = next_multiple(n_elements, tcnn::batch_size_granularity);
 
 						GPUMatrix<float> positions_matrix((float*)positions.data(), 3, n_elements);
 						GPUMatrix<float> normals_matrix((float*)normals.data(), 3, n_elements);

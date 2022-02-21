@@ -733,7 +733,7 @@ uint32_t Testbed::SphereTracer::trace(const distance_fun_t& distance_function, f
 }
 
 void Testbed::SphereTracer::enlarge(size_t n_elements) {
-	n_elements = next_multiple(n_elements, size_t(BATCH_SIZE_MULTIPLE)); // network inference rounds n_elements up to 256, and uses these arrays, so we must do so also.
+	n_elements = next_multiple(n_elements, size_t(tcnn::batch_size_granularity));
 	m_rays[0].enlarge(n_elements);
 	m_rays[1].enlarge(n_elements);
 	m_rays_hit.enlarge(n_elements);
@@ -846,7 +846,7 @@ void Testbed::render_sdf(
 			extract_dimension_pos_neg_kernel<float><<<n_blocks_linear(n_hit*3), n_threads_linear, 0, stream>>>(n_hit*3, 0, 1, 3, rays_hit.distance.data(), CM, (float*)rays_hit.normal.data());
 		} else {
 			// Store colors in the normal buffer
-			uint32_t n_elements = next_multiple(n_hit, BATCH_SIZE_MULTIPLE);
+			uint32_t n_elements = next_multiple(n_hit, tcnn::batch_size_granularity);
 
 			GPUMatrix<float> positions_matrix((float*)rays_hit.pos.data(), 3, n_elements);
 			GPUMatrix<float> colors_matrix((float*)rays_hit.normal.data(), 3, n_elements);
@@ -900,7 +900,7 @@ void Testbed::render_sdf(
 		}
 	} else if (render_mode == ERenderMode::EncodingVis && m_render_mode != ERenderMode::Slice) {
 		// HACK: Store colors temporarily in the normal buffer
-		uint32_t n_elements = next_multiple(n_hit, BATCH_SIZE_MULTIPLE);
+		uint32_t n_elements = next_multiple(n_hit, tcnn::batch_size_granularity);
 
 		GPUMatrix<float> positions_matrix((float*)rays_hit.pos.data(), 3, n_elements);
 		GPUMatrix<float> colors_matrix((float*)rays_hit.normal.data(), 3, n_elements);

@@ -474,7 +474,7 @@ void Testbed::render_volume(CudaRenderBuffer& render_buffer,
 			uint32_t srcbuf=(iter&1);
 			uint32_t dstbuf=1-srcbuf;
 
-			uint32_t n_elements = next_multiple(n, BATCH_SIZE_MULTIPLE);
+			uint32_t n_elements = next_multiple(n, tcnn::batch_size_granularity);
 			GPUMatrix<float> positions_matrix((float*)m_volume.pos[srcbuf].data(), 3, n_elements);
 			GPUMatrix<float> densities_matrix((float*)m_volume.radiance_and_density.data(), 4, n_elements);
 			m_network->inference(stream, positions_matrix, densities_matrix);

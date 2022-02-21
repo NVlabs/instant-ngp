@@ -58,8 +58,6 @@ using Vector3i16 = Eigen::Matrix<uint16_t, 3, 1>;
 using Vector4i16 = Eigen::Matrix<uint16_t, 4, 1>;
 using Vector4i32 = Eigen::Matrix<uint32_t, 4, 1>;
 
-static constexpr uint32_t BATCH_SIZE_MULTIPLE = 256;
-
 enum class EMeshRenderMode : int {
 	Off,
 	VertexColors,

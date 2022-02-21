@@ -380,7 +380,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 			std::string json_provided_path(frame["file_path"]);
 			if (json_provided_path == "") {
 				char buf[256];
-				snprintf(buf,256,"%s_%03d/rgba.png", part_after_underscore.c_str(), (int) i);
+				snprintf(buf, 256, "%s_%03d/rgba.png", part_after_underscore.c_str(), (int)i);
 				json_provided_path = buf;
 			}
 			fs::path path = basepath / json_provided_path;
