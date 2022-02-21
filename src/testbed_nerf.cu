@@ -808,7 +808,7 @@ __global__ void composite_kernel_nerf(
 		local_rgba.w() += weight;
 
 		if (local_rgba.w() > (1.0f - min_alpha)) {
-			rgba[i] = local_rgba / local_rgba.w();
+			local_rgba /= local_rgba.w();
 			break;
 		}
 	}
