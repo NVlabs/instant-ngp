@@ -58,14 +58,14 @@ int main(int argc, char** argv) {
 		parser,
 		"NO_GUI",
 		"Disables the GUI and instead reports training progress on the command line.",
-		{"no_gui"},
+		{"no-gui"},
 	};
 
 	Flag no_train_flag{
 		parser,
 		"NO_TRAIN",
 		"Disables training on startup.",
-		{"no_train"},
+		{"no-train"},
 	};
 
 	ValueFlag<string> scene_flag{
