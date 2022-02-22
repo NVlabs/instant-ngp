@@ -97,9 +97,11 @@ inline void from_json(const nlohmann::json& j, CameraDistortion& dist) {
 inline void to_json(nlohmann::json& j, const NerfDataset& dataset) {
 	j["n_images"] = dataset.n_images;
 	for (size_t i = 0; i < dataset.n_images; ++i) {
-		j["focal_lengths"].emplace_back();
+		j["metadata"].emplace_back();
 		j["xforms"].emplace_back();
-		to_json(j["focal_lengths"].at(i), dataset.focal_lengths[i]);
+		to_json(j["metadata"].at(i)["focal_length"], dataset.metadata[i].focal_length);
+		to_json(j["metadata"].at(i)["camera_distortion"], dataset.metadata[i].camera_distortion);
+		to_json(j["metadata"].at(i)["principal_point"], dataset.metadata[i].principal_point);
 		to_json(j["xforms"].at(i), dataset.xforms[i]);
 	}
 	j["render_aabb"] = dataset.render_aabb;
@@ -109,8 +111,9 @@ inline void to_json(nlohmann::json& j, const NerfDataset& dataset) {
 	to_json(j["envmap_resolution"], dataset.envmap_resolution);
 	j["scale"] = dataset.scale;
 	j["aabb_scale"] = dataset.aabb_scale;
-	j["camera_distortion"] = dataset.camera_distortion;
-	to_json(j["principal_point"], dataset.principal_point);
+	// global distortion removed
+	//j["camera_distortion"] = dataset.camera_distortion;
+	//to_json(j["principal_point"], dataset.principal_point);
 	j["from_mitsuba"] = dataset.from_mitsuba;
 	j["is_hdr"] = dataset.is_hdr;
 	j["wants_importance_sampling"] = dataset.wants_importance_sampling;
@@ -118,11 +121,24 @@ inline void to_json(nlohmann::json& j, const NerfDataset& dataset) {
 
 inline void from_json(const nlohmann::json& j, NerfDataset& dataset) {
 	dataset.n_images = j.at("n_images");
-	dataset.focal_lengths.resize(dataset.n_images);
+	dataset.metadata.resize(dataset.n_images);
 	dataset.xforms.resize(dataset.n_images);
+	TrainingImageMetadata global_metadata = {};
+	if (j.contains("camera_distortion")) from_json(j.at("camera_distortion"), global_metadata.camera_distortion);
+	if (j.contains("principal_point")) from_json(j.at("principal_point"), global_metadata.principal_point);
+	if (j.contains("focal_length")) from_json(j.at("focal_length"), global_metadata.focal_length);
+
 	for (size_t i = 0; i < dataset.n_images; ++i) {
-		from_json(j.at("focal_lengths").at(i), dataset.focal_lengths[i]);
+		dataset.metadata[i]= global_metadata;
 		from_json(j.at("xforms").at(i), dataset.xforms[i]);
+		if (j.contains("focal_lengths"))
+			from_json(j.at("focal_lengths").at(i), dataset.metadata[i].focal_length);
+		if (j.contains("metadata")) {
+			auto &ji = j["metadata"].at(i);
+			from_json(ji.at("focal_length"),dataset.metadata[i].focal_length);
+			from_json(ji.at("principal_point"),dataset.metadata[i].principal_point);
+			from_json(ji.at("camera_distortion"),dataset.metadata[i].camera_distortion);
+		}
 	}
 	dataset.render_aabb = j.at("render_aabb");
 	from_json(j.at("up"), dataset.up);
@@ -131,8 +147,6 @@ inline void from_json(const nlohmann::json& j, NerfDataset& dataset) {
 	from_json(j.at("envmap_resolution"), dataset.envmap_resolution);
 	dataset.scale = j.at("scale");
 	dataset.aabb_scale = j.at("aabb_scale");
-	dataset.camera_distortion = j.at("camera_distortion");
-	from_json(j.at("principal_point"), dataset.principal_point);
 	dataset.from_mitsuba = j.at("from_mitsuba");
 	dataset.is_hdr = j.value("is_hdr", false);
 	if (j.contains("wants_importance_sampling")) {

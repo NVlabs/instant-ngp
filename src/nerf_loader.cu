@@ -139,6 +139,27 @@ bool ends_with(const std::string& str, const std::string& suffix) {
 	return str.size() >= suffix.size() && 0 == str.compare(str.size()-suffix.size(), suffix.size(), suffix);
 }
 
+NerfDataset create_empty_nerf_dataset(size_t n_images, Eigen::Vector2i image_resolution, int aabb_scale, bool is_hdr) {
+	NerfDataset result{};
+	result.n_images = n_images;
+	result.sharpness_resolution = { 128, 72 };
+	result.sharpness_data.enlarge( result.sharpness_resolution.x() * result.sharpness_resolution.y() *  result.n_images );
+	result.xforms.resize(n_images);
+	result.metadata.resize(n_images);
+	result.scale = NERF_SCALE;
+	result.offset = {0.5f, 0.5f, 0.5f};
+	result.image_resolution = image_resolution;
+	result.aabb_scale = aabb_scale;
+	result.is_hdr = is_hdr;
+	for (size_t i = 0; i < n_images; ++i) {
+		result.xforms[i] = Eigen::Matrix<float, 3, 4>::Identity();
+	}
+	size_t n_pixels = result.image_resolution.prod();
+	size_t img_size = n_pixels * 4;
+	result.images_data.resize(img_size * n_images);
+	return result;
+}
+
 NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float sharpen_amount) {
 	if (jsonpaths.empty()) {
 		throw std::runtime_error{"Cannot load NeRF data from an empty set of paths."};
@@ -234,7 +255,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 	images.resize(result.n_images, nullptr);
 	rays.resize(result.n_images, nullptr);
 	result.xforms.resize(result.n_images);
-	result.focal_lengths.resize(result.n_images);
+	result.metadata.resize(result.n_images);
 
 	result.scale = NERF_SCALE;
 	result.offset = {0.5f, 0.5f, 0.5f};
@@ -299,30 +320,33 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 			result.wants_importance_sampling = json["importance_sampling"];
 		}
 
+		CameraDistortion camera_distortion = {};
+		Vector2f principal_point = Vector2f::Constant(0.5f);
+
 		// Camera distortion
 		{
 			if (json.contains("k1")) {
-				result.camera_distortion.params[0] = json["k1"];
+				camera_distortion.params[0] = json["k1"];
 			}
 
 			if (json.contains("k2")) {
-				result.camera_distortion.params[1] = json["k2"];
+				camera_distortion.params[1] = json["k2"];
 			}
 
 			if (json.contains("p1")) {
-				result.camera_distortion.params[2] = json["p1"];
+				camera_distortion.params[2] = json["p1"];
 			}
 
 			if (json.contains("p2")) {
-				result.camera_distortion.params[3] = json["p2"];
+				camera_distortion.params[3] = json["p2"];
 			}
 
 			if (json.contains("cx")) {
-				result.principal_point.x() = (float)json["cx"] / (float)json["w"];
+				principal_point.x() = (float)json["cx"] / (float)json["w"];
 			}
 
 			if (json.contains("cy")) {
-				result.principal_point.y() = (float)json["cy"] / (float)json["h"];
+				principal_point.y() = (float)json["cy"] / (float)json["h"];
 			}
 		}
 
@@ -484,6 +508,16 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 
 			nlohmann::json& jsonmatrix = frame["transform_matrix"];
 
+			if (frame.contains("driver_parameters")) {
+				Eigen::Vector3f light_dir(
+					frame["driver_parameters"].value("LightX", 0.f),
+					frame["driver_parameters"].value("LightY", 0.f),
+					frame["driver_parameters"].value("LightZ", 0.f)
+				);
+				result.metadata[i_img].light_dir = result.nerf_direction_to_ngp(light_dir.normalized());
+				result.has_light_dirs = true;
+			}
+
 			result.image_resolution = res;
 
 			auto read_focal_length = [&](int resolution, const std::string& axis) {
@@ -503,12 +537,12 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 			float y_fl = read_focal_length(result.image_resolution.y(), "y");
 
 			if (x_fl != 0) {
-				result.focal_lengths[i_img] = Vector2f::Constant(x_fl);
+				result.metadata[i_img].focal_length = Vector2f::Constant(x_fl);
 				if (y_fl != 0) {
-					result.focal_lengths[i_img].y() = y_fl;
+					result.metadata[i_img].focal_length.y() = y_fl;
 				}
 			} else if (y_fl != 0) {
-				result.focal_lengths[i_img] = Vector2f::Constant(y_fl);
+				result.metadata[i_img].focal_length = Vector2f::Constant(y_fl);
 			} else {
 				throw std::runtime_error{"Couldn't read fov."};
 			}
@@ -519,6 +553,9 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 					result.xforms[i_img](m, n) = float(jsonmatrix[m][n]);
 				}
 			}
+
+			result.metadata[i_img].principal_point = principal_point;
+			result.metadata[i_img].camera_distortion = camera_distortion;
 
 			result.xforms[i_img] = result.nerf_matrix_to_ngp(result.xforms[i_img]);
 
@@ -605,5 +642,26 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 
 	return result;
 }
+
+
+void NerfDataset::set_training_image(int frame_idx, const float* pixels) {
+	if (frame_idx < 0 || frame_idx >= n_images) {
+		throw std::runtime_error{"NerfDataset::set_training_image: invalid frame index"};
+	}
+
+	GPUMemory<float> images_data_gpu_tmp;
+	size_t n_pixels = image_resolution.prod();
+	size_t img_size = n_pixels * 4;
+	images_data_gpu_tmp.resize(img_size);
+	images_data_gpu_tmp.copy_from_host(pixels);
+	linear_kernel(from_fullp, 0, nullptr, img_size,
+		(float*)images_data_gpu_tmp.data(), images_data.data() + img_size * (size_t)frame_idx
+	);
+	const dim3 threads = { 16, 8, 1 };
+	const dim3 blocks = { div_round_up((uint32_t)sharpness_resolution.x(), threads.x), div_round_up((uint32_t)sharpness_resolution.y(), threads.y), div_round_up((uint32_t)n_images, threads.z) };
+	sharpness_data.enlarge(sharpness_resolution.x() * sharpness_resolution.y());
+	compute_sharpness<<<blocks, threads, 0, nullptr>>>(sharpness_resolution, image_resolution, 1, images_data.data() + img_size * (size_t)frame_idx, sharpness_data.data() + sharpness_resolution.x() * sharpness_resolution.y() * (size_t)frame_idx);
+}
+
 
 NGP_NAMESPACE_END
