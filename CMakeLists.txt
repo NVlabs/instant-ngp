@@ -113,14 +113,15 @@ if (NGP_BUILD_WITH_GUI)
 	)
 
 	include_directories("dependencies/glfw/include")
+	include_directories("dependencies/imgui")
 
 	#############
 	# GL3W/GLEW #
 	#############
 	if (MSVC)
-		include_directories("dependencies/imgui/gl3w")
-		link_directories("dependencies/imgui")
-		set(GL_SOURCES "dependencies/imgui/gl3w/GL/gl3w.c")
+		include_directories("dependencies/gl3w")
+		link_directories("dependencies")
+		set(GL_SOURCES "dependencies/gl3w/GL/gl3w.c")
 		set(GL_LIBRARIES $<TARGET_OBJECTS:glfw_objects>)
 	else()
 		find_package(GLEW REQUIRED)
@@ -130,10 +131,10 @@ if (NGP_BUILD_WITH_GUI)
 
 	set(GL_SOURCES
 		${GL_SOURCES}
-		dependencies/imgui/ImGuizmo.cpp
+		dependencies/imguizmo/ImGuizmo.cpp
 		dependencies/imgui/imgui.cpp
-		dependencies/imgui/imgui_impl_glfw.cpp
-		dependencies/imgui/imgui_impl_opengl3.cpp
+		dependencies/imgui/backends/imgui_impl_glfw.cpp
+		dependencies/imgui/backends/imgui_impl_opengl3.cpp
 		dependencies/imgui/imgui_draw.cpp
 		dependencies/imgui/imgui_tables.cpp
 		dependencies/imgui/imgui_widgets.cpp

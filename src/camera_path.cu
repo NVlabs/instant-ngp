@@ -17,7 +17,7 @@
 
 #ifdef NGP_GUI
 #include <imgui/imgui.h>
-#include <imgui/ImGuizmo.h>
+#include <imguizmo/ImGuizmo.h>
 #endif
 
 #include <json/json.hpp>
