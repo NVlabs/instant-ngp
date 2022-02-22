@@ -50,7 +50,6 @@
 #  endif
 #  include <GLFW/glfw3.h>
 #  if defined(_MSC_VER)
-#    pragma comment(lib, "glfw3.lib")
 #    pragma comment(lib, "opengl32.lib")
 #    pragma comment(lib, "gdi32.lib")
 #    pragma comment(lib, "shell32.lib")
