@@ -760,7 +760,7 @@ void marching_cubes_gpu(cudaStream_t stream, BoundingBox aabb, Vector3i res_3d, 
 	counters.enlarge(4);
 	counters.memset(0);
 
-	size_t n_bytes = res_3d.x() * res_3d.y() * res_3d.z() * 3 * sizeof(int);
+	size_t n_bytes = res_3d.x() * (size_t)res_3d.y() * res_3d.z() * 3 * sizeof(int);
 	auto workspace = allocate_workspace(stream, n_bytes);
 	CUDA_CHECK_THROW(cudaMemsetAsync(workspace.data(), -1, n_bytes, stream));
 

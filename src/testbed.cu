@@ -699,7 +699,7 @@ void Testbed::imgui() {
 			ImGui::Checkbox("Swap Y&Z", &flip_y_and_z_axes);
 
 			static char obj_filename_buf[128] = "";
-			ImGui::SliderInt("Res:", &m_mesh.res, 16, 1024, "%d", ImGuiSliderFlags_Logarithmic);
+			ImGui::SliderInt("Res:", &m_mesh.res, 16, 2048, "%d", ImGuiSliderFlags_Logarithmic);
 			ImGui::SameLine();
 
 			ImGui::Text("%dx%dx%d", res3d.x(), res3d.y(), res3d.z());
