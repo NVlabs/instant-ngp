@@ -260,8 +260,8 @@ if __name__ == "__main__":
 
 	# find a central point they are all looking at
 	print("computing center of attention...")
-	totw=0
-	totp=np.array([0, 0, 0])
+	totw=0.
+	totp=np.array([0., 0., 0.])
 	for f in out["frames"]:
 		mf = f["transform_matrix"][0:3,:]
 		for g in out["frames"]:
