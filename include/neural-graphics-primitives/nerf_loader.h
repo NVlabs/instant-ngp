@@ -24,11 +24,14 @@
 
 NGP_NAMESPACE_BEGIN
 
-struct TrainingImageMetadata {		// Camera Intrinsics and additional data associated with a NeRF training image
+struct TrainingImageMetadata {
+	// Camera intrinsics and additional data associated with a NeRF training image
 	CameraDistortion camera_distortion = {};
 	Eigen::Vector2f principal_point = Eigen::Vector2f::Constant(0.5f);
 	Eigen::Vector2f focal_length = Eigen::Vector2f::Constant(1000.f);
-	Eigen::Vector3f light_dir = Eigen::Vector3f::Constant(0.f); // for future Nerf extension where we pass lighting direction thru to MLP. TODO: extend to more general (learnable) per image latent vectors
+
+	// TODO: replace this with more generic float[] of task-specific metadata.
+	Eigen::Vector3f light_dir = Eigen::Vector3f::Constant(0.f);
 };
 
 struct NerfDataset {
@@ -49,6 +52,8 @@ struct NerfDataset {
 	bool from_mitsuba = false;
 	bool is_hdr = false;
 	bool wants_importance_sampling = true;
+
+	// TODO: replace this with more generic `uint32_t n_extra_metadata_dims;`
 	bool has_light_dirs = false;
 
 	void set_training_image(int frame_idx, const float *pixels);

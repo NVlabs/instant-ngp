@@ -37,10 +37,6 @@ NGP_NAMESPACE_BEGIN
 
 static constexpr uint32_t MARCH_ITER = 10000;
 
-void Testbed::get_network_params_sdf(uint32_t &n_input_dims, uint32_t &n_output_dims, uint32_t &n_pos_dims) {
-	n_input_dims = 3; n_output_dims = 1; n_pos_dims = 3;
-}
-
 __device__ inline float square(float x) { return x * x; }
 __device__ inline float mix(float a, float b, float t) { return a + (b - a) * t; }
 __device__ inline Vector3f mix(const Vector3f &a, const Vector3f &b, float t) { return a + (b - a) * t; }

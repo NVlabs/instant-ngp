@@ -395,7 +395,7 @@ void Testbed::imgui() {
 			ImGui::SliderFloat("Density grid decay", &m_nerf.training.density_grid_decay, 0.f, 1.f,"%.4f");
 			ImGui::SliderFloat("Extrinsic L2 Reg", &m_nerf.training.extrinsic_l2_reg, 1e-8f, 0.1f, "%.6f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
 			ImGui::SliderFloat("Intrinsic L2 Reg", &m_nerf.training.intrinsic_l2_reg, 1e-8f, 0.1f, "%.6f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
-			ImGui::SliderFloat("Exposure L2 Reg", &m_nerf.training.exposure_l2_reg,   1e-8f, 0.1f, "%.6f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
+			ImGui::SliderFloat("Exposure L2 Reg", &m_nerf.training.exposure_l2_reg, 1e-8f, 0.1f, "%.6f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
 			ImGui::TreePop();
 		}
 
@@ -448,8 +448,8 @@ void Testbed::imgui() {
 			if (ImGui::TreeNodeEx("Light Dir (Polar)", ImGuiTreeNodeFlags_DefaultOpen)) {
 				float phi = atan2f(m_nerf.light_dir.x(), m_nerf.light_dir.z());
 				float theta = asinf(m_nerf.light_dir.y());
-				bool spin = ImGui::SliderFloat("Light Dir Theta", &theta, -PI() / 2.f, PI() / 2.f);
-				spin |=ImGui::SliderFloat("Light Dir Phi", &phi, -PI(), PI());
+				bool spin = ImGui::SliderFloat("Light Dir Theta", &theta, -PI() / 2.0f, PI() / 2.0f);
+				spin |= ImGui::SliderFloat("Light Dir Phi", &phi, -PI(), PI());
 				if (spin) {
 					float sin_phi, cos_phi;
 					sincosf(phi, &sin_phi, &cos_phi);
@@ -460,9 +460,9 @@ void Testbed::imgui() {
 				ImGui::TreePop();
 			}
 			if (ImGui::TreeNode("Light Dir (Cartesian)")) {
-				accum_reset |= ImGui::SliderFloat("Light Dir X", ((float*)(&m_nerf.light_dir)) + 0, -1.f, 1.f);
-				accum_reset |= ImGui::SliderFloat("Light Dir Y", ((float*)(&m_nerf.light_dir)) + 1, -1.f, 1.f);
-				accum_reset |= ImGui::SliderFloat("Light Dir Z", ((float*)(&m_nerf.light_dir)) + 2, -1.f, 1.f);
+				accum_reset |= ImGui::SliderFloat("Light Dir X", ((float*)(&m_nerf.light_dir)) + 0, -1.0f, 1.0f);
+				accum_reset |= ImGui::SliderFloat("Light Dir Y", ((float*)(&m_nerf.light_dir)) + 1, -1.0f, 1.0f);
+				accum_reset |= ImGui::SliderFloat("Light Dir Z", ((float*)(&m_nerf.light_dir)) + 2, -1.0f, 1.0f);
 				ImGui::TreePop();
 			}
 		}
@@ -822,7 +822,7 @@ void Testbed::imgui() {
 
 void Testbed::visualize_nerf_cameras(const Matrix<float, 4, 4>& world2proj) {
 	ImDrawList* list = ImGui::GetForegroundDrawList();
-	for (int i=0; i < m_nerf.training.n_images_for_training;++i) {
+	for (int i=0; i < m_nerf.training.n_images_for_training; ++i) {
 		float aspect = float(m_nerf.training.dataset.image_resolution.x())/float(m_nerf.training.dataset.image_resolution.y());
 		visualize_nerf_camera(world2proj, m_nerf.training.dataset.xforms[i], aspect, 0x40ffff40);
 		visualize_nerf_camera(world2proj, m_nerf.training.transforms[i], aspect, 0x80ffffff);
@@ -1605,10 +1605,10 @@ void Testbed::reset_network() {
 	uint32_t n_pos_dims;
 
 	switch (m_testbed_mode) {
-		case ETestbedMode::Nerf:   get_network_params_nerf(n_input_dims, n_output_dims, n_pos_dims); break;
-		case ETestbedMode::Sdf:    get_network_params_sdf(n_input_dims, n_output_dims, n_pos_dims); break;
-		case ETestbedMode::Image:  get_network_params_image(n_input_dims, n_output_dims, n_pos_dims); break;
-		case ETestbedMode::Volume: get_network_params_volume(n_input_dims, n_output_dims, n_pos_dims); break;
+		case ETestbedMode::Nerf:   n_input_dims = 3; n_output_dims = 4; n_pos_dims = 3; break;
+		case ETestbedMode::Sdf:    n_input_dims = 3; n_output_dims = 1; n_pos_dims = 3; break;
+		case ETestbedMode::Image:  n_input_dims = 2; n_output_dims = 3; n_pos_dims = 2; break;
+		case ETestbedMode::Volume: n_input_dims = 3; n_output_dims = 4; n_pos_dims = 3; break;
 		default: throw std::runtime_error{"Invalid mode."};
 	}
 
@@ -1671,8 +1671,8 @@ void Testbed::reset_network() {
 	size_t n_encoding_params = 0;
 	if (m_testbed_mode == ETestbedMode::Nerf) {
 		m_nerf.training.cam_exposure.resize(m_nerf.training.dataset.n_images, AdamOptimizer<Array3f>(1e-3f));
-		m_nerf.training.cam_pos_offset.resize(m_nerf.training.dataset.n_images, AdamOptimizer<Vector3f>(1e-5f));
-		m_nerf.training.cam_rot_offset.resize(m_nerf.training.dataset.n_images, RotationAdamOptimizer(1e-5f));
+		m_nerf.training.cam_pos_offset.resize(m_nerf.training.dataset.n_images, AdamOptimizer<Vector3f>(1e-4f));
+		m_nerf.training.cam_rot_offset.resize(m_nerf.training.dataset.n_images, RotationAdamOptimizer(1e-4f));
 		m_nerf.training.cam_focal_length_offset = AdamOptimizer<Vector2f>(1e-5f);
 
 		json& dir_encoding_config = config["dir_encoding"];

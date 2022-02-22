@@ -165,7 +165,7 @@ public:
 			ENerfActivation density_activation,
 			int show_accel,
 			float min_alpha,
-			const Eigen::Vector3f &light_dir,
+			const Eigen::Vector3f& light_dir,
 			cudaStream_t stream
 		);
 
@@ -225,11 +225,6 @@ public:
 	};
 
 	static constexpr float LOSS_SCALE = 128.f;
-
-	void get_network_params_volume(uint32_t& n_input_dims, uint32_t& n_output_dims, uint32_t& n_pos_dims);
-	void get_network_params_sdf(uint32_t& n_input_dims, uint32_t& n_output_dims, uint32_t& n_pos_dims);
-	void get_network_params_image(uint32_t& n_input_dims, uint32_t& n_output_dims, uint32_t& n_pos_dims);
-	void get_network_params_nerf(uint32_t& n_input_dims, uint32_t& n_output_dims, uint32_t& n_pos_dims);
 
 	void render_volume(CudaRenderBuffer& render_buffer,
 		const Eigen::Vector2f& focal_length,
@@ -451,10 +446,6 @@ public:
 			int n_images_for_training = 0; // how many images to train from, as a high watermark compared to the dataset size
 			int n_images_for_training_prev = 0; // how many images we saw last time we updated the density grid
 
-			void set_images_watermark(int n) {
-				n_images_for_training = (n<0) ? 0 : (n>=dataset.n_images) ? (int)dataset.n_images : n;
-			}
-
 			struct ErrorMap {
 				tcnn::GPUMemory<float> data;
 				tcnn::GPUMemory<float> cdf_x_cond_y;
@@ -489,10 +480,9 @@ public:
 			std::vector<RotationAdamOptimizer> cam_rot_offset;
 			AdamOptimizer<Eigen::Vector2f> cam_focal_length_offset = AdamOptimizer<Eigen::Vector2f>(0.f);
 
-			float extrinsic_l2_reg = 0.01f;
-			float intrinsic_l2_reg = 0.01f;
+			float extrinsic_l2_reg = 1e-4f;
+			float intrinsic_l2_reg = 1e-4f;
 			float exposure_l2_reg = 0.0f;
-
 
 			tcnn::GPUMemory<uint32_t> numsteps_counter; // number of steps each ray took
 			tcnn::GPUMemory<uint32_t> numsteps_counter_compacted; // number of steps each ray took
@@ -532,17 +522,17 @@ public:
 
 			tcnn::GPUMemory<float> sharpness_grid;
 
-			void set_camera_intrinsics(int frame_idx, float fx, float fy=0.f, float cx=-0.5f, float cy=-0.5f, float k1=0.f, float k2=0.f, float p1=0.f, float p2=0.f);
-			void set_camera_extrinsics(int frame_idx, const Eigen::Matrix<float, 3, 4> &camera_to_world);
+			void set_camera_intrinsics(int frame_idx, float fx, float fy = 0.0f, float cx = -0.5f, float cy = -0.5f, float k1 = 0.0f, float k2 = 0.0f, float p1 = 0.0f, float p2 = 0.0f);
+			void set_camera_extrinsics(int frame_idx, const Eigen::Matrix<float, 3, 4>& camera_to_world);
 			Eigen::Matrix<float, 3, 4> get_camera_extrinsics(int frame_idx);
-			void update_nerf_metadata(int first=0, int last=-1);
-			void update_nerf_transforms(int first=0, int last=-1);
+			void update_metadata(int first = 0, int last = -1);
+			void update_transforms(int first = 0, int last = -1);
 
 #ifdef NGP_PYTHON
 			void set_image(int frame_idx, pybind11::array_t<float> img);
 #endif
 
-			void reset_camera_extrinsics();			
+			void reset_camera_extrinsics();
 
 		} training = {};
 

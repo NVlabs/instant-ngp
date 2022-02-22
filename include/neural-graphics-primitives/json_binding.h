@@ -123,7 +123,7 @@ inline void from_json(const nlohmann::json& j, NerfDataset& dataset) {
 	dataset.n_images = j.at("n_images");
 	dataset.metadata.resize(dataset.n_images);
 	dataset.xforms.resize(dataset.n_images);
-	TrainingImageMetadata global_metadata={};
+	TrainingImageMetadata global_metadata = {};
 	if (j.contains("camera_distortion")) from_json(j.at("camera_distortion"), global_metadata.camera_distortion);
 	if (j.contains("principal_point")) from_json(j.at("principal_point"), global_metadata.principal_point);
 	if (j.contains("focal_length")) from_json(j.at("focal_length"), global_metadata.focal_length);

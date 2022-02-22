@@ -36,10 +36,6 @@ using namespace tcnn;
 
 NGP_NAMESPACE_BEGIN
 
-void Testbed::get_network_params_volume(uint32_t &n_input_dims, uint32_t &n_output_dims, uint32_t &n_pos_dims) {
-	n_input_dims = 3; n_output_dims = 4; n_pos_dims = 3;
-}
-
 __device__ Array4f proc_envmap(const Vector3f& dir, const Vector3f& up_dir, const Vector3f& sun_dir, const Array3f& skycol) {
 	float skyam = up_dir.dot(dir)*0.5f+0.5f;
 	float sunam = std::max(0.f,sun_dir.dot(dir));

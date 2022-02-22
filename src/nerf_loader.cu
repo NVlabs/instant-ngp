@@ -322,6 +322,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 
 		CameraDistortion camera_distortion = {};
 		Vector2f principal_point = Vector2f::Constant(0.5f);
+
 		// Camera distortion
 		{
 			if (json.contains("k1")) {
@@ -643,10 +644,11 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 }
 
 
-void NerfDataset::set_training_image(int frame_idx, const float *pixels) {
+void NerfDataset::set_training_image(int frame_idx, const float* pixels) {
 	if (frame_idx < 0 || frame_idx >= n_images) {
-		return;
+		throw std::runtime_error{"NerfDataset::set_training_image: invalid frame index"};
 	}
+
 	GPUMemory<float> images_data_gpu_tmp;
 	size_t n_pixels = image_resolution.prod();
 	size_t img_size = n_pixels * 4;
@@ -657,7 +659,7 @@ void NerfDataset::set_training_image(int frame_idx, const float *pixels) {
 	);
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)sharpness_resolution.x(), threads.x), div_round_up((uint32_t)sharpness_resolution.y(), threads.y), div_round_up((uint32_t)n_images, threads.z) };
-	sharpness_data.enlarge( sharpness_resolution.x() * sharpness_resolution.y() );
+	sharpness_data.enlarge(sharpness_resolution.x() * sharpness_resolution.y());
 	compute_sharpness<<<blocks, threads, 0, nullptr>>>(sharpness_resolution, image_resolution, 1, images_data.data() + img_size * (size_t)frame_idx, sharpness_data.data() + sharpness_resolution.x() * sharpness_resolution.y() * (size_t)frame_idx);
 }
 

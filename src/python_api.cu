@@ -43,24 +43,31 @@ using namespace pybind11::literals; // to bring in the `_a` literal
 
 NGP_NAMESPACE_BEGIN
 
-
 void Testbed::Nerf::Training::set_image(int frame_idx, pybind11::array_t<float> img) {
-	if (frame_idx < 0 || frame_idx >= dataset.n_images)
-		return;
+	if (frame_idx < 0 || frame_idx >= dataset.n_images) {
+		throw std::runtime_error{"Invalid frame index"};
+	}
+
 	py::buffer_info img_buf = img.request();
-	//printf("%dx%d vs %dx%d vs %dx%d\n", img_buf.shape[1], img_buf.shape[0],  dataset.image_resolution.x(), dataset.image_resolution.y(), image_resolution.x(), image_resolution.y());
-	if (img_buf.ndim != 3)
+
+	if (img_buf.ndim != 3) {
 		throw std::runtime_error{"image should be (H,W,C) where C=4"};
-	if (img_buf.shape[2]!=4)
-	throw std::runtime_error{"image should be (H,W,C) where C=4"};
-	if (img_buf.shape[1]!=dataset.image_resolution.x())
+	}
+
+	if (img_buf.shape[2] != 4) {
+		throw std::runtime_error{"image should be (H,W,C) where C=4"};
+	}
+
+	if (img_buf.shape[1] != dataset.image_resolution.x()) {
 		throw std::runtime_error{"image has wrong width"};
-	if (img_buf.shape[0]!=dataset.image_resolution.y())
+	}
+
+	if (img_buf.shape[0] != dataset.image_resolution.y()) {
 		throw std::runtime_error{"image has wrong height"};
+	}
+
 	dataset.set_training_image(frame_idx, (const float*)img_buf.ptr);
 }
-
-
 
 void Testbed::override_sdf_training_data(py::array_t<float> points, py::array_t<float> distances) {
 	py::buffer_info points_buf = points.request();
@@ -117,7 +124,6 @@ pybind11::dict Testbed::compute_marching_cubes_mesh(Eigen::Vector3i res3d, Bound
 
 	return py::dict("V"_a=cpuverts, "N"_a=cpunormals, "C"_a=cpucolors, "F"_a=cpuindices);
 }
-
 
 py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool linear, float start_time, float end_time, float fps, float shutter_fraction) {
 	m_windowless_render_surface.resize({width, height});
@@ -466,7 +472,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("sample_focal_plane_proportional_to_error", &Testbed::Nerf::Training::sample_focal_plane_proportional_to_error)
 		.def_readwrite("sample_image_proportional_to_error", &Testbed::Nerf::Training::sample_image_proportional_to_error)
 		.def_readwrite("include_sharpness_in_error", &Testbed::Nerf::Training::include_sharpness_in_error)
-		.def_readwrite("n_images_for_training", &Testbed::Nerf::Training::n_images_for_training) // , &Testbed::Nerf::Training::set_images_watermark)
+		.def_readwrite("n_images_for_training", &Testbed::Nerf::Training::n_images_for_training)
 		.def_readonly("transforms", &Testbed::Nerf::Training::transforms)
 		//.def_readonly("focal_lengths", &Testbed::Nerf::Training::focal_lengths) // use training.dataset.metadata instead
 		.def_readonly("image_resolution", &Testbed::Nerf::Training::image_resolution)
@@ -476,7 +482,6 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("intrinsic_l2_reg", &Testbed::Nerf::Training::intrinsic_l2_reg)
 		.def_readwrite("exposure_l2_reg", &Testbed::Nerf::Training::exposure_l2_reg)
 		.def_readonly("dataset", &Testbed::Nerf::Training::dataset)
-
 		.def("set_camera_intrinsics", &Testbed::Nerf::Training::set_camera_intrinsics,
 			py::arg("frame_idx"),
 			py::arg("fx")=0.f, py::arg("fy")=0.f,
@@ -485,14 +490,12 @@ PYBIND11_MODULE(pyngp, m) {
 			py::arg("p1")=0.f, py::arg("p2")=0.f,
 			"Set up the camera intrinsics for the given training image index."
 		)
-
 		.def("set_camera_extrinsics", &Testbed::Nerf::Training::set_camera_extrinsics,
 			py::arg("frame_idx"),
 			py::arg("camera_to_world"),
 			"Set up the camera extrinsics for the given training image index, from the given 3x4 transformation matrix."
 		)
 		.def("get_camera_extrinsics", &Testbed::Nerf::Training::get_camera_extrinsics, py::arg("frame_idx"), "return the 3x4 transformation matrix of given training frame")
-
 		.def("set_image", &Testbed::Nerf::Training::set_image,
 			py::arg("frame_idx"),
 			py::arg("img"),
