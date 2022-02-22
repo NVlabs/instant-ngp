@@ -1570,6 +1570,16 @@ ELossType Testbed::string_to_loss_type(const std::string& str) {
 	}
 }
 
+Testbed::NetworkDims Testbed::network_dims() const {
+	switch (m_testbed_mode) {
+		case ETestbedMode::Nerf:   return network_dims_nerf(); break;
+		case ETestbedMode::Sdf:    return network_dims_sdf(); break;
+		case ETestbedMode::Image:  return network_dims_image(); break;
+		case ETestbedMode::Volume: return network_dims_volume(); break;
+		default: throw std::runtime_error{"Invalid mode."};
+	}
+}
+
 void Testbed::reset_network() {
 	m_sdf.iou_decay = 0;
 
@@ -1600,17 +1610,7 @@ void Testbed::reset_network() {
 	json& optimizer_config = config["optimizer"];
 	json& network_config = config["network"];
 
-	uint32_t n_input_dims;
-	uint32_t n_output_dims;
-	uint32_t n_pos_dims;
-
-	switch (m_testbed_mode) {
-		case ETestbedMode::Nerf:   n_input_dims = 3; n_output_dims = 4; n_pos_dims = 3; break;
-		case ETestbedMode::Sdf:    n_input_dims = 3; n_output_dims = 1; n_pos_dims = 3; break;
-		case ETestbedMode::Image:  n_input_dims = 2; n_output_dims = 3; n_pos_dims = 2; break;
-		case ETestbedMode::Volume: n_input_dims = 3; n_output_dims = 4; n_pos_dims = 3; break;
-		default: throw std::runtime_error{"Invalid mode."};
-	}
+	auto dims = network_dims();
 
 	if (m_testbed_mode == ETestbedMode::Nerf) {
 		m_nerf.training.loss_type = string_to_loss_type(loss_config.value("otype", "L2"));
@@ -1623,7 +1623,7 @@ void Testbed::reset_network() {
 
 	// Automatically determine certain parameters if we're dealing with the (hash)grid encoding
 	if (to_lower(encoding_config.value("otype", "OneBlob")).find("grid") != std::string::npos) {
-		encoding_config["n_pos_dims"] = n_pos_dims;
+		encoding_config["n_pos_dims"] = dims.n_pos;
 
 		const uint32_t n_features_per_level = encoding_config.value("n_features_per_level", 2u);
 
@@ -1637,7 +1637,7 @@ void Testbed::reset_network() {
 
 		m_base_grid_resolution = encoding_config.value("base_resolution", 0);
 		if (!m_base_grid_resolution) {
-			m_base_grid_resolution = 1u << ((log2_hashmap_size)/n_pos_dims);
+			m_base_grid_resolution = 1u << ((log2_hashmap_size) / dims.n_pos);
 			encoding_config["base_resolution"] = m_base_grid_resolution;
 		}
 
@@ -1681,7 +1681,7 @@ void Testbed::reset_network() {
 		uint32_t n_dir_dims = 3;
 		uint32_t n_extra_dims = m_nerf.training.dataset.has_light_dirs ? 3u : 0u;
 		m_network = m_nerf_network = std::make_shared<NerfNetwork<precision_t>>(
-			n_pos_dims,
+			dims.n_pos,
 			n_dir_dims,
 			n_extra_dims,
 			4, // The offset of 4 comes from the dt member variable of NerfCoordinate. HACKY
@@ -1695,7 +1695,7 @@ void Testbed::reset_network() {
 		n_encoding_params = m_encoding->n_params() + m_nerf_network->dir_encoding()->n_params();
 
 		tlog::info()
-			<< "Density model: " << n_pos_dims
+			<< "Density model: " << dims.n_pos
 			<< "--[" << std::string(encoding_config["otype"])
 			<< "]-->" << m_nerf_network->encoding()->num_encoded_dims()
 			<< "--[" << std::string(network_config["otype"])
@@ -1743,11 +1743,11 @@ void Testbed::reset_network() {
 				tcnn::string_to_interpolation_type(encoding_config.value("interpolation", "linear"))
 			));
 
-			m_network = std::make_shared<NetworkWithInputEncoding<precision_t>>(m_encoding, n_output_dims, network_config);
+			m_network = std::make_shared<NetworkWithInputEncoding<precision_t>>(m_encoding, dims.n_output, network_config);
 			m_sdf.uses_takikawa_encoding = true;
 		} else {
-			m_encoding.reset(create_encoding<precision_t>(n_input_dims, encoding_config));
-			m_network = std::make_shared<NetworkWithInputEncoding<precision_t>>(m_encoding, n_output_dims, network_config);
+			m_encoding.reset(create_encoding<precision_t>(dims.n_input, encoding_config));
+			m_network = std::make_shared<NetworkWithInputEncoding<precision_t>>(m_encoding, dims.n_output, network_config);
 			m_sdf.uses_takikawa_encoding = false;
 			if (m_sdf.octree_depth_target == 0 && encoding_config.contains("n_levels")) {
 				m_sdf.octree_depth_target = encoding_config["n_levels"];
@@ -1757,12 +1757,12 @@ void Testbed::reset_network() {
 		n_encoding_params = m_encoding->n_params();
 
 		tlog::info()
-			<< "Model:         " << n_input_dims
+			<< "Model:         " << dims.n_input
 			<< "--[" << std::string(encoding_config["otype"])
 			<< "]-->" << m_encoding->num_encoded_dims()
 			<< "--[" << std::string(network_config["otype"])
 			<< "(neurons=" << (int)network_config["n_neurons"] << ",layers=" << ((int)network_config["n_hidden_layers"]+2) << ")"
-			<< "]-->" << n_output_dims;
+			<< "]-->" << dims.n_output;
 	}
 
 	size_t n_network_params = m_network->n_params() - n_encoding_params;

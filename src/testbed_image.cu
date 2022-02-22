@@ -30,6 +30,14 @@ using namespace tcnn;
 
 NGP_NAMESPACE_BEGIN
 
+Testbed::NetworkDims Testbed::network_dims_image() const {
+	NetworkDims dims;
+	dims.n_input = 2;
+	dims.n_output = 3;
+	dims.n_pos = 2;
+	return dims;
+}
+
 template <uint32_t base>
 __host__ __device__ float halton(size_t idx) {
 	float f = 1;

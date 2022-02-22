@@ -65,6 +65,14 @@ static constexpr uint32_t MARCH_ITER = 10000;
 static constexpr uint32_t MIN_STEPS_INBETWEEN_COMPACTION = 1;
 static constexpr uint32_t MAX_STEPS_INBETWEEN_COMPACTION = 8;
 
+Testbed::NetworkDims Testbed::network_dims_nerf() const {
+	NetworkDims dims;
+	dims.n_input = 3;
+	dims.n_output = 4;
+	dims.n_pos = 3;
+	return dims;
+}
+
 inline __host__ __device__ uint32_t grid_mip_offset(uint32_t mip) {
 	return (NERF_GRIDSIZE() * NERF_GRIDSIZE() * NERF_GRIDSIZE()) * mip;
 }

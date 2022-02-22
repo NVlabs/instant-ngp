@@ -226,6 +226,19 @@ public:
 
 	static constexpr float LOSS_SCALE = 128.f;
 
+	struct NetworkDims {
+		uint32_t n_input;
+		uint32_t n_output;
+		uint32_t n_pos;
+	};
+
+	NetworkDims network_dims_volume() const;
+	NetworkDims network_dims_sdf() const;
+	NetworkDims network_dims_image() const;
+	NetworkDims network_dims_nerf() const;
+
+	NetworkDims network_dims() const;
+
 	void render_volume(CudaRenderBuffer& render_buffer,
 		const Eigen::Vector2f& focal_length,
 		const Eigen::Matrix<float, 3, 4>& camera_matrix,
