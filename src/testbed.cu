@@ -235,7 +235,7 @@ void Testbed::set_view_dir(const Vector3f& dir) {
 void Testbed::set_camera_to_training_view(int trainview) {
 	auto old_look_at = look_at();
 	m_camera = m_smoothed_camera = m_nerf.training.dataset.xforms[trainview];
-	m_relative_focal_length = m_nerf.training.dataset.focal_lengths[trainview] / (float)m_nerf.training.image_resolution[m_fov_axis];
+	m_relative_focal_length = m_nerf.training.dataset.metadata[trainview].focal_length / (float)m_nerf.training.image_resolution[m_fov_axis];
 	m_scale = std::max((old_look_at - view_pos()).dot(view_dir()), 0.1f);
 	m_nerf.render_with_camera_distortion = true;
 }
@@ -316,7 +316,7 @@ void Testbed::imgui() {
 			}
 		}
 		if (!m_camera_path.m_keyframes.empty()) {
-			float w = ImGui::GetContentRegionAvailWidth();
+			float w = ImGui::GetContentRegionAvail().x;
 			m_picture_in_picture_res = (float)std::min((int(w)+31)&(~31),1920/4);
 			if (m_camera_path.m_update_cam_from_path)
 				ImGui::Image((ImTextureID)(size_t)m_render_textures.front()->texture(), ImVec2(w,w*9.f/16.f));
@@ -393,6 +393,9 @@ void Testbed::imgui() {
 				ImGui::SliderFloat("Error overlay brightness", &m_nerf.training.error_overlay_brightness, 0.f, 1.f);
 			}
 			ImGui::SliderFloat("Density grid decay", &m_nerf.training.density_grid_decay, 0.f, 1.f,"%.4f");
+			ImGui::SliderFloat("Extrinsic L2 Reg", &m_nerf.training.extrinsic_l2_reg, 1e-8f, 0.1f, "%.6f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
+			ImGui::SliderFloat("Intrinsic L2 Reg", &m_nerf.training.intrinsic_l2_reg, 1e-8f, 0.1f, "%.6f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
+			ImGui::SliderFloat("Exposure L2 Reg", &m_nerf.training.exposure_l2_reg,   1e-8f, 0.1f, "%.6f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
 			ImGui::TreePop();
 		}
 
@@ -439,6 +442,31 @@ void Testbed::imgui() {
 		if (!m_dynamic_res) {
 			ImGui::SliderInt("Fixed resolution factor", &m_fixed_res_factor, 8, 64);
 		}
+
+		if (m_testbed_mode == ETestbedMode::Nerf && m_nerf_network->n_extra_dims() == 3) {
+			Vector3f light_dir = m_nerf.light_dir.normalized();
+			if (ImGui::TreeNodeEx("Light Dir (Polar)", ImGuiTreeNodeFlags_DefaultOpen)) {
+				float phi = atan2f(m_nerf.light_dir.x(), m_nerf.light_dir.z());
+				float theta = asinf(m_nerf.light_dir.y());
+				bool spin = ImGui::SliderFloat("Light Dir Theta", &theta, -PI() / 2.f, PI() / 2.f);
+				spin |=ImGui::SliderFloat("Light Dir Phi", &phi, -PI(), PI());
+				if (spin) {
+					float sin_phi, cos_phi;
+					sincosf(phi, &sin_phi, &cos_phi);
+					float cos_theta=cosf(theta);
+					m_nerf.light_dir = {sin_phi * cos_theta,sinf(theta),cos_phi * cos_theta};
+					accum_reset = true;
+				}
+				ImGui::TreePop();
+			}
+			if (ImGui::TreeNode("Light Dir (Cartesian)")) {
+				accum_reset |= ImGui::SliderFloat("Light Dir X", ((float*)(&m_nerf.light_dir)) + 0, -1.f, 1.f);
+				accum_reset |= ImGui::SliderFloat("Light Dir Y", ((float*)(&m_nerf.light_dir)) + 1, -1.f, 1.f);
+				accum_reset |= ImGui::SliderFloat("Light Dir Z", ((float*)(&m_nerf.light_dir)) + 2, -1.f, 1.f);
+				ImGui::TreePop();
+			}
+		}
+
 		accum_reset |= ImGui::Combo("Render mode", (int*)&m_render_mode, RenderModeStr);
 		accum_reset |= ImGui::Combo("Color space", (int*)&m_color_space, ColorSpaceStr);
 		accum_reset |= ImGui::Combo("Tonemap curve", (int*)&m_tonemap_curve, TonemapCurveStr);
@@ -527,8 +555,8 @@ void Testbed::imgui() {
 				ImGui::PlotLines("Training view error", m_nerf.training.error_map.pmf_img_cpu.data(), m_nerf.training.error_map.pmf_img_cpu.size(), 0, nullptr, 0.0f, FLT_MAX, ImVec2(0, 60.f));
 
 				if (m_nerf.training.optimize_exposure) {
-					std::vector<float> exposures(m_nerf.training.n_images);
-					for (uint32_t i = 0; i < m_nerf.training.n_images; ++i) {
+					std::vector<float> exposures(m_nerf.training.dataset.n_images);
+					for (uint32_t i = 0; i < m_nerf.training.dataset.n_images; ++i) {
 						exposures[i] = m_nerf.training.cam_exposure[i].variable().x();
 					}
 
@@ -794,7 +822,7 @@ void Testbed::imgui() {
 
 void Testbed::visualize_nerf_cameras(const Matrix<float, 4, 4>& world2proj) {
 	ImDrawList* list = ImGui::GetForegroundDrawList();
-	for (int i=0; i < m_nerf.training.dataset.n_images;++i) {
+	for (int i=0; i < m_nerf.training.n_images_for_training;++i) {
 		float aspect = float(m_nerf.training.dataset.image_resolution.x())/float(m_nerf.training.dataset.image_resolution.y());
 		visualize_nerf_camera(world2proj, m_nerf.training.dataset.xforms[i], aspect, 0x40ffff40);
 		visualize_nerf_camera(world2proj, m_nerf.training.transforms[i], aspect, 0x80ffffff);
@@ -1060,6 +1088,10 @@ bool Testbed::handle_user_input() {
 		m_imgui_enabled = !m_imgui_enabled;
 	}
 
+	if (m_imgui_enabled) {
+		imgui();
+	}
+
 	ImVec2 m = ImGui::GetMousePos();
 	int mb = 0;
 	float mw = 0.f;
@@ -1088,6 +1120,7 @@ bool Testbed::handle_user_input() {
 	mouse_wheel({m.x / (float)m_window_res.y(), m.y / (float)m_window_res.y()}, mw);
 	mouse_drag({relm.x, relm.y}, mb);
 
+
 	glfwGetWindowSize(m_glfw_window, &m_window_res.x(), &m_window_res.y());
 	return true;
 }
@@ -1095,10 +1128,6 @@ bool Testbed::handle_user_input() {
 void Testbed::draw_gui() {
 	// Make sure all the cuda code finished its business here
 	CUDA_CHECK_THROW(cudaDeviceSynchronize());
-
-	if (m_imgui_enabled) {
-		imgui();
-	}
 
 	int display_w, display_h;
 	glfwGetFramebufferSize(m_glfw_window, &display_w, &display_h);
@@ -1335,6 +1364,7 @@ void Testbed::init_window(int resw, int resh, bool hidden) {
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+	io.ConfigInputTrickleEventQueue = false; // new ImGui event handling seems to make camera controls laggy if this is true.
 	ImGui::StyleColorsDark();
 	ImGui_ImplGlfw_InitForOpenGL(m_glfw_window, true);
 	ImGui_ImplOpenGL3_Init("#version 330 core");
@@ -1558,6 +1588,8 @@ void Testbed::reset_network() {
 	m_nerf.training.n_steps_between_error_map_updates = 128;
 	m_nerf.training.error_map.is_cdf_valid = false;
 
+	m_nerf.training.reset_camera_extrinsics();
+
 	m_loss_graph_samples = 0;
 
 	// Default config
@@ -1573,10 +1605,10 @@ void Testbed::reset_network() {
 	uint32_t n_pos_dims;
 
 	switch (m_testbed_mode) {
-		case ETestbedMode::Nerf:  n_input_dims = 3; n_output_dims = 4; n_pos_dims = 3; break;
-		case ETestbedMode::Sdf:   n_input_dims = 3; n_output_dims = 1; n_pos_dims = 3; break;
-		case ETestbedMode::Image: n_input_dims = 2; n_output_dims = 3; n_pos_dims = 2; break;
-		case ETestbedMode::Volume:n_input_dims = 3; n_output_dims = 4; n_pos_dims = 3; break;
+		case ETestbedMode::Nerf:   get_network_params_nerf(n_input_dims, n_output_dims, n_pos_dims); break;
+		case ETestbedMode::Sdf:    get_network_params_sdf(n_input_dims, n_output_dims, n_pos_dims); break;
+		case ETestbedMode::Image:  get_network_params_image(n_input_dims, n_output_dims, n_pos_dims); break;
+		case ETestbedMode::Volume: get_network_params_volume(n_input_dims, n_output_dims, n_pos_dims); break;
 		default: throw std::runtime_error{"Invalid mode."};
 	}
 
@@ -1638,18 +1670,20 @@ void Testbed::reset_network() {
 
 	size_t n_encoding_params = 0;
 	if (m_testbed_mode == ETestbedMode::Nerf) {
-		m_nerf.training.cam_exposure.resize(m_nerf.training.n_images, AdamOptimizer<Array3f>(1e-3f));
-		m_nerf.training.cam_pos_offset.resize(m_nerf.training.n_images, AdamOptimizer<Vector3f>(1e-5f));
-		m_nerf.training.cam_rot_offset.resize(m_nerf.training.n_images, RotationAdamOptimizer(1e-5f));
+		m_nerf.training.cam_exposure.resize(m_nerf.training.dataset.n_images, AdamOptimizer<Array3f>(1e-3f));
+		m_nerf.training.cam_pos_offset.resize(m_nerf.training.dataset.n_images, AdamOptimizer<Vector3f>(1e-5f));
+		m_nerf.training.cam_rot_offset.resize(m_nerf.training.dataset.n_images, RotationAdamOptimizer(1e-5f));
 		m_nerf.training.cam_focal_length_offset = AdamOptimizer<Vector2f>(1e-5f);
 
 		json& dir_encoding_config = config["dir_encoding"];
 		json& rgb_network_config = config["rgb_network"];
 
 		uint32_t n_dir_dims = 3;
+		uint32_t n_extra_dims = m_nerf.training.dataset.has_light_dirs ? 3u : 0u;
 		m_network = m_nerf_network = std::make_shared<NerfNetwork<precision_t>>(
 			n_pos_dims,
 			n_dir_dims,
+			n_extra_dims,
 			4, // The offset of 4 comes from the dt member variable of NerfCoordinate. HACKY
 			encoding_config,
 			dir_encoding_config,
@@ -1872,8 +1906,8 @@ Vector2f Testbed::calc_focal_length(const Vector2i& resolution, int fov_axis, fl
 Vector2f Testbed::render_screen_center() const {
 	// see pixel_to_ray for how screen center is used; 0.5,0.5 is 'normal'. we flip so that it becomes the point in the original image we want to center on.
 	auto screen_center = m_screen_center;
-	if (m_nerf.render_with_camera_distortion) {
-		screen_center -= m_nerf.training.dataset.principal_point - Vector2f::Constant(0.5f);
+	if (m_nerf.render_with_camera_distortion && !m_nerf.training.dataset.metadata.empty()) {
+		screen_center -= m_nerf.training.dataset.metadata[0].principal_point - Vector2f::Constant(0.5f);
 	}
 	return {(0.5f-screen_center.x())*m_zoom + 0.5f, (0.5-screen_center.y())*m_zoom + 0.5f};
 }

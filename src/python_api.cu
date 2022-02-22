@@ -43,6 +43,25 @@ using namespace pybind11::literals; // to bring in the `_a` literal
 
 NGP_NAMESPACE_BEGIN
 
+
+void Testbed::Nerf::Training::set_image(int frame_idx, pybind11::array_t<float> img) {
+	if (frame_idx < 0 || frame_idx >= dataset.n_images)
+		return;
+	py::buffer_info img_buf = img.request();
+	//printf("%dx%d vs %dx%d vs %dx%d\n", img_buf.shape[1], img_buf.shape[0],  dataset.image_resolution.x(), dataset.image_resolution.y(), image_resolution.x(), image_resolution.y());
+	if (img_buf.ndim != 3)
+		throw std::runtime_error{"image should be (H,W,C) where C=4"};
+	if (img_buf.shape[2]!=4)
+	throw std::runtime_error{"image should be (H,W,C) where C=4"};
+	if (img_buf.shape[1]!=dataset.image_resolution.x())
+		throw std::runtime_error{"image has wrong width"};
+	if (img_buf.shape[0]!=dataset.image_resolution.y())
+		throw std::runtime_error{"image has wrong height"};
+	dataset.set_training_image(frame_idx, (const float*)img_buf.ptr);
+}
+
+
+
 void Testbed::override_sdf_training_data(py::array_t<float> points, py::array_t<float> distances) {
 	py::buffer_info points_buf = points.request();
 	py::buffer_info distances_buf = distances.request();
@@ -272,6 +291,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def(py::init<ETestbedMode>())
 		.def(py::init<ETestbedMode, const std::string&, const std::string&>())
 		.def(py::init<ETestbedMode, const std::string&, const json&>())
+		.def("create_empty_nerf_dataset", &Testbed::create_empty_nerf_dataset, "Allocate memory for a nerf dataset with a given size", py::arg("n_images"), py::arg("image_resolution"), py::arg("aabb_scale")=1, py::arg("is_hdr")=false)
 		.def("load_training_data", &Testbed::load_training_data, "Load training data from a given path.")
 		.def("clear_training_data", &Testbed::clear_training_data, "Clears training data to free up GPU memory.")
 		// General control
@@ -408,9 +428,17 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("ambientcolor", &BRDFParams::ambientcolor)
 		;
 
+	py::class_<TrainingImageMetadata> metadata(m, "TrainingImageMetadata");
+	metadata
+		.def_readwrite("focal_length", &TrainingImageMetadata::focal_length)
+		.def_readwrite("camera_distortion", &TrainingImageMetadata::camera_distortion)
+		.def_readwrite("principal_point", &TrainingImageMetadata::principal_point)
+		.def_readwrite("light_dir", &TrainingImageMetadata::light_dir)
+		;
+
 	py::class_<NerfDataset> nerfdataset(m, "NerfDataset");
 	nerfdataset
-		.def_readonly("focal_lengths", &NerfDataset::focal_lengths)
+		.def_readonly("metadata", &NerfDataset::metadata)
 		.def_readonly("transforms", &NerfDataset::xforms)
 		.def_readonly("render_aabb", &NerfDataset::render_aabb)
 		.def_readonly("up", &NerfDataset::up)
@@ -420,13 +448,13 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readonly("envmap_resolution", &NerfDataset::envmap_resolution)
 		.def_readonly("scale", &NerfDataset::scale)
 		.def_readonly("aabb_scale", &NerfDataset::aabb_scale)
-		.def_readonly("principal_point", &NerfDataset::principal_point)
 		.def_readonly("from_mitsuba", &NerfDataset::from_mitsuba)
 		.def_readonly("is_hdr", &NerfDataset::is_hdr)
 		;
 
 	py::class_<Testbed::Nerf::Training>(nerf, "Training")
 		.def_readwrite("random_bg_color", &Testbed::Nerf::Training::random_bg_color)
+		.def_readwrite("n_images_for_training", &Testbed::Nerf::Training::n_images_for_training)
 		.def_readwrite("linear_colors", &Testbed::Nerf::Training::linear_colors)
 		.def_readwrite("loss_type", &Testbed::Nerf::Training::loss_type)
 		.def_readwrite("snap_to_pixel_centers", &Testbed::Nerf::Training::snap_to_pixel_centers)
@@ -438,12 +466,38 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("sample_focal_plane_proportional_to_error", &Testbed::Nerf::Training::sample_focal_plane_proportional_to_error)
 		.def_readwrite("sample_image_proportional_to_error", &Testbed::Nerf::Training::sample_image_proportional_to_error)
 		.def_readwrite("include_sharpness_in_error", &Testbed::Nerf::Training::include_sharpness_in_error)
+		.def_readwrite("n_images_for_training", &Testbed::Nerf::Training::n_images_for_training) // , &Testbed::Nerf::Training::set_images_watermark)
 		.def_readonly("transforms", &Testbed::Nerf::Training::transforms)
-		.def_readonly("focal_lengths", &Testbed::Nerf::Training::focal_lengths)
+		//.def_readonly("focal_lengths", &Testbed::Nerf::Training::focal_lengths) // use training.dataset.metadata instead
 		.def_readonly("image_resolution", &Testbed::Nerf::Training::image_resolution)
 		.def_readwrite("near_distance", &Testbed::Nerf::Training::near_distance)
 		.def_readwrite("density_grid_decay", &Testbed::Nerf::Training::density_grid_decay)
+		.def_readwrite("extrinsic_l2_reg", &Testbed::Nerf::Training::extrinsic_l2_reg)
+		.def_readwrite("intrinsic_l2_reg", &Testbed::Nerf::Training::intrinsic_l2_reg)
+		.def_readwrite("exposure_l2_reg", &Testbed::Nerf::Training::exposure_l2_reg)
 		.def_readonly("dataset", &Testbed::Nerf::Training::dataset)
+
+		.def("set_camera_intrinsics", &Testbed::Nerf::Training::set_camera_intrinsics,
+			py::arg("frame_idx"),
+			py::arg("fx")=0.f, py::arg("fy")=0.f,
+			py::arg("cx")=-0.5f, py::arg("cy")=-0.5f,
+			py::arg("k1")=0.f, py::arg("k2")=0.f,
+			py::arg("p1")=0.f, py::arg("p2")=0.f,
+			"Set up the camera intrinsics for the given training image index."
+		)
+
+		.def("set_camera_extrinsics", &Testbed::Nerf::Training::set_camera_extrinsics,
+			py::arg("frame_idx"),
+			py::arg("camera_to_world"),
+			"Set up the camera extrinsics for the given training image index, from the given 3x4 transformation matrix."
+		)
+		.def("get_camera_extrinsics", &Testbed::Nerf::Training::get_camera_extrinsics, py::arg("frame_idx"), "return the 3x4 transformation matrix of given training frame")
+
+		.def("set_image", &Testbed::Nerf::Training::set_image,
+			py::arg("frame_idx"),
+			py::arg("img"),
+			"set one of the training images. must be a floating point numpy array of (H,W,C) with 4 channels; linear color space; W and H must match image size of the rest of the dataset"
+		)
 		;
 
 	py::class_<Testbed::Sdf> sdf(testbed, "Sdf");

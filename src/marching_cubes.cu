@@ -80,7 +80,7 @@ static bool check_shader(GLuint handle, const char* desc, bool program) {
 
 static GLuint compile_shader(bool pixel, const char* code) {
 	GLuint g_VertHandle = glCreateShader(pixel ? GL_FRAGMENT_SHADER : GL_VERTEX_SHADER );
-	const char* glsl_version = "#version 450 core";
+	const char* glsl_version = "#version 330";
 	const GLchar* strings[2] = { glsl_version, code};
 	glShaderSource(g_VertHandle, 2, strings, NULL);
 	glCompileShader(g_VertHandle);
@@ -178,7 +178,6 @@ void main()
 }
 )foo");
 		ps = compile_shader(true, R"foo(
-#extension GL_NV_fragment_shader_barycentric : enable
 layout (location = 0) out vec4 o;
 in vec3 vtxcol;
 uniform int mode;
@@ -188,12 +187,7 @@ void main() {
 		o = vec4(tricol, 1.0);
 	} else {
 		o = vec4(vtxcol, 1.0);
-	}
-	float aa, edge;
-	aa = fwidth(gl_BaryCoordNV.x); edge = smoothstep(0.0, aa, gl_BaryCoordNV.x);
-	aa = fwidth(gl_BaryCoordNV.y); edge = min(edge, smoothstep(0.0, aa, gl_BaryCoordNV.y));
-	aa = fwidth(gl_BaryCoordNV.z); edge = min(edge, smoothstep(0.0, aa, gl_BaryCoordNV.z));
-	o.xyz *= sqrt(edge * 0.5 + 0.5);
+	}	
 }
 )foo");
 		program = glCreateProgram();

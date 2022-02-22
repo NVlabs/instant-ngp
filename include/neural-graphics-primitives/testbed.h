@@ -124,6 +124,7 @@ public:
 		void init_rays_from_camera(
 			uint32_t spp,
 			uint32_t padded_output_width,
+			uint32_t n_extra_dims,
 			const Eigen::Vector2i& resolution,
 			const Eigen::Vector2f& focal_length,
 			const Eigen::Matrix<float, 3, 4>& camera_matrix0,
@@ -164,10 +165,11 @@ public:
 			ENerfActivation density_activation,
 			int show_accel,
 			float min_alpha,
+			const Eigen::Vector3f &light_dir,
 			cudaStream_t stream
 		);
 
-		void enlarge(size_t n_elements, uint32_t padded_output_width, cudaStream_t stream);
+		void enlarge(size_t n_elements, uint32_t padded_output_width, uint32_t n_extra_dims, cudaStream_t stream);
 		RaysNerfSoa& rays_hit() { return m_rays_hit; }
 		RaysNerfSoa& rays_init() { return m_rays[0]; }
 		uint32_t n_rays_initialized() const { return m_n_rays_initialized; }
@@ -180,7 +182,7 @@ public:
 		RaysNerfSoa m_rays[2];
 		RaysNerfSoa m_rays_hit;
 		precision_t* m_network_output;
-		NerfCoordinate* m_network_input;
+		float* m_network_input;
 		tcnn::GPUMemory<uint32_t> m_hit_counter;
 		tcnn::GPUMemory<uint32_t> m_alive_counter;
 		uint32_t m_n_rays_initialized = 0;
@@ -224,6 +226,11 @@ public:
 
 	static constexpr float LOSS_SCALE = 128.f;
 
+	void get_network_params_volume(uint32_t& n_input_dims, uint32_t& n_output_dims, uint32_t& n_pos_dims);
+	void get_network_params_sdf(uint32_t& n_input_dims, uint32_t& n_output_dims, uint32_t& n_pos_dims);
+	void get_network_params_image(uint32_t& n_input_dims, uint32_t& n_output_dims, uint32_t& n_pos_dims);
+	void get_network_params_nerf(uint32_t& n_input_dims, uint32_t& n_output_dims, uint32_t& n_pos_dims);
+
 	void render_volume(CudaRenderBuffer& render_buffer,
 		const Eigen::Vector2f& focal_length,
 		const Eigen::Matrix<float, 3, 4>& camera_matrix,
@@ -254,8 +261,7 @@ public:
 	void reset_accumulation();
 	static ELossType string_to_loss_type(const std::string& str);
 	void reset_network();
-	void update_nerf_focal_lengths();
-	void update_nerf_transforms();
+	void create_empty_nerf_dataset(size_t n_images, Eigen::Vector2i image_resolution, int aabb_scale = 1, bool is_hdr = false);
 	void load_nerf();
 	void load_mesh();
 	void set_exposure(float exposure) { m_exposure = exposure; }
@@ -442,7 +448,12 @@ public:
 		struct Training {
 			NerfDataset dataset;
 			Eigen::Vector2i image_resolution;
-			int n_images = 0; // how many images
+			int n_images_for_training = 0; // how many images to train from, as a high watermark compared to the dataset size
+			int n_images_for_training_prev = 0; // how many images we saw last time we updated the density grid
+
+			void set_images_watermark(int n) {
+				n_images_for_training = (n<0) ? 0 : (n>=dataset.n_images) ? (int)dataset.n_images : n;
+			}
 
 			struct ErrorMap {
 				tcnn::GPUMemory<float> data;
@@ -455,8 +466,7 @@ public:
 				bool is_cdf_valid = false;
 			} error_map;
 
-			std::vector<Eigen::Vector2f> focal_lengths;
-			tcnn::GPUMemory<Eigen::Vector2f> focal_lengths_gpu;
+			tcnn::GPUMemory<TrainingImageMetadata> metadata_gpu;
 
 			std::vector<Eigen::Matrix<float, 3, 4>> transforms;
 			tcnn::GPUMemory<Eigen::Matrix<float, 3, 4>> transforms_gpu;
@@ -478,6 +488,11 @@ public:
 			std::vector<AdamOptimizer<Eigen::Vector3f>> cam_pos_offset;
 			std::vector<RotationAdamOptimizer> cam_rot_offset;
 			AdamOptimizer<Eigen::Vector2f> cam_focal_length_offset = AdamOptimizer<Eigen::Vector2f>(0.f);
+
+			float extrinsic_l2_reg = 0.01f;
+			float intrinsic_l2_reg = 0.01f;
+			float exposure_l2_reg = 0.0f;
+
 
 			tcnn::GPUMemory<uint32_t> numsteps_counter; // number of steps each ray took
 			tcnn::GPUMemory<uint32_t> numsteps_counter_compacted; // number of steps each ray took
@@ -516,6 +531,19 @@ public:
 			int view = 0;
 
 			tcnn::GPUMemory<float> sharpness_grid;
+
+			void set_camera_intrinsics(int frame_idx, float fx, float fy=0.f, float cx=-0.5f, float cy=-0.5f, float k1=0.f, float k2=0.f, float p1=0.f, float p2=0.f);
+			void set_camera_extrinsics(int frame_idx, const Eigen::Matrix<float, 3, 4> &camera_to_world);
+			Eigen::Matrix<float, 3, 4> get_camera_extrinsics(int frame_idx);
+			void update_nerf_metadata(int first=0, int last=-1);
+			void update_nerf_transforms(int first=0, int last=-1);
+
+#ifdef NGP_PYTHON
+			void set_image(int frame_idx, pybind11::array_t<float> img);
+#endif
+
+			void reset_camera_extrinsics();			
+
 		} training = {};
 
 		tcnn::GPUMemory<float> density_grid; // NERF_GRIDSIZE()^3 grid of EMA smoothed densities from the network
@@ -526,11 +554,13 @@ public:
 
 		uint32_t max_cascade = 0;
 
-		tcnn::GPUMemory<NerfCoordinate> vis_input;
+		tcnn::GPUMemory<float> vis_input;
 		tcnn::GPUMemory<Eigen::Array4f> vis_rgba;
 
 		ENerfActivation rgb_activation = ENerfActivation::Exponential;
 		ENerfActivation density_activation = ENerfActivation::Exponential;
+
+		Eigen::Vector3f light_dir = Eigen::Vector3f::Constant(0.5f);
 
 		int show_accel = -1;
 

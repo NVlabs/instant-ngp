@@ -56,6 +56,10 @@ public:
 		return m_state.variable;
 	}
 
+	void reset_state() {
+		m_state = {};
+	}
+
 	private:
 	struct State {
 		int iter = 0;
@@ -112,6 +116,10 @@ public:
 
 	const Eigen::Vector3f& variable() const {
 		return m_state.variable;
+	}
+
+	void reset_state() {
+		m_state = {};
 	}
 
 	private:

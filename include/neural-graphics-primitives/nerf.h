@@ -66,9 +66,28 @@ struct NerfDirection {
 
 struct NerfCoordinate {
 	NGP_HOST_DEVICE NerfCoordinate(const Eigen::Vector3f& pos, const Eigen::Vector3f& dir, float dt) : pos{pos, dt}, dt{dt}, dir{dir, dt} {}
+	NGP_HOST_DEVICE void set_with_optional_light_dir(const Eigen::Vector3f& _pos, const Eigen::Vector3f& _dir, float _dt, const Eigen::Vector3f &light_dir, uint32_t stride_in_bytes) {
+		dt = _dt;
+		pos = NerfPosition(_pos, _dt);
+		dir = NerfDirection(_dir, _dt);
+		if (stride_in_bytes >= sizeof(Eigen::Vector3f) + sizeof(NerfCoordinate)) {
+			*(Eigen::Vector3f*)(this+1)=light_dir;
+		}
+	}
+	NGP_HOST_DEVICE void copy_with_optional_light_dir(const NerfCoordinate &inp, uint32_t stride_in_bytes) {
+		*this = inp;
+		if (stride_in_bytes >= sizeof(Eigen::Vector3f) + sizeof(NerfCoordinate)) {
+			*(Eigen::Vector3f*)(this+1)=*(Eigen::Vector3f*)(&inp+1);
+		}
+	}
+
 	NerfPosition pos;
 	float dt;
 	NerfDirection dir;
+};
+
+struct NerfCoordinateWithLightDir : NerfCoordinate {
+	Eigen::Vector3f light_dir;
 };
 
 NGP_NAMESPACE_END

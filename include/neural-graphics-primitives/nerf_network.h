@@ -161,10 +161,10 @@ class NerfNetwork : public tcnn::Network<float, T> {
 public:
 	using json = nlohmann::json;
 
-	NerfNetwork(uint32_t n_pos_dims, uint32_t n_dir_dims, uint32_t dir_offset, const json& pos_encoding, const json& dir_encoding, const json& density_network, const json& rgb_network) : m_n_pos_dims{n_pos_dims}, m_n_dir_dims{n_dir_dims}, m_dir_offset{dir_offset} {
+	NerfNetwork(uint32_t n_pos_dims, uint32_t n_dir_dims, uint32_t n_extra_dims, uint32_t dir_offset, const json& pos_encoding, const json& dir_encoding, const json& density_network, const json& rgb_network) : m_n_pos_dims{n_pos_dims}, m_n_dir_dims{n_dir_dims}, m_dir_offset{dir_offset}, m_n_extra_dims{n_extra_dims} {
 		m_pos_encoding.reset(tcnn::create_encoding<T>(n_pos_dims, pos_encoding, density_network.contains("otype") && (tcnn::equals_case_insensitive(density_network["otype"], "FullyFusedMLP") || tcnn::equals_case_insensitive(density_network["otype"], "MegakernelMLP")) ? 16u : 8u));
 		uint32_t rgb_alignment = rgb_network.contains("otype") && (tcnn::equals_case_insensitive(rgb_network["otype"], "FullyFusedMLP") || tcnn::equals_case_insensitive(rgb_network["otype"], "MegakernelMLP")) ? 16u : 8u;
-		m_dir_encoding.reset(tcnn::create_encoding<T>(n_dir_dims, dir_encoding, rgb_alignment));
+		m_dir_encoding.reset(tcnn::create_encoding<T>(m_n_dir_dims + m_n_extra_dims, dir_encoding, rgb_alignment));
 
 		// Assume that row-major/SoA operation will be faster, so use it if supported.
 		// This assumption is valid mostly for the (hash-)grid encoding, which is
@@ -497,6 +497,10 @@ public:
 		return 4;
 	}
 
+	uint32_t n_extra_dims() const {
+		return m_n_extra_dims;
+	}
+
 	uint32_t required_input_alignment() const override {
 		return 1; // No alignment required due to encoding
 	}
@@ -566,6 +570,7 @@ private:
 	uint32_t m_rgb_network_input_width;
 	uint32_t m_n_pos_dims;
 	uint32_t m_n_dir_dims;
+	uint32_t m_n_extra_dims; // extra dimensions are assumed to be part of a compound encoding with dir_dims
 	uint32_t m_dir_offset;
 
 	// // Storage of forward pass data
