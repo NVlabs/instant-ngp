@@ -12,6 +12,7 @@ import argparse
 import common
 import numpy as np
 import os
+import PIL
 
 def parse_args():
 	parser = argparse.ArgumentParser(description="Convert image into a different format. By default, converts to our binary fp16 '.bin' format, which helps quickly load large images.")
@@ -22,7 +23,7 @@ def parse_args():
 
 if __name__ == "__main__":
 	args = parse_args()
-	Image.MAX_IMAGE_PIXELS = 10000000000
+	PIL.Image.MAX_IMAGE_PIXELS = 10000000000
 	print(f"Loading {args.input}")
 	img = common.read_image(args.input)
 	print(f"{img.shape[1]}x{img.shape[0]} pixels, {img.shape[2]} channels")

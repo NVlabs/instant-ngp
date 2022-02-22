@@ -115,7 +115,7 @@ instant-ngp$ ./build/testbed --scene data/image/albert.exr
 
 <img src="docs/assets_readme/albert.png"/>
 
-To reproduce the gigapixel results, download, for example, [the Tokyo image](https://www.flickr.com/photos/trevor_dobson_inefekt69/29314390837) and convert it to `.bin` using the `scripts/image2bin.py` script. This custom format improves compatibility and loading speed when resolution is high. Now you can run:
+To reproduce the gigapixel results, download, for example, [the Tokyo image](https://www.flickr.com/photos/trevor_dobson_inefekt69/29314390837) and convert it to `.bin` using the `scripts/convert_image.py` script. This custom format improves compatibility and loading speed when resolution is high. Now you can run:
 
 ```sh
 instant-ngp$ ./build/testbed --scene data/image/tokyo.bin
