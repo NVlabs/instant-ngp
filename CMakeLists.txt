@@ -239,7 +239,8 @@ if (OptiX_FOUND OR OptiX_INCLUDE)
 	)
 
 	set_target_properties(optix_program PROPERTIES CUDA_PTX_COMPILATION ON)
-	set_target_properties(optix_program PROPERTIES CUDA_ARCHITECTURES OFF)
+	list(GET CMAKE_CUDA_ARCHITECTURES 0 MIN_GPU_ARCH)
+	set_target_properties(optix_program PROPERTIES CUDA_ARCHITECTURES ${MIN_GPU_ARCH})
 	target_compile_definitions(optix_program PUBLIC ${TCNN_DEFINITIONS})
 	target_compile_options(optix_program PUBLIC "--expt-relaxed-constexpr")
 
