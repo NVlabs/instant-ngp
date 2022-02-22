@@ -49,14 +49,6 @@
 #    include <GL/glew.h>
 #  endif
 #  include <GLFW/glfw3.h>
-#  if defined(_MSC_VER)
-#    pragma comment(lib, "opengl32.lib")
-#    pragma comment(lib, "gdi32.lib")
-#    pragma comment(lib, "shell32.lib")
-#  endif
-#  if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
-#    pragma comment(lib, "legacy_stdio_definitions")
-#  endif
 #endif
 
 #undef min
