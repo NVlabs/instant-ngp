@@ -139,7 +139,7 @@ if (NGP_BUILD_WITH_GUI)
 		dependencies/imgui/imgui_widgets.cpp
 	)
 
-	add_definitions(-DNGP_GUI)
+	list(APPEND NGP_DEFINITIONS -DNGP_GUI)
 endif(NGP_BUILD_WITH_GUI)
 
 ###########
@@ -164,7 +164,7 @@ find_package(OptiX)
 
 if (OptiX_FOUND OR OptiX_INCLUDE)
 	include_directories("${OptiX_INCLUDE}")
-	add_definitions(-DNGP_OPTIX)
+	list(APPEND NGP_DEFINITIONS -DNGP_OPTIX)
 else()
 	message(WARNING
 		"OptiX was not found. Neural graphics primitives will still compile "
@@ -189,7 +189,6 @@ set(TCNN_BUILD_EXAMPLES OFF)
 add_subdirectory(dependencies/tiny-cuda-nn)
 include_directories("dependencies/tiny-cuda-nn/include")
 include_directories("dependencies/tiny-cuda-nn/dependencies")
-add_definitions(${TCNN_DEFINITIONS})
 
 ##############
 # tinylogger #
@@ -201,7 +200,7 @@ include_directories("dependencies/tinylogger")
 # Program
 ###############################################################################
 
-add_definitions(-DNGP_VERSION="${NGP_VERSION}")
+list(APPEND NGP_DEFINITIONS -DNGP_VERSION="${NGP_VERSION}")
 
 include_directories("include")
 
@@ -239,9 +238,8 @@ if (OptiX_FOUND OR OptiX_INCLUDE)
 	)
 
 	set_target_properties(optix_program PROPERTIES CUDA_PTX_COMPILATION ON)
-	list(GET CMAKE_CUDA_ARCHITECTURES 0 MIN_GPU_ARCH)
-	set_target_properties(optix_program PROPERTIES CUDA_ARCHITECTURES ${MIN_GPU_ARCH})
-	target_compile_definitions(optix_program PUBLIC ${TCNN_DEFINITIONS})
+	set_target_properties(optix_program PROPERTIES CUDA_ARCHITECTURES OFF)
+	target_compile_definitions(optix_program PUBLIC ${NGP_DEFINITIONS} -DTCNN_MIN_GPU_ARCH=0)
 	target_compile_options(optix_program PUBLIC "--expt-relaxed-constexpr")
 
 	# OptiX programs will be compiled as PTX and packaged
@@ -278,10 +276,12 @@ set_target_properties(ngp PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
 set_target_properties(ngp PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(ngp PUBLIC ${GL_LIBRARIES} tiny-cuda-nn)
 target_compile_options(ngp PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:${CUDA_NVCC_FLAGS}>)
+target_compile_definitions(ngp PUBLIC ${NGP_DEFINITIONS} ${TCNN_DEFINITIONS})
 
 add_executable(testbed src/main.cu)
 target_link_libraries(testbed PUBLIC ngp)
 target_compile_options(testbed PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:${CUDA_NVCC_FLAGS}>)
+target_compile_definitions(testbed PUBLIC ${NGP_DEFINITIONS} ${TCNN_DEFINITIONS})
 
 if (Python_FOUND)
 	add_library(pyngp SHARED src/python_api.cu)
@@ -289,7 +289,7 @@ if (Python_FOUND)
 	set_target_properties(pyngp PROPERTIES CUDA_VISIBILITY_PRESET "hidden")
 	target_link_libraries(pyngp PUBLIC ngp ${PYTHON_LIBRARIES} pybind11::module)
 	target_compile_options(pyngp PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:${CUDA_NVCC_FLAGS}>)
-	target_compile_definitions(pyngp PUBLIC -DNGP_PYTHON)
+	target_compile_definitions(pyngp PUBLIC -DNGP_PYTHON ${NGP_DEFINITIONS} ${TCNN_DEFINITIONS})
 	pybind11_extension(pyngp)
 
 	if (MSVC)
