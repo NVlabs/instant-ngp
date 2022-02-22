@@ -36,7 +36,6 @@ using namespace tcnn;
 NGP_NAMESPACE_BEGIN
 
 static constexpr uint32_t MARCH_ITER = 10000;
-static constexpr float MIN_DIST = 0.00005f;
 
 __device__ inline float square(float x) { return x * x; }
 __device__ inline float mix(float a, float b, float t) { return a + (b - a) * t; }
@@ -151,6 +150,7 @@ __global__ void advance_pos_kernel_sdf(
 	const TriangleOctreeNode* __restrict__ octree_nodes,
 	int max_depth,
 	float distance_scale,
+	float maximum_distance,
 	float k,
 	float* __restrict__ prev_distances,
 	float* __restrict__ total_distances,
@@ -198,7 +198,7 @@ __global__ void advance_pos_kernel_sdf(
 		total_distances[i] = total_distance + distance;
 	}
 
-	bool stay_alive = distance > MIN_DIST && fabsf(distance / 2) > 3*MIN_DIST;
+	bool stay_alive = distance > maximum_distance && fabsf(distance / 2) > 3*maximum_distance;
 	if (!stay_alive) {
 		payload.alive = false;
 		return;
@@ -649,7 +649,16 @@ uint32_t Testbed::SphereTracer::trace_bvh(TriangleBvh* bvh, const Triangle* tria
 	return n_alive;
 }
 
-uint32_t Testbed::SphereTracer::trace(const distance_fun_t& distance_function, float zero_offset, float distance_scale, const BoundingBox& aabb, const float floor_y, const TriangleOctree* octree, cudaStream_t stream) {
+uint32_t Testbed::SphereTracer::trace(
+	const distance_fun_t& distance_function,
+	float zero_offset,
+	float distance_scale,
+	float maximum_distance,
+	const BoundingBox& aabb,
+	const float floor_y,
+	const TriangleOctree* octree,
+	cudaStream_t stream
+) {
 	if (m_n_rays_initialized == 0) {
 		return 0;
 	}
@@ -716,6 +725,7 @@ uint32_t Testbed::SphereTracer::trace(const distance_fun_t& distance_function, f
 				octree ? octree->nodes_gpu() : nullptr,
 				octree ? octree->depth() : 0,
 				distance_scale,
+				maximum_distance,
 				m_shadow_sharpness,
 				m_trace_shadow_rays ? rays_current.prev_distance.data() : nullptr,
 				m_trace_shadow_rays ? rays_current.total_distance.data() : nullptr,
@@ -828,7 +838,16 @@ void Testbed::render_sdf(
 		if (gt_raytrace) {
 			return tracer.trace_bvh(m_sdf.triangle_bvh.get(), m_sdf.triangles_gpu.data(), stream);
 		} else {
-			return tracer.trace(distance_function, m_sdf.zero_offset, m_sdf.distance_scale, sdf_bounding_box, get_floor_y(), octree_ptr, stream);
+			return tracer.trace(
+				distance_function,
+				m_sdf.zero_offset,
+				m_sdf.distance_scale,
+				m_sdf.maximum_distance,
+				sdf_bounding_box,
+				get_floor_y(),
+				octree_ptr,
+				stream
+			);
 		}
 	};
 

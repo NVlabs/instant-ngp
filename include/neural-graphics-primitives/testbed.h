@@ -91,7 +91,16 @@ public:
 
 		void init_rays_from_data(uint32_t n_elements, const RaysSdfSoa& data, cudaStream_t stream);
 		uint32_t trace_bvh(TriangleBvh* bvh, const Triangle* triangles, cudaStream_t stream);
-		uint32_t trace(const distance_fun_t& distance_function, float zero_offset, float distance_scale, const BoundingBox& aabb, const float floor_y, const TriangleOctree* octree, cudaStream_t stream);
+		uint32_t trace(
+			const distance_fun_t& distance_function,
+			float zero_offset,
+			float distance_scale,
+			float maximum_distance,
+			const BoundingBox& aabb,
+			const float floor_y,
+			const TriangleOctree* octree,
+			cudaStream_t stream
+		);
 		void enlarge(size_t n_elements);
 		RaysSdfSoa& rays_hit() { return m_rays_hit; }
 		RaysSdfSoa& rays_init() { return m_rays[0];	}
@@ -539,6 +548,7 @@ public:
 		SphereTracer tracer;
 		SphereTracer shadow_tracer;
 		float shadow_sharpness = 2048.0f;
+		float maximum_distance = 0.00005f;
 
 		bool groundtruth_spheremarch = false;
 

@@ -2000,8 +2000,15 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 			focal_length,
 			m_nerf.cone_angle_constant,
 			m_nerf.density_grid_bitfield.data(),
-			render_mode, camera_matrix1, depth_scale, m_visualized_layer, m_visualized_dimension,
-			m_nerf.rgb_activation, m_nerf.density_activation, m_nerf.show_accel, m_nerf.rendering_min_alpha,
+			render_mode,
+			camera_matrix1,
+			depth_scale,
+			m_visualized_layer,
+			m_visualized_dimension,
+			m_nerf.rgb_activation,
+			m_nerf.density_activation,
+			m_nerf.show_accel,
+			m_nerf.rendering_min_alpha,
 			stream
 		);
 	}

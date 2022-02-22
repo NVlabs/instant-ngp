@@ -371,36 +371,54 @@ void Testbed::imgui() {
 		ImGui::Text("Steps: %d, Loss: %0.6f (%0.2f dB)", m_training_step, m_loss_scalar, linear_to_db(m_loss_scalar));
 		ImGui::PlotLines("loss graph", m_loss_graph, std::min(m_loss_graph_samples, 256), (m_loss_graph_samples < 256) ? 0 : (m_loss_graph_samples&255), 0, FLT_MAX, FLT_MAX, ImVec2(0, 50.f));
 
-		if (m_testbed_mode == ETestbedMode::Nerf) {
-			if (ImGui::TreeNode("NeRF rendering options")) {
-				accum_reset |= ImGui::Checkbox("Apply lens distortion", &m_nerf.render_with_camera_distortion);
-				ImGui::TreePop();
+		if (m_testbed_mode == ETestbedMode::Nerf && ImGui::TreeNode("NeRF training options")) {
+			ImGui::Checkbox("Random bg color", &m_nerf.training.random_bg_color);
+			ImGui::SameLine();
+			ImGui::Checkbox("Snap to pixel centers", &m_nerf.training.snap_to_pixel_centers);
+			ImGui::SliderFloat("Near distance", &m_nerf.training.near_distance, 0.0f, 1.0f);
+			accum_reset |= ImGui::Checkbox("Linear colors", &m_nerf.training.linear_colors);
+			ImGui::Combo("Loss", (int*)&m_nerf.training.loss_type, LossTypeStr);
+			ImGui::Combo("RGB activation", (int*)&m_nerf.rgb_activation, NerfActivationStr);
+			ImGui::Combo("Density activation", (int*)&m_nerf.density_activation, NerfActivationStr);
+			ImGui::SliderFloat("Cone angle", &m_nerf.cone_angle_constant, 0.0f, 1.0f/128.0f);
+
+			// Importance sampling options, but still related to training
+			ImGui::Checkbox("Sample focal plane ~error", &m_nerf.training.sample_focal_plane_proportional_to_error);
+			ImGui::SameLine();
+			ImGui::Checkbox("Sample focal plane ~sharpness", &m_nerf.training.include_sharpness_in_error);
+			ImGui::Checkbox("Sample image ~error", &m_nerf.training.sample_image_proportional_to_error);
+			ImGui::Text("%dx%d error res w/ %d steps between updates", m_nerf.training.error_map.resolution.x(), m_nerf.training.error_map.resolution.y(), m_nerf.training.n_steps_between_error_map_updates);
+			ImGui::Checkbox("Display error overlay", &m_nerf.training.render_error_overlay);
+			if (m_nerf.training.render_error_overlay) {
+				ImGui::SliderFloat("Error overlay brightness", &m_nerf.training.error_overlay_brightness, 0.f, 1.f);
+			}
+			ImGui::SliderFloat("Density grid decay", &m_nerf.training.density_grid_decay, 0.f, 1.f,"%.4f");
+			ImGui::TreePop();
+		}
+
+		if (m_testbed_mode == ETestbedMode::Sdf && ImGui::TreeNode("SDF training options")) {
+			accum_reset |= ImGui::Checkbox("Use octree for acceleration", &m_sdf.use_triangle_octree);
+			accum_reset |= ImGui::Combo("Mesh SDF mode", (int*)&m_sdf.mesh_sdf_mode, MeshSdfModeStr);
+
+			if (ImGui::Checkbox("Calculate IoU", &m_sdf.calculate_iou_online)) {
+				m_sdf.iou_decay = 0;
 			}
 
-			if (ImGui::TreeNode("NeRF training options")) {
-				ImGui::Checkbox("Random bg color", &m_nerf.training.random_bg_color);
-				ImGui::SameLine();
-				ImGui::Checkbox("Snap to pixel centers", &m_nerf.training.snap_to_pixel_centers);
-				ImGui::SliderFloat("Near distance", &m_nerf.training.near_distance, 0.0f, 1.0f);
-				accum_reset |= ImGui::Checkbox("Linear colors", &m_nerf.training.linear_colors);
-				ImGui::Combo("Loss", (int*)&m_nerf.training.loss_type, LossTypeStr);
-				ImGui::Combo("RGB activation", (int*)&m_nerf.rgb_activation, NerfActivationStr);
-				ImGui::Combo("Density activation", (int*)&m_nerf.density_activation, NerfActivationStr);
-				ImGui::SliderFloat("Cone angle", &m_nerf.cone_angle_constant, 0.0f, 1.0f/128.0f);
+			ImGui::SameLine();
+			ImGui::Text("%0.6f", m_sdf.iou);
+			ImGui::TreePop();
+		}
 
-				// Importance sampling options, but still related to training
-				ImGui::Checkbox("Sample focal plane ~error", &m_nerf.training.sample_focal_plane_proportional_to_error);
-				ImGui::SameLine();
-				ImGui::Checkbox("Sample focal plane ~sharpness", &m_nerf.training.include_sharpness_in_error);
-				ImGui::Checkbox("Sample image ~error", &m_nerf.training.sample_image_proportional_to_error);
-				ImGui::Text("%dx%d error res w/ %d steps between updates", m_nerf.training.error_map.resolution.x(), m_nerf.training.error_map.resolution.y(), m_nerf.training.n_steps_between_error_map_updates);
-				ImGui::Checkbox("Display error overlay", &m_nerf.training.render_error_overlay);
-				if (m_nerf.training.render_error_overlay) {
-					ImGui::SliderFloat("Error overlay brightness", &m_nerf.training.error_overlay_brightness, 0.f, 1.f);
-				}
-				ImGui::SliderFloat("Density grid decay", &m_nerf.training.density_grid_decay, 0.f, 1.f,"%.4f");
-				ImGui::TreePop();
-			}
+		if (m_testbed_mode == ETestbedMode::Image && ImGui::TreeNode("Image training options")) {
+			ImGui::Combo("Training coords", (int*)&m_image.random_mode, RandomModeStr);
+			ImGui::TreePop();
+		}
+
+		if (m_testbed_mode == ETestbedMode::Volume && ImGui::CollapsingHeader("Volume training options")) {
+			accum_reset |= ImGui::SliderFloat("Albedo", &m_volume.albedo, 0.f, 1.f);
+			accum_reset |= ImGui::SliderFloat("Scattering", &m_volume.scattering, -2.f, 2.f);
+			accum_reset |= ImGui::SliderFloat("Distance Scale", &m_volume.inv_distance_scale, 1.f, 100.f, "%.3g", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
+			ImGui::TreePop();
 		}
 	}
 
@@ -455,11 +473,31 @@ void Testbed::imgui() {
 			ImGui::TreePop();
 		}
 
+		if (m_testbed_mode == ETestbedMode::Nerf && ImGui::TreeNode("NeRF rendering options")) {
+			accum_reset |= ImGui::Checkbox("Apply lens distortion", &m_nerf.render_with_camera_distortion);
+			ImGui::TreePop();
+		}
+
+		if (m_testbed_mode == ETestbedMode::Sdf && ImGui::TreeNode("SDF rendering options")) {
+			accum_reset |= ImGui::Checkbox("Analytic normals", &m_sdf.analytic_normals);
+
+			accum_reset |= ImGui::SliderFloat("Normals epsilon", &m_sdf.fd_normals_epsilon, 0.00001f, 0.1f, "%.6g", ImGuiSliderFlags_Logarithmic);
+			accum_reset |= ImGui::SliderFloat("Maximum distance", &m_sdf.maximum_distance, 0.00001f, 0.1f, "%.6g", ImGuiSliderFlags_Logarithmic);
+			accum_reset |= ImGui::SliderFloat("Shadow sharpness", &m_sdf.shadow_sharpness, 0.1f, 2048.0f, "%.6g", ImGuiSliderFlags_Logarithmic);
+
+			accum_reset |= ImGui::SliderFloat("Inflate (offset the zero set)", &m_sdf.zero_offset, -0.25f, 0.25f);
+			accum_reset |= ImGui::SliderFloat("Distance scale", &m_sdf.distance_scale, 0.25f, 1.f);
+
+			ImGui::TreePop();
+		}
+
 		if (ImGui::TreeNode("Debug visualization")) {
-			ImGui::Checkbox("Visualize cameras", &m_nerf.visualize_cameras);
-			ImGui::SameLine();
 			ImGui::Checkbox("Visualize unit cube", &m_visualize_unit_cube);
-			accum_reset |= ImGui::SliderInt("Show acceleration", &m_nerf.show_accel, -1, 7);
+			if (m_testbed_mode == ETestbedMode::Nerf) {
+				ImGui::SameLine();
+				ImGui::Checkbox("Visualize cameras", &m_nerf.visualize_cameras);
+				accum_reset |= ImGui::SliderInt("Show acceleration", &m_nerf.show_accel, -1, 7);
+			}
 
 			if (!m_single_view) {
 				ImGui::BeginDisabled();
@@ -685,34 +723,6 @@ void Testbed::imgui() {
 				ImGui::SliderFloat("Inflate", &m_mesh.inflate_amount, 0.f, 128.f);
 			}
 		}
-	}
-
-	if (m_testbed_mode == ETestbedMode::Sdf && ImGui::CollapsingHeader("SDF settings")) {
-		accum_reset |= ImGui::Checkbox("Analytic normals", &m_sdf.analytic_normals);
-		ImGui::SameLine();
-		accum_reset |= ImGui::Checkbox("Use octree for acceleration", &m_sdf.use_triangle_octree);
-		accum_reset |= ImGui::SliderFloat("Normals epsilon", &m_sdf.fd_normals_epsilon, 0.00001f, 0.1f, "%.6g", ImGuiSliderFlags_Logarithmic);
-
-		accum_reset |= ImGui::SliderFloat("Shadow sharpness", &m_sdf.shadow_sharpness, 0.1f, 2048.0f, "%.6g", ImGuiSliderFlags_Logarithmic);
-		accum_reset |= ImGui::SliderFloat("Inflate (offset the zero set)", &m_sdf.zero_offset, -0.25f, 0.25f);
-		accum_reset |= ImGui::SliderFloat("Distance scale", &m_sdf.distance_scale, 0.25f, 1.f);
-		accum_reset |= ImGui::Combo("Mesh SDF mode", (int*)&m_sdf.mesh_sdf_mode, MeshSdfModeStr);
-
-		if (ImGui::Checkbox("Calculate IoU", &m_sdf.calculate_iou_online)) {
-			m_sdf.iou_decay = 0;
-		}
-
-		ImGui::SameLine();
-		ImGui::Text("%0.6f", m_sdf.iou);
-	}
-
-	if (m_testbed_mode == ETestbedMode::Image && ImGui::CollapsingHeader("Image settings")) {
-		ImGui::Combo("Training coords", (int*)&m_image.random_mode, RandomModeStr);
-	}
-	if (m_testbed_mode == ETestbedMode::Volume && ImGui::CollapsingHeader("Volume settings")) {
-		accum_reset |= ImGui::SliderFloat("Albedo", &m_volume.albedo, 0.f, 1.f);
-		accum_reset |= ImGui::SliderFloat("Scattering", &m_volume.scattering, -2.f, 2.f);
-		accum_reset |= ImGui::SliderFloat("Distance Scale", &m_volume.inv_distance_scale, 1.f, 100.f, "%.3g", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
 	}
 
 	if (m_testbed_mode == ETestbedMode::Sdf) {
