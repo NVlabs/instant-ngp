@@ -240,7 +240,7 @@ if __name__ == "__main__":
 				c2w = np.linalg.inv(m)
 				c2w[0:3,2] *= -1 # flip the y and z axis
 				c2w[0:3,1] *= -1
-				c2w=c2w[[1,0,2,3],:] # swap y and z
+				c2w = c2w[[1,0,2,3],:] # swap y and z
 				c2w[2,:] *= -1 # flip whole world upside down
 
 				up += c2w[0:3,1]
@@ -249,10 +249,10 @@ if __name__ == "__main__":
 				out["frames"].append(frame)
 	nframes = len(out["frames"])
 	up = up / np.linalg.norm(up)
-	print("up vector was ", up)
-	R=rotmat(up,[0,0,1]) # rotate up vector to [0,0,1]
-	R=np.pad(R,[0,1])
-	R[-1,-1]=1
+	print("up vector was", up)
+	R = rotmat(up,[0,0,1]) # rotate up vector to [0,0,1]
+	R = np.pad(R,[0,1])
+	R[-1,-1] = 1
 
 
 	for f in out["frames"]:
@@ -261,30 +261,30 @@ if __name__ == "__main__":
 	# find a central point they are all looking at
 	print("computing center of attention...")
 	totw=0
-	totp=[0,0,0]
+	totp=np.array([0, 0, 0])
 	for f in out["frames"]:
-		mf=f["transform_matrix"][0:3,:]
+		mf = f["transform_matrix"][0:3,:]
 		for g in out["frames"]:
-			mg=g["transform_matrix"][0:3,:]
-			p,w=closest_point_2_lines(mf[:,3],mf[:,2],mg[:,3],mg[:,2])
-			if w>0.01:
-				totp+=p*w
-				totw+=w
-	totp/=totw
+			mg = g["transform_matrix"][0:3,:]
+			p, w = closest_point_2_lines(mf[:,3], mf[:,2], mg[:,3], mg[:,2])
+			if w > 0.01:
+				totp += p*w
+				totw += w
+	totp /= totw
 	print(totp) # the cameras are looking at totp
 	for f in out["frames"]:
-		f["transform_matrix"][0:3,3]-=totp
+		f["transform_matrix"][0:3,3] -= totp
 
-	avglen=0.
+	avglen = 0.
 	for f in out["frames"]:
-		avglen+=np.linalg.norm(f["transform_matrix"][0:3,3])
-	avglen/=nframes
+		avglen += np.linalg.norm(f["transform_matrix"][0:3,3])
+	avglen /= nframes
 	print("avg camera distance from origin ", avglen)
 	for f in out["frames"]:
-		f["transform_matrix"][0:3,3]*=4./avglen     # scale to "nerf sized"
+		f["transform_matrix"][0:3,3] *= 4.0 / avglen # scale to "nerf sized"
 
 	for f in out["frames"]:
-		f["transform_matrix"]=f["transform_matrix"].tolist()
+		f["transform_matrix"] = f["transform_matrix"].tolist()
 	print(nframes,"frames")
 	print(f"writing {OUT_PATH}")
 	with open(OUT_PATH, "w") as outfile:
