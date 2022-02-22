@@ -40,9 +40,9 @@
 
 #ifdef NGP_GUI
 #  include <imgui/imgui.h>
-#  include <imgui/imgui_impl_glfw.h>
-#  include <imgui/imgui_impl_opengl3.h>
-#  include <imgui/ImGuizmo.h>
+#  include <imgui/backends/imgui_impl_glfw.h>
+#  include <imgui/backends/imgui_impl_opengl3.h>
+#  include <imguizmo/ImGuizmo.h>
 #  ifdef _WIN32
 #    include <GL/gl3w.h>
 #  else
@@ -50,7 +50,6 @@
 #  endif
 #  include <GLFW/glfw3.h>
 #  if defined(_MSC_VER)
-#    pragma comment(lib, "glfw/lib-vc2010-64/glfw3.lib")
 #    pragma comment(lib, "opengl32.lib")
 #    pragma comment(lib, "gdi32.lib")
 #    pragma comment(lib, "shell32.lib")

@@ -19,7 +19,7 @@
 #include <tiny-cuda-nn/common.h>
 
 #include <imgui/imgui.h>
-#include <imgui/ImGuizmo.h>
+#include <imguizmo/ImGuizmo.h>
 
 #include <vector>
 
