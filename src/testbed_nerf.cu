@@ -2934,17 +2934,21 @@ void Testbed::compute_mesh_vertex_colors() {
 	}
 
 	m_mesh.vert_colors.resize(n_verts);
-	const uint32_t padded_output_width = m_network->padded_output_width();
-	const uint32_t floats_per_coord = sizeof(NerfCoordinate) / sizeof(float) + m_nerf_network->n_extra_dims();
-	const uint32_t extra_stride = m_nerf_network->n_extra_dims() * sizeof(float);
-	GPUMemory<float> coords(n_verts * floats_per_coord);
-	GPUMemory<float> mlp_out(n_verts * padded_output_width);
+	m_mesh.vert_colors.memset(0);
 
-	GPUMatrix<float> positions_matrix((float*)coords.data(), floats_per_coord, n_verts);
-	GPUMatrix<float> color_matrix(mlp_out.data(), padded_output_width, n_verts);
-	linear_kernel(generate_nerf_network_inputs_from_positions, 0, m_inference_stream, n_verts, m_aabb, m_mesh.verts.data(), PitchedPtr<NerfCoordinate>((NerfCoordinate*)coords.data(), 1, 0, extra_stride), m_nerf.light_dir.normalized());
-	m_network->inference(m_inference_stream, positions_matrix, color_matrix);
-	linear_kernel(extract_srgb_with_activation, 0, m_inference_stream, n_verts * 3, 3, mlp_out.data(), (float*)m_mesh.vert_colors.data(), m_nerf.rgb_activation, m_nerf.training.linear_colors);
+	if (m_testbed_mode == ETestbedMode::Nerf) {
+		const uint32_t padded_output_width = m_network->padded_output_width();
+		const uint32_t floats_per_coord = sizeof(NerfCoordinate) / sizeof(float) + m_nerf_network->n_extra_dims();
+		const uint32_t extra_stride = m_nerf_network->n_extra_dims() * sizeof(float);
+		GPUMemory<float> coords(n_verts * floats_per_coord);
+		GPUMemory<float> mlp_out(n_verts * padded_output_width);
+
+		GPUMatrix<float> positions_matrix((float*)coords.data(), floats_per_coord, n_verts);
+		GPUMatrix<float> color_matrix(mlp_out.data(), padded_output_width, n_verts);
+		linear_kernel(generate_nerf_network_inputs_from_positions, 0, m_inference_stream, n_verts, m_aabb, m_mesh.verts.data(), PitchedPtr<NerfCoordinate>((NerfCoordinate*)coords.data(), 1, 0, extra_stride), m_nerf.light_dir.normalized());
+		m_network->inference(m_inference_stream, positions_matrix, color_matrix);
+		linear_kernel(extract_srgb_with_activation, 0, m_inference_stream, n_verts * 3, 3, mlp_out.data(), (float*)m_mesh.vert_colors.data(), m_nerf.rgb_activation, m_nerf.training.linear_colors);
+	}
 }
 
 GPUMemory<float> Testbed::get_density_on_grid(Vector3i res3d, const BoundingBox& aabb) {
@@ -3052,6 +3056,7 @@ int Testbed::marching_cubes(Vector3i res3d, const BoundingBox& aabb, float thres
 
 	compute_mesh_1ring(m_mesh.verts, m_mesh.indices, m_mesh.verts_smoothed, m_mesh.vert_normals);
 	compute_mesh_vertex_colors();
+
 	return (int)(m_mesh.indices.size()/3);
 }
 
