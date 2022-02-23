@@ -159,13 +159,11 @@ __Q:__ Is there a [Docker container](https://www.docker.com/)?
 __A:__ Yes. We bundle a [Visual Studio Code development container](https://code.visualstudio.com/docs/remote/containers), the `.devcontainer/Dockerfile` of which you can also use stand-alone. 
 
 If you want to run the container without using VSCode:
-
 ```
 docker-compose -f .devcontainer/docker-compose.yml build instant-ngp
 xhost local:root
 docker-compose -f .devcontainer/docker-compose.yml run instant-ngp /bin/bash
 ```
-
 Then run the build commands above as normal.
 
 ##

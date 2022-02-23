@@ -38,18 +38,17 @@ def parse_args():
 
 def do_system(arg):
 	print(f"==== running: {arg}")
-	err=os.system(arg)
+	err = os.system(arg)
 	if err:
 		print("FATAL: command failed")
 		sys.exit(err)
 
-
 def run_ffmpeg(args):
 	if not os.path.isabs(args.images):
 		args.images = os.path.join(os.path.dirname(args.video_in), args.images)
-	images=args.images
-	video=args.video_in
-	fps=float(args.video_fps) or 1.0
+	images = args.images
+	video = args.video_in
+	fps = float(args.video_fps) or 1.0
 	print(f"running ffmpeg with input video file={video}, output image folder={images}, fps={fps}.")
 	if (input(f"warning! folder '{images}' will be deleted/replaced. continue? (Y/n)").lower().strip()+"y")[:1] != "y":
 		sys.exit(1)
@@ -125,18 +124,18 @@ def rotmat(a, b):
 	return np.eye(3) + kmat + kmat.dot(kmat) * ((1 - c) / (s ** 2 + 1e-10))
 
 def closest_point_2_lines(oa, da, ob, db): # returns point closest to both rays of form o+t*d, and a weight factor that goes to 0 if the lines are parallel
-	da=da/np.linalg.norm(da)
-	db=db/np.linalg.norm(db)
-	c=np.cross(da,db)
-	denom=(np.linalg.norm(c)**2)
-	t=ob-oa
-	ta=np.linalg.det([t,db,c])/(denom+1e-10)
-	tb=np.linalg.det([t,da,c])/(denom+1e-10)
-	if ta>0:
-		ta=0
-	if tb>0:
-		tb=0
-	return (oa+ta*da+ob+tb*db)*0.5,denom
+	da = da / np.linalg.norm(da)
+	db = db / np.linalg.norm(db)
+	c = np.cross(da, db)
+	denom = np.linalg.norm(c)**2
+	t = ob - oa
+	ta = np.linalg.det([t, db, c]) / (denom + 1e-10)
+	tb = np.linalg.det([t, da, c]) / (denom + 1e-10)
+	if ta > 0:
+		ta = 0
+	if tb > 0:
+		tb = 0
+	return (oa+ta*da+ob+tb*db) * 0.5, denom
 
 if __name__ == "__main__":
 	args = parse_args()
@@ -144,21 +143,21 @@ if __name__ == "__main__":
 		run_ffmpeg(args)
 	if args.run_colmap:
 		run_colmap(args)
-	AABB_SCALE=int(args.aabb_scale)
-	SKIP_EARLY=int(args.skip_early)
-	IMAGE_FOLDER=args.images
-	TEXT_FOLDER=args.text
-	OUT_PATH=args.out
+	AABB_SCALE = int(args.aabb_scale)
+	SKIP_EARLY = int(args.skip_early)
+	IMAGE_FOLDER = args.images
+	TEXT_FOLDER = args.text
+	OUT_PATH = args.out
 	print(f"outputting to {OUT_PATH}...")
 	with open(os.path.join(TEXT_FOLDER,"cameras.txt"), "r") as f:
-		angle_x=math.pi/2
+		angle_x = math.pi / 2
 		for line in f:
 			# 1 SIMPLE_RADIAL 2048 1536 1580.46 1024 768 0.0045691
 			# 1 OPENCV 3840 2160 3178.27 3182.09 1920 1080 0.159668 -0.231286 -0.00123982 0.00272224
 			# 1 RADIAL 1920 1080 1665.1 960 540 0.0672856 -0.0761443
-			if line[0]=="#":
+			if line[0] == "#":
 				continue
-			els=line.split(" ")
+			els = line.split(" ")
 			w = float(els[2])
 			h = float(els[3])
 			fl_x = float(els[4])
@@ -167,18 +166,18 @@ if __name__ == "__main__":
 			k2 = 0
 			p1 = 0
 			p2 = 0
-			cx = w/2
-			cy = h/2
-			if (els[1]=="SIMPLE_RADIAL"):
+			cx = w / 2
+			cy = h / 2
+			if (els[1] =="SIMPLE_RADIAL"):
 				cx = float(els[5])
 				cy = float(els[6])
 				k1 = float(els[7])
-			elif (els[1]=="RADIAL"):
+			elif (els[1] =="RADIAL"):
 				cx = float(els[5])
 				cy = float(els[6])
 				k1 = float(els[7])
 				k2 = float(els[8])
-			elif (els[1]=="OPENCV"):
+			elif (els[1] =="OPENCV"):
 				fl_y = float(els[5])
 				cx = float(els[6])
 				cy = float(els[7])
@@ -189,41 +188,42 @@ if __name__ == "__main__":
 			else:
 				print("unknown camera model ", els[1])
 			# fl = 0.5 * w / tan(0.5 * angle_x);
-			angle_x= math.atan(w/(fl_x*2))*2
-			angle_y= math.atan(h/(fl_y*2))*2
-			fovx=angle_x*180/math.pi
-			fovy=angle_y*180/math.pi
+			angle_x = math.atan(w / (fl_x * 2)) * 2
+			angle_y = math.atan(h / (fl_y * 2)) * 2
+			fovx = angle_x * 180 / math.pi
+			fovy = angle_y * 180 / math.pi
 
 	print(f"camera:\n\tres={w,h}\n\tcenter={cx,cy}\n\tfocal={fl_x,fl_y}\n\tfov={fovx,fovy}\n\tk={k1,k2} p={p1,p2} ")
 
 	with open(os.path.join(TEXT_FOLDER,"images.txt"), "r") as f:
-		i=0
-		bottom = np.array([0,0,0,1.]).reshape([1,4])
-		out={
-			"camera_angle_x":angle_x,
-			"camera_angle_y":angle_y,
-			"fl_x":fl_x,
-			"fl_y":fl_y,
-			"k1":k1,
-			"k2":k2,
-			"p1":p1,
-			"p2":p2,
-			"cx":cx,
-			"cy":cy,
-			"w":w,
-			"h":h,
-			"aabb_scale":AABB_SCALE,"frames":[]
+		i = 0
+		bottom = np.array([0.0, 0.0, 0.0, 1.0]).reshape([1, 4])
+		out = {
+			"camera_angle_x": angle_x,
+			"camera_angle_y": angle_y,
+			"fl_x": fl_x,
+			"fl_y": fl_y,
+			"k1": k1,
+			"k2": k2,
+			"p1": p1,
+			"p2": p2,
+			"cx": cx,
+			"cy": cy,
+			"w": w,
+			"h": h,
+			"aabb_scale": AABB_SCALE,
+			"frames": [],
 		}
 
-		up=np.zeros(3)
+		up = np.zeros(3)
 		for line in f:
-			line=line.strip()
-			if line[0]=="#":
+			line = line.strip()
+			if line[0] == "#":
 				continue
-			i=i+1
+			i = i + 1
 			if i < SKIP_EARLY*2:
 				continue
-			if  i%2==1 :
+			if  i % 2 == 1:
 				elems=line.split(" ") # 1-4 is quat, 5-7 is trans, 9ff is filename (9, if filename contains no spaces)
 				#name = str(PurePosixPath(Path(IMAGE_FOLDER, elems[9])))
 				# why is this requireing a relitive path while using ^
@@ -252,16 +252,16 @@ if __name__ == "__main__":
 	print("up vector was", up)
 	R = rotmat(up,[0,0,1]) # rotate up vector to [0,0,1]
 	R = np.pad(R,[0,1])
-	R[-1,-1] = 1
+	R[-1, -1] = 1
 
 
 	for f in out["frames"]:
-		f["transform_matrix"]=np.matmul(R,f["transform_matrix"]) # rotate up to be the z axis
+		f["transform_matrix"] = np.matmul(R, f["transform_matrix"]) # rotate up to be the z axis
 
 	# find a central point they are all looking at
 	print("computing center of attention...")
-	totw=0.
-	totp=np.array([0., 0., 0.])
+	totw = 0.0
+	totp = np.array([0.0, 0.0, 0.0])
 	for f in out["frames"]:
 		mf = f["transform_matrix"][0:3,:]
 		for g in out["frames"]:
@@ -279,7 +279,7 @@ if __name__ == "__main__":
 	for f in out["frames"]:
 		avglen += np.linalg.norm(f["transform_matrix"][0:3,3])
 	avglen /= nframes
-	print("avg camera distance from origin ", avglen)
+	print("avg camera distance from origin", avglen)
 	for f in out["frames"]:
 		f["transform_matrix"][0:3,3] *= 4.0 / avglen # scale to "nerf sized"
 
