@@ -1,0 +1,21 @@
+{
+	"parent" : "base.json",
+	"encoding": {
+		"otype": "OneBlob",
+		"n_bins": 32
+	},
+	"optimizer": {
+		"nested": {
+			"nested":	{
+				"learning_rate": 3e-4
+			}
+		}
+	},
+	"network": {
+		"otype": "FullyFusedMLP",
+		"activation": "ReLU",
+		"output_activation": "None",
+		"n_neurons": 128,
+		"n_hidden_layers": 6
+	}
+}
