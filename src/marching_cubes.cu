@@ -187,7 +187,7 @@ void main() {
 		o = vec4(tricol, 1.0);
 	} else {
 		o = vec4(vtxcol, 1.0);
-	}	
+	}
 }
 )foo");
 		program = glCreateProgram();
@@ -695,10 +695,18 @@ void compute_mesh_1ring(const tcnn::GPUMemory<Vector3f> &verts, const tcnn::GPUM
 }
 
 __global__ void compute_mesh_opt_gradients_kernel(
-	uint32_t n_verts, float thresh, const Vector3f* verts, const Vector3f* normals, const Vector4f* verts_smoothed,
-	uint32_t padded_output_width, const network_precision_t* densities,
-	uint32_t input_gradient_width, const float* input_gradients, Vector3f* verts_gradient_out,
-	float k_smooth_amount,	float k_density_amount,	float k_inflate_amount
+	uint32_t n_verts,
+	float thresh,
+	const Vector3f* verts,
+	const Vector3f* normals,
+	const Vector4f* verts_smoothed,
+	const network_precision_t* densities,
+	uint32_t input_gradient_width,
+	const float* input_gradients,
+	Vector3f* verts_gradient_out,
+	float k_smooth_amount,
+	float k_density_amount,
+	float k_inflate_amount
 ) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i >= n_verts) return;
@@ -716,17 +724,22 @@ __global__ void compute_mesh_opt_gradients_kernel(
 	Vector3f input_gradient = *(const Vector3f *)(input_gradients + i * input_gradient_width);
 
 	Vector3f n = input_gradient.normalized();
-	float density = densities[i * padded_output_width];
+	float density = densities[i];
 	verts_gradient_out[i] = n * sign(density - thresh) * k_density_amount + smoothing_grad * k_smooth_amount - normals[i].normalized() * k_inflate_amount;
 }
 
-void compute_mesh_opt_gradients(float thresh,
-	const tcnn::GPUMemory<Vector3f> &verts, const tcnn::GPUMemory<Vector3f> &normals,
-	const tcnn::GPUMemory<Vector4f> &verts_smoothed,
-	uint32_t padded_output_width, const network_precision_t* densities,
-	uint32_t input_gradients_width, const float *input_gradients,
-	GPUMemory<Vector3f> &verts_gradient_out,
-	float k_smooth_amount,	float k_density_amount,	float k_inflate_amount
+void compute_mesh_opt_gradients(
+	float thresh,
+	const tcnn::GPUMemory<Vector3f>& verts,
+	const tcnn::GPUMemory<Vector3f>& normals,
+	const tcnn::GPUMemory<Vector4f>& verts_smoothed,
+	const network_precision_t* densities,
+	uint32_t input_gradients_width,
+	const float* input_gradients,
+	GPUMemory<Vector3f>& verts_gradient_out,
+	float k_smooth_amount,
+	float k_density_amount,
+	float k_inflate_amount
 ) {
 	linear_kernel(
 		compute_mesh_opt_gradients_kernel,
@@ -737,7 +750,6 @@ void compute_mesh_opt_gradients(float thresh,
 		verts.data(),
 		normals.data(),
 		verts_smoothed.data(),
-		padded_output_width,
 		densities,
 		input_gradients_width,
 		input_gradients,

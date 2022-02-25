@@ -25,13 +25,18 @@ void marching_cubes_gpu(cudaStream_t stream, BoundingBox aabb, Eigen::Vector3i r
 // computes the average of the 1ring of all verts, as homogenous coordinates
 void compute_mesh_1ring(const tcnn::GPUMemory<Eigen::Vector3f>& verts, const tcnn::GPUMemory<uint32_t>& indices, tcnn::GPUMemory<Eigen::Vector4f>& output_pos, tcnn::GPUMemory<Eigen::Vector3f>& output_normals);
 
-void compute_mesh_opt_gradients(float thresh,
-	const tcnn::GPUMemory<Eigen::Vector3f>& verts, const tcnn::GPUMemory<Eigen::Vector3f>& vert_normals,
+void compute_mesh_opt_gradients(
+	float thresh,
+	const tcnn::GPUMemory<Eigen::Vector3f>& verts,
+	const tcnn::GPUMemory<Eigen::Vector3f>& vert_normals,
 	const tcnn::GPUMemory<Eigen::Vector4f>& verts_smoothed,
-	uint32_t padded_output_width, const tcnn::network_precision_t* densities,
-	uint32_t input_gradient_width, 	const float *input_gradients,
-	tcnn::GPUMemory<Eigen::Vector3f> &verts_gradient_out,
-	float k_smooth_amount,	float k_density_amount,	float k_inflate_amount
+	const tcnn::network_precision_t* densities,
+	uint32_t input_gradient_width,
+	const float* input_gradients,
+	tcnn::GPUMemory<Eigen::Vector3f>& verts_gradient_out,
+	float k_smooth_amount,
+	float k_density_amount,
+	float k_inflate_amount
 );
 
 void save_mesh(

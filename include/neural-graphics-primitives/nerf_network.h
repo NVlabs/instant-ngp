@@ -80,24 +80,21 @@ template <typename T>
 __global__ void assemble_rgbd(
 	const uint32_t n_elements,
 	const uint32_t density_stride,
-	const uint32_t rgb_stride,
+	const uint32_t rgbd_stride,
 	const T* __restrict__ density,
-	const T* __restrict__ rgb,
 	T* __restrict__ rgbd
 ) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_elements) return;
 
-	const uint32_t elem_idx = i / 4;
-	const uint32_t dim_idx = i - elem_idx * 4;
-
-	rgbd[i] = dim_idx < 3 ? rgb[elem_idx*rgb_stride + dim_idx] : density[elem_idx*density_stride];
+	rgbd[i * rgbd_stride + 3] = density[i * density_stride];
 }
 
 template <typename T>
 __global__ void extract_rgb(
 	const uint32_t n_elements,
 	const uint32_t rgb_stride,
+	const uint32_t output_stride,
 	const T* __restrict__ rgbd,
 	T* __restrict__ rgb
 ) {
@@ -107,7 +104,7 @@ __global__ void extract_rgb(
 	const uint32_t elem_idx = i / 3;
 	const uint32_t dim_idx = i - elem_idx * 3;
 
-	rgb[elem_idx*rgb_stride + dim_idx] = rgbd[elem_idx*4 + dim_idx];
+	rgb[elem_idx*rgb_stride + dim_idx] = rgbd[elem_idx*output_stride + dim_idx];
 }
 
 template <typename T>
@@ -115,6 +112,7 @@ __global__ void extract_density_gradient(
 	const uint32_t n_elements,
 	const uint32_t width,
 	const uint32_t stride,
+	const uint32_t rgbd_stride,
 	const T* __restrict__ rgbd,
 	const T* __restrict__ rgb_in,
 	const T* __restrict__ rgb_in_grad,
@@ -133,7 +131,7 @@ __global__ void extract_density_gradient(
 	float value = rgb_in_grad[elem_idx*stride + dim_idx];
 #endif
 	if (dim_idx == 0) {
-		value += (float)rgbd[elem_idx*4+3]; // Add density gradient
+		value += (float)rgbd[elem_idx*rgbd_stride+3]; // Add density gradient
 	}
 	density_out[i] = (T)value;
 }
@@ -141,13 +139,14 @@ __global__ void extract_density_gradient(
 template <typename T>
 __global__ void add_density_gradient(
 	const uint32_t n_elements,
+	const uint32_t rgbd_stride,
 	const T* __restrict__ rgbd,
 	T* __restrict__ density
 ) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_elements) return;
 
-	density[i] += rgbd[i*4+3];
+	density[i] += rgbd[i*rgbd_stride+3];
 }
 
 template <typename T>
@@ -207,14 +206,21 @@ public:
 	virtual ~NerfNetwork() { }
 
 	void inference(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<float>& output) override {
-		tcnn::GPUMatrixDynamic<T> inference_network_output{4, input.n(), stream, output.layout()};
-		inference_mixed_precision(stream, input, inference_network_output);
-		tcnn::linear_kernel(tcnn::cast_from<T>, 0, stream, inference_network_output.n_elements(), inference_network_output.data(), output.data());
+		tcnn::GPUMatrixDynamic<T> inference_output_tmp{padded_output_width(), output.n(), stream, output.layout()};
+		inference_mixed_precision(stream, input, inference_output_tmp);
+
+		const uint32_t n_elements = (uint32_t)output.n_elements();
+		if (output.layout() == tcnn::RM) {
+			// If the layout is row major, trimming away excess dimensions amounts to simply discarding the tail of the buffer.
+			tcnn::cast_from<T><<<tcnn::n_blocks_linear(n_elements), tcnn::n_threads_linear, 0, stream>>>(n_elements, inference_output_tmp.data(), output.data());
+		} else {
+			tcnn::trim_and_cast<T><<<tcnn::n_blocks_linear(n_elements), tcnn::n_threads_linear, 0, stream>>>(n_elements, padded_output_width(), output_width(), inference_output_tmp.data(), output.data());
+		}
 	}
 
 	void inference_mixed_precision(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<T>& output, bool use_inference_matrices = true) override {
-		if (input.layout() != tcnn::CM || output.layout() != tcnn::CM) {
-			throw std::runtime_error("NerfNetwork::inference_mixed_precision input and output must be in column major format.");
+		if (input.layout() != tcnn::CM) {
+			throw std::runtime_error("NerfNetwork::inference_mixed_precision input must be in column major format.");
 		}
 
 		uint32_t batch_size = input.n();
@@ -228,7 +234,8 @@ public:
 			// If SoA, the density network output is just at the beginning of the RGB network input
 			density_network_output = tcnn::GPUMatrixDynamic<T>{rgb_network_input.data(), m_density_network->padded_output_width(), batch_size, tcnn::RM};
 		}
-		tcnn::GPUMatrix<T> rgb_network_output{m_rgb_network->padded_output_width(), batch_size, stream};
+
+		tcnn::GPUMatrixDynamic<T> rgb_network_output{output.data(), m_rgb_network->padded_output_width(), batch_size, output.layout()};
 
 		// Perform directional encoding and density network query in parallel
 		{
@@ -262,9 +269,13 @@ public:
 
 		m_rgb_network->inference_mixed_precision(stream, rgb_network_input, rgb_network_output, use_inference_matrices);
 
-		tcnn::linear_kernel(assemble_rgbd<T>, 0, stream,
-			output.n_elements(), m_dir_encoding->output_layout() == tcnn::AoS ? density_network_output.m() : 1, rgb_network_output.m(), density_network_output.data(), rgb_network_output.data(), output.data()
-		);
+		if (output.layout() == tcnn::CM) {
+			tcnn::linear_kernel(assemble_rgbd<T>, 0, stream,
+				batch_size, m_dir_encoding->output_layout() == tcnn::AoS ? density_network_output.m() : 1, padded_output_width(), density_network_output.data(), output.data()
+			);
+		} else {
+			CUDA_CHECK_THROW(cudaMemcpyAsync(output.data() + batch_size * 3, density_network_output.data(), batch_size * sizeof(T), cudaMemcpyDeviceToDevice, stream));
+		}
 	}
 
 	void density(cudaStream_t stream, const tcnn::PitchedPtr<const float>& input, tcnn::GPUMatrixDynamic<T>& output, bool use_inference_matrices = true) {
@@ -347,12 +358,15 @@ public:
 			);
 		}
 
-		forward->rgb_network_output = tcnn::GPUMatrix<T>{m_rgb_network->padded_output_width(), batch_size, stream};
-		forward->rgb_network_ctx = m_rgb_network->forward(stream, forward->rgb_network_input, &forward->rgb_network_output, use_inference_matrices, prepare_input_gradients);
+		if (output) {
+			forward->rgb_network_output = tcnn::GPUMatrixDynamic<T>{output->data(), m_rgb_network->padded_output_width(), batch_size, output->layout()};
+		}
+
+		forward->rgb_network_ctx = m_rgb_network->forward(stream, forward->rgb_network_input, output ? &forward->rgb_network_output : nullptr, use_inference_matrices, prepare_input_gradients);
 
 		if (output) {
 			tcnn::linear_kernel(assemble_rgbd<T>, 0, stream,
-				output->n_elements(), m_dir_encoding->output_layout() == tcnn::AoS ? forward->density_network_output.m() : 1, forward->rgb_network_output.m(), forward->density_network_output.data(), forward->rgb_network_output.data(), output->data()
+				batch_size, m_dir_encoding->output_layout() == tcnn::AoS ? forward->density_network_output.m() : 1, padded_output_width(), forward->density_network_output.data(), output->data()
 			);
 		}
 
@@ -381,11 +395,12 @@ public:
 		tcnn::GPUMatrix<T> dL_drgb{m_rgb_network->padded_output_width(), batch_size, stream};
 		CUDA_CHECK_THROW(cudaMemsetAsync(dL_drgb.data(), 0, dL_drgb.n_bytes(), stream));
 		tcnn::linear_kernel(extract_rgb<T>, 0, stream,
-			batch_size*3, dL_drgb.m(), dL_doutput.data(), dL_drgb.data()
+			batch_size*3, dL_drgb.m(), dL_doutput.m(), dL_doutput.data(), dL_drgb.data()
 		);
 
+		const tcnn::GPUMatrixDynamic<T> rgb_network_output{(T*)output.data(), m_rgb_network->padded_output_width(), batch_size, output.layout()};
 		tcnn::GPUMatrixDynamic<T> dL_drgb_network_input{m_rgb_network_input_width, batch_size, stream, m_dir_encoding->output_layout()};
-		m_rgb_network->backward(stream, *forward.rgb_network_ctx, forward.rgb_network_input, forward.rgb_network_output, dL_drgb, &dL_drgb_network_input, use_inference_matrices, compute_param_gradients);
+		m_rgb_network->backward(stream, *forward.rgb_network_ctx, forward.rgb_network_input, rgb_network_output, dL_drgb, &dL_drgb_network_input, use_inference_matrices, compute_param_gradients);
 
 		// Backprop through dir encoding if it is trainable or if we need input gradients
 		if (m_dir_encoding->n_params() > 0 || dL_dinput) {
@@ -421,6 +436,7 @@ public:
 				dL_ddensity_network_output.n_elements(),
 				dL_ddensity_network_output.m(),
 				dL_drgb_network_input.m(),
+				dL_doutput.m(),
 				dL_doutput.data(),
 				forward.density_network_output.data(),
 				dL_drgb_network_input.data(),
@@ -431,6 +447,7 @@ public:
 
 			tcnn::linear_kernel(add_density_gradient<T>, 0, stream,
 				batch_size,
+				dL_doutput.m(),
 				dL_doutput.data(),
 				dL_ddensity_network_output.data()
 			);
@@ -543,7 +560,7 @@ public:
 	}
 
 	uint32_t padded_output_width() const override {
-		return 4;
+		return std::max(m_rgb_network->padded_output_width(), (uint32_t)4);
 	}
 
 	uint32_t output_width() const override {
