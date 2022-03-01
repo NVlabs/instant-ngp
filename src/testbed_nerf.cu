@@ -2663,7 +2663,7 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 		max_samples * floats_per_coord,
 		max_samples,
 		std::max(target_batch_size, max_samples) * padded_output_width,
-		std::max(target_batch_size, max_samples) * 4,
+		target_batch_size * padded_output_width,
 		target_batch_size * padded_output_width,
 		target_batch_size * floats_per_coord,
 		target_batch_size
