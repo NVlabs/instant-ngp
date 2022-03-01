@@ -7,7 +7,6 @@ services:
       context: ..
       dockerfile: ./.devcontainer/Dockerfile
     stdin_open: true
-    runtime: nvidia
     tty: true
     environment:
       NVIDIA_DRIVER_CAPABILITIES: compute,utility,graphics
@@ -17,4 +16,11 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix
     working_dir: /volume
     command: /bin/bash
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
