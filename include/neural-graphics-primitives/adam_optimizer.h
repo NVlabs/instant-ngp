@@ -44,6 +44,10 @@ public:
 		m_state.variable -= actual_learning_rate * m_state.first_moment.cwiseQuotient(m_state.second_moment.cwiseSqrt() + T::Constant(m_hparams.epsilon));
 	}
 
+	uint32_t step() const {
+		return m_state.iter;
+	}
+
 	void set_learning_rate(float lr) {
 		m_hparams.learning_rate = lr;
 	}
@@ -62,7 +66,7 @@ public:
 
 	private:
 	struct State {
-		int iter = 0;
+		uint32_t iter = 0;
 		T first_moment = T::Zero();
 		T second_moment = T::Zero();
 		T variable = T::Zero();
@@ -75,8 +79,6 @@ public:
 		float beta2;
 	} m_hparams;
 };
-
-
 
 class RotationAdamOptimizer {
 public:
@@ -112,6 +114,10 @@ public:
 		m_state.variable = result.axis() * result.angle();
 	}
 
+	uint32_t step() const {
+		return m_state.iter;
+	}
+
 	void set_learning_rate(float lr) {
 		m_hparams.learning_rate = lr;
 	}
@@ -126,7 +132,7 @@ public:
 
 	private:
 	struct State {
-		int iter = 0;
+		uint32_t iter = 0;
 		Eigen::Vector3f first_moment = Eigen::Vector3f::Zero();
 		Eigen::Vector3f second_moment = Eigen::Vector3f::Zero();
 		Eigen::Vector3f variable = Eigen::Vector3f::Zero();

@@ -2573,8 +2573,8 @@ void Testbed::train_nerf(uint32_t target_batch_size, uint32_t n_training_steps, 
 				pos_gradient += m_nerf.training.cam_pos_offset[i].variable() * l2_reg;
 				rot_gradient += m_nerf.training.cam_rot_offset[i].variable() * l2_reg;
 
-				m_nerf.training.cam_pos_offset[i].set_learning_rate(std::max(1e-3f * std::pow(0.33f, (float)(m_training_step / 2048)), m_optimizer->learning_rate()/1000.0f));
-				m_nerf.training.cam_rot_offset[i].set_learning_rate(std::max(1e-3f * std::pow(0.33f, (float)(m_training_step / 2048)), m_optimizer->learning_rate()/1000.0f));
+				m_nerf.training.cam_pos_offset[i].set_learning_rate(std::max(1e-3f * std::pow(0.33f, (float)(m_nerf.training.cam_pos_offset[i].step() / 128)), m_optimizer->learning_rate()/1000.0f));
+				m_nerf.training.cam_rot_offset[i].set_learning_rate(std::max(1e-3f * std::pow(0.33f, (float)(m_nerf.training.cam_rot_offset[i].step() / 128)), m_optimizer->learning_rate()/1000.0f));
 
 				m_nerf.training.cam_pos_offset[i].step(pos_gradient);
 				m_nerf.training.cam_rot_offset[i].step(rot_gradient);
@@ -2598,7 +2598,7 @@ void Testbed::train_nerf(uint32_t target_batch_size, uint32_t n_training_steps, 
 			Vector2f focal_length_gradient = m_nerf.training.cam_focal_length_gradient * per_camera_loss_scale;
 			float l2_reg = m_nerf.training.intrinsic_l2_reg;
 			focal_length_gradient += m_nerf.training.cam_focal_length_offset.variable() * l2_reg;
-			m_nerf.training.cam_focal_length_offset.set_learning_rate(std::max(1e-3f * std::pow(0.33f, (float)(m_training_step / 2048)),m_optimizer->learning_rate() / 1000.0f));
+			m_nerf.training.cam_focal_length_offset.set_learning_rate(std::max(1e-3f * std::pow(0.33f, (float)(m_nerf.training.cam_focal_length_offset.step() / 128)),m_optimizer->learning_rate() / 1000.0f));
 			m_nerf.training.cam_focal_length_offset.step(focal_length_gradient);
 			m_nerf.training.update_metadata();
 		}
