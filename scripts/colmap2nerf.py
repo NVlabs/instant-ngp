@@ -25,6 +25,7 @@ def parse_args():
 
 	parser.add_argument("--video_in", default="", help="run ffmpeg first to convert a provided video file into a set of images. uses the video_fps parameter also")
 	parser.add_argument("--video_fps", default=2)
+	parser.add_argument("--time_slice", default="", help="time (in seconds) in the format t1,t2 within which the images should be generated from the video. eg: \"--time_slice '10,300'\" will generate images only from 10th second to 300th second of the video")
 	parser.add_argument("--run_colmap", action="store_true", help="run colmap first on the image folder")
 	parser.add_argument("--colmap_matcher", default="sequential", choices=["exhaustive","sequential","spatial","transitive","vocab_tree"], help="select which matcher colmap should use. sequential for videos, exhaustive for adhoc images")
 	parser.add_argument("--colmap_db", default="colmap.db", help="colmap database filename")
@@ -57,7 +58,13 @@ def run_ffmpeg(args):
 	except:
 		pass
 	do_system(f"mkdir {images}")
-	do_system(f"ffmpeg -i {video} -qscale:v 1 -qmin 1 -vf \"fps={fps}\" {images}/%04d.jpg")
+
+	time_slice_value = ""
+	time_slice = args.time_slice
+	if time_slice:
+	    start, end = time_slice.split(",")
+	    time_slice_value = f",select='between(t\,{start}\,{end})'"
+	do_system(f"ffmpeg -i {video} -qscale:v 1 -qmin 1 -vf \"fps={fps}{time_slice_value}\" {images}/%04d.jpg")
 
 def run_colmap(args):
 	db=args.colmap_db
