@@ -29,6 +29,7 @@ struct TrainingImageMetadata {
 	CameraDistortion camera_distortion = {};
 	Eigen::Vector2f principal_point = Eigen::Vector2f::Constant(0.5f);
 	Eigen::Vector2f focal_length = Eigen::Vector2f::Constant(1000.f);
+	Eigen::Vector4f rolling_shutter = Eigen::Vector4f::Zero();
 
 	// TODO: replace this with more generic float[] of task-specific metadata.
 	Eigen::Vector3f light_dir = Eigen::Vector3f::Constant(0.f);
@@ -36,11 +37,13 @@ struct TrainingImageMetadata {
 
 struct NerfDataset {
 	std::vector<TrainingImageMetadata> metadata;
-	std::vector<Eigen::Matrix<float, 3, 4>> xforms;
+	std::vector<TrainingXForm> xforms;
 	tcnn::GPUMemory<__half> images_data;
 	tcnn::GPUMemory<float> sharpness_data;
 	Eigen::Vector2i sharpness_resolution = {0, 0};
 	tcnn::GPUMemory<float> envmap_data;
+	tcnn::GPUMemory<Ray> rays_data;
+
 	BoundingBox render_aabb = {};
 	Eigen::Vector3f up = {0.0f, 1.0f, 0.0f};
 	Eigen::Vector3f offset = {0.0f, 0.0f, 0.0f};
@@ -57,8 +60,6 @@ struct NerfDataset {
 	bool has_light_dirs = false;
 
 	void set_training_image(int frame_idx, const float *pixels);
-
-	tcnn::GPUMemory<Ray> rays_data;
 
 	Eigen::Vector3f nerf_direction_to_ngp(const Eigen::Vector3f& nerf_dir) {
 		Eigen::Vector3f result = nerf_dir;
@@ -108,8 +109,10 @@ struct NerfDataset {
 		return result;
 	}
 
-	void nerf_ray_to_ngp(Ray& ray) {
+	void nerf_ray_to_ngp(Ray& ray, bool scale_direction = false) {
 		ray.o = ray.o * scale + offset;
+		if (scale_direction)
+			ray.d *= scale;
 
 		float tmp = ray.o[0];
 		ray.o[0] = ray.o[1];

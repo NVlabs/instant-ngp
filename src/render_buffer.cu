@@ -172,16 +172,16 @@ void GLTexture::resize(const Vector2i& new_size, int n_channels, bool is_8bit) {
 }
 
 GLTexture::CUDAMapping::CUDAMapping(GLuint texture_id, const Vector2i& size) : m_size{size} {
-	static bool IS_CUDA_INTEROP_SUPPORTED = true;
-	if (IS_CUDA_INTEROP_SUPPORTED) {
+	static bool s_is_cuda_interop_supported = true;
+	if (s_is_cuda_interop_supported) {
 		cudaError_t err = cudaGraphicsGLRegisterImage(&m_graphics_resource, texture_id, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore);
 		if (err != cudaSuccess) {
-			IS_CUDA_INTEROP_SUPPORTED = false;
+			s_is_cuda_interop_supported = false;
 			cudaGetLastError(); // Reset error
 		}
 	}
 
-	if (!IS_CUDA_INTEROP_SUPPORTED) {
+	if (!s_is_cuda_interop_supported) {
 		// falling back to a regular cuda surface + CPU copy of data
 		m_cuda_surface = std::make_unique<CudaSurface2D>();
 		m_cuda_surface->resize(size);

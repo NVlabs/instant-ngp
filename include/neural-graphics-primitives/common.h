@@ -15,6 +15,7 @@
 
 #pragma once
 
+
 #include <tinylogger/tinylogger.h>
 
 // Eigen uses __device__ __host__ on a bunch of defaulted constructors.
@@ -143,13 +144,20 @@ struct Ray {
 	Eigen::Vector3f d;
 };
 
+struct TrainingXForm {
+	Eigen::Matrix<float, 3, 4> start;
+	Eigen::Matrix<float, 3, 4> end;
+};
+
+enum class ECameraDistortionMode : int {
+	None,
+	Iterative,
+	FTheta,
+};
+
 struct CameraDistortion {
-	float params[4] = {};
-#ifdef __NVCC__
-	inline __host__ __device__ bool is_zero() const {
-		return params[0] == 0.0f && params[1] == 0.0f && params[2] == 0.0f && params[3] == 0.0f;
-	}
-#endif
+	ECameraDistortionMode mode = ECameraDistortionMode::None;
+	float params[7] = {};
 };
 
 #ifdef __NVCC__

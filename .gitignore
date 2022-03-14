@@ -5,6 +5,7 @@
 /out
 /results
 /tmp
+/venv
 /video
 /*.json
 *.msgpack
@@ -12,4 +13,3 @@
 __pycache__
 .DS_Store
 imgui.ini
-/venv

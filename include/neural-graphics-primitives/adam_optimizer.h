@@ -64,7 +64,7 @@ public:
 		m_state = {};
 	}
 
-	private:
+private:
 	struct State {
 		uint32_t iter = 0;
 		T first_moment = T::Zero();
@@ -130,7 +130,7 @@ public:
 		m_state = {};
 	}
 
-	private:
+private:
 	struct State {
 		uint32_t iter = 0;
 		Eigen::Vector3f first_moment = Eigen::Vector3f::Zero();

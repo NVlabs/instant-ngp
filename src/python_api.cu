@@ -160,7 +160,7 @@ py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool l
 			autofocus();
 		}
 
-		render_frame(sample_start_cam_matrix, sample_end_cam_matrix, m_windowless_render_surface, !linear);
+		render_frame(sample_start_cam_matrix, sample_end_cam_matrix, Eigen::Vector4f::Zero(), m_windowless_render_surface, !linear);
 	}
 
 	// For cam smoothing when rendering the next frame.
@@ -169,6 +169,21 @@ py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool l
 	py::array_t<float> result({height, width, 4});
 	py::buffer_info buf = result.request();
 
+	CUDA_CHECK_THROW(cudaMemcpy2DFromArray(buf.ptr, width * sizeof(float) * 4, m_windowless_render_surface.surface_provider().array(), 0, 0, width * sizeof(float) * 4, height, cudaMemcpyDeviceToHost));
+	return result;
+}
+
+py::array_t<float> Testbed::render_with_rolling_shutter_to_cpu(const Eigen::Matrix<float, 3, 4>& camera_transform_start, const Eigen::Matrix<float, 3, 4>& camera_transform_end, const Eigen::Vector4f& rolling_shutter, int width, int height, int spp, bool linear) {
+	m_windowless_render_surface.resize({width, height});
+	m_windowless_render_surface.reset_accumulation();
+	for (int i = 0; i < spp; ++i) {
+		if (m_autofocus) {
+			autofocus();
+		}
+		render_frame(m_nerf.training.dataset.nerf_matrix_to_ngp(camera_transform_start), m_nerf.training.dataset.nerf_matrix_to_ngp(camera_transform_end), rolling_shutter, m_windowless_render_surface, !linear);
+	}
+	py::array_t<float> result({height, width, 4});
+	py::buffer_info buf = result.request();
 	CUDA_CHECK_THROW(cudaMemcpy2DFromArray(buf.ptr, width * sizeof(float) * 4, m_windowless_render_surface.surface_provider().array(), 0, 0, width * sizeof(float) * 4, height, cudaMemcpyDeviceToHost));
 	return result;
 }
@@ -271,6 +286,12 @@ PYBIND11_MODULE(pyngp, m) {
 		.value("Reinhard", ETonemapCurve::Reinhard)
 		.export_values();
 
+	py::enum_<ECameraDistortionMode>(m, "ECameraDistortionMode")
+		.value("None", ECameraDistortionMode::None)
+		.value("Iterative", ECameraDistortionMode::Iterative)
+		.value("FTheta", ECameraDistortionMode::FTheta)
+		.export_values();
+
 	py::class_<BoundingBox>(m, "BoundingBox")
 		.def(py::init<>())
 		.def(py::init<const Vector3f&, const Vector3f&>())
@@ -317,6 +338,15 @@ PYBIND11_MODULE(pyngp, m) {
 			py::arg("end_t") = -1.f,
 			py::arg("fps") = 30.f,
 			py::arg("shutter_fraction") = 1.0f
+		)
+		.def("render_with_rolling_shutter", &Testbed::render_with_rolling_shutter_to_cpu, "Renders an image at the requested resolution. Does not require a window. Supports rolling shutter, with per ray time being computed as A+B*u+C*v+D*t for [A,B,C,D]",
+			py::arg("transform_matrix_start"),
+			py::arg("transform_matrix_end"),
+			py::arg("rolling_shutter") = Eigen::Vector4f::Zero(),
+			py::arg("width") = 1920,
+			py::arg("height") = 1080,
+			py::arg("spp") = 1,
+			py::arg("linear") = true
 		)
 		.def("screenshot", &Testbed::screenshot, "Takes a screenshot of the current window contents.", py::arg("linear")=true)
 		.def("destroy_window", &Testbed::destroy_window, "Destroy the window again.")
@@ -409,6 +439,15 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("tonemap_curve", &Testbed::m_tonemap_curve)
 		;
 
+	py::class_<CameraDistortion> camera_distortion(m, "CameraDistortion");
+	camera_distortion
+		.def_readwrite("mode", &CameraDistortion::mode)
+		.def_property_readonly("params", [](py::object& obj) {
+			CameraDistortion& o = obj.cast<CameraDistortion&>();
+			return py::array{sizeof(o.params)/sizeof(o.params[0]), o.params, obj};
+		})
+		;
+
 	py::class_<Testbed::Nerf> nerf(testbed, "Nerf");
 	nerf
 		.def_readonly("training", &Testbed::Nerf::training)
@@ -416,6 +455,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("density_activation", &Testbed::Nerf::density_activation)
 		.def_readwrite("sharpen", &Testbed::Nerf::sharpen)
 		.def_readwrite("render_with_camera_distortion", &Testbed::Nerf::render_with_camera_distortion)
+		.def_readwrite("render_distortion", &Testbed::Nerf::render_distortion)
 		.def_readwrite("rendering_min_alpha", &Testbed::Nerf::rendering_min_alpha)
 		.def_readwrite("cone_angle_constant", &Testbed::Nerf::cone_angle_constant)
 		.def_readwrite("visualize_cameras", &Testbed::Nerf::visualize_cameras)
@@ -439,6 +479,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("focal_length", &TrainingImageMetadata::focal_length)
 		.def_readwrite("camera_distortion", &TrainingImageMetadata::camera_distortion)
 		.def_readwrite("principal_point", &TrainingImageMetadata::principal_point)
+		.def_readwrite("rolling_shutter", &TrainingImageMetadata::rolling_shutter)
 		.def_readwrite("light_dir", &TrainingImageMetadata::light_dir)
 		;
 
