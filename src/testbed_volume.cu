@@ -419,7 +419,7 @@ void Testbed::render_volume(CudaRenderBuffer& render_buffer,
 	m_volume.hit_counter.enlarge(2);
 	m_volume.hit_counter.memset(0);
 
-	auto sky_col = m_background_color.head<3>();
+	Array3f sky_col = m_background_color.head<3>();
 
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };

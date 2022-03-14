@@ -478,7 +478,7 @@ void Testbed::imgui() {
 		if (ImGui::SliderFloat("Crop size", &render_diam, 0.1f, max_diam, "%.3f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat)) {
 			accum_reset = true;
 			if (old_render_diam > 0.f && render_diam > 0.f) {
-				auto center = (m_render_aabb.max + m_render_aabb.min) * 0.5f;
+				const Vector3f center = (m_render_aabb.max + m_render_aabb.min) * 0.5f;
 				float scale = render_diam / old_render_diam;
 				m_render_aabb.max = ((m_render_aabb.max-center) * scale + center).cwiseMin(m_aabb.max);
 				m_render_aabb.min = ((m_render_aabb.min-center) * scale + center).cwiseMax(m_aabb.min);
@@ -859,7 +859,7 @@ void Testbed::draw_visualizations(const Matrix<float, 3, 4>& camera_matrix) {
 
 		float zscale = 1.0f / focal[m_fov_axis];
 		float xyscale = (float)m_window_res[m_fov_axis];
-		auto screen_center = render_screen_center();
+		Vector2f screen_center = render_screen_center();
 		view2proj <<
 			xyscale, 0,       (float)m_window_res.x()*screen_center.x()*zscale, 0,
 			0,       xyscale, (float)m_window_res.y()*screen_center.y()*zscale, 0,

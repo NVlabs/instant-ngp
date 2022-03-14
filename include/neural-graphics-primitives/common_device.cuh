@@ -77,10 +77,10 @@ inline __host__ __device__ Eigen::Array3f linear_to_srgb_derivative(const Eigen:
 
 template <uint32_t N_DIMS, typename T>
 __host__ __device__ Eigen::Matrix<float, N_DIMS, 1> read_image(const T* __restrict__ data, const Eigen::Vector2i& resolution, const Eigen::Vector2f& pos) {
-	auto pos_float = Eigen::Vector2f{pos.x() * (float)(resolution.x()-1), pos.y() * (float)(resolution.y()-1)};
-	Eigen::Vector2i texel = pos_float.cast<int>();
+	const Eigen::Vector2f pos_float = Eigen::Vector2f{pos.x() * (float)(resolution.x()-1), pos.y() * (float)(resolution.y()-1)};
+	const Eigen::Vector2i texel = pos_float.cast<int>();
 
-	auto weight = pos_float - texel.cast<float>();
+	const Eigen::Vector2f weight = pos_float - texel.cast<float>();
 
 	auto read_val = [&](Eigen::Vector2i pos) {
 		pos.x() = std::max(std::min(pos.x(), resolution.x()-1), 0);
@@ -100,22 +100,20 @@ __host__ __device__ Eigen::Matrix<float, N_DIMS, 1> read_image(const T* __restri
 		return result;
 	};
 
-	auto result = (
+	return (
 		(1 - weight.x()) * (1 - weight.y()) * read_val({texel.x(), texel.y()}) +
 		(weight.x()) * (1 - weight.y()) * read_val({texel.x()+1, texel.y()}) +
 		(1 - weight.x()) * (weight.y()) * read_val({texel.x(), texel.y()+1}) +
 		(weight.x()) * (weight.y()) * read_val({texel.x()+1, texel.y()+1})
 	);
-
-	return result;
 }
 
 template <uint32_t N_DIMS, typename T>
 __device__ void deposit_image_gradient(const Eigen::Matrix<float, N_DIMS, 1>& value, T* __restrict__ gradient, T* __restrict__ gradient_weight, const Eigen::Vector2i& resolution, const Eigen::Vector2f& pos) {
-	auto pos_float = Eigen::Vector2f{pos.x() * (resolution.x()-1), pos.y() * (resolution.y()-1)};
-	Eigen::Vector2i texel = pos_float.cast<int>();
+	const Eigen::Vector2f pos_float = Eigen::Vector2f{pos.x() * (resolution.x()-1), pos.y() * (resolution.y()-1)};
+	const Eigen::Vector2i texel = pos_float.cast<int>();
 
-	auto weight = pos_float - texel.cast<float>();
+	const Eigen::Vector2f weight = pos_float - texel.cast<float>();
 
 	auto deposit_val = [&](const Eigen::Matrix<float, N_DIMS, 1>& value, T weight, Eigen::Vector2i pos) {
 		pos.x() = std::max(std::min(pos.x(), resolution.x()-1), 0);
@@ -210,7 +208,7 @@ inline __host__ __device__ Ray pixel_to_ray_pinhole(
 	float focus_z = 1.0f,
 	float dof = 0.0f
 ) {
-	auto uv = pixel.cast<float>().cwiseQuotient(resolution.cast<float>());
+	const Eigen::Vector2f uv = pixel.cast<float>().cwiseQuotient(resolution.cast<float>());
 
 	Eigen::Vector3f dir = {
 		(uv.x() - screen_center.x()) * (float)resolution.x() / focal_length.x(),
@@ -258,7 +256,7 @@ inline __host__ __device__ Ray pixel_to_ray(
 	const Eigen::Vector2i distortion_resolution = Eigen::Vector2i::Zero()
 ) {
 	Eigen::Vector2f offset = ld_random_pixel_offset(snap_to_pixel_centers ? 0 : spp, pixel.x(), pixel.y());
-	auto uv = (pixel.cast<float>() + offset).cwiseQuotient(resolution.cast<float>());
+	Eigen::Vector2f uv = (pixel.cast<float>() + offset).cwiseQuotient(resolution.cast<float>());
 
 	Eigen::Vector3f dir;
 	if (camera_distortion.mode == ECameraDistortionMode::FTheta) {

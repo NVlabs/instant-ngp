@@ -1142,10 +1142,10 @@ __device__ LossAndGradient loss_and_gradient(const Vector3f& target, const Vecto
 inline __device__ Array3f composit_and_lerp(Vector2f pos, const Vector2i& resolution, uint32_t img, const __half* training_images, const Array3f& background_color, const Array3f& exposure_scale = Array3f::Ones()) {
 	pos = (pos.cwiseProduct(resolution.cast<float>()) - Vector2f::Constant(0.5f)).cwiseMax(0.0f).cwiseMin(resolution.cast<float>() - Vector2f::Constant(1.0f + 1e-4f));
 
-	Vector2i pos_int = pos.cast<int>();
-	auto weight = pos - pos_int.cast<float>();
+	const Vector2i pos_int = pos.cast<int>();
+	const Vector2f weight = pos - pos_int.cast<float>();
 
-	Vector2i idx = pos_int.cwiseMin(resolution - Vector2i::Constant(2)).cwiseMax(0);
+	const Vector2i idx = pos_int.cwiseMin(resolution - Vector2i::Constant(2)).cwiseMax(0);
 
 	auto read_val = [&](const Vector2i& p) {
 		__half val[4];
@@ -1153,38 +1153,32 @@ inline __device__ Array3f composit_and_lerp(Vector2f pos, const Vector2i& resolu
 		return Array3f{val[0], val[1], val[2]} * exposure_scale + background_color * (1.0f - (float)val[3]);
 	};
 
-	Array3f result = (
+	return (
 		(1 - weight.x()) * (1 - weight.y()) * read_val({idx.x(), idx.y()}) +
 		(weight.x()) * (1 - weight.y()) * read_val({idx.x()+1, idx.y()}) +
 		(1 - weight.x()) * (weight.y()) * read_val({idx.x(), idx.y()+1}) +
 		(weight.x()) * (weight.y()) * read_val({idx.x()+1, idx.y()+1})
 	);
-
-	return result;
 }
 
 inline __device__ Array3f composit(Vector2f pos, const Vector2i& resolution, uint32_t img, const __half* training_images, const Array3f& background_color, const Array3f& exposure_scale = Array3f::Ones()) {
-	Vector2i idx = image_pos(pos, resolution);
-
 	auto read_val = [&](const Vector2i& p) {
 		__half val[4];
 		*(uint64_t*)&val[0] = ((uint64_t*)training_images)[pixel_idx(p, resolution, img)];
 		return Array3f{val[0], val[1], val[2]} * exposure_scale + background_color * (1.0f - (float)val[3]);
 	};
 
-	return read_val(idx);
+	return read_val(image_pos(pos, resolution));
 }
 
 inline __device__ Array4f read_rgba(Vector2f pos, const Vector2i& resolution, uint32_t img, const __half* training_images) {
-	Vector2i idx = image_pos(pos, resolution);
-
 	auto read_val = [&](const Vector2i& p) {
 		__half val[4];
 		*(uint64_t*)&val[0] = ((uint64_t*)training_images)[pixel_idx(p, resolution, img)];
 		return Array4f{val[0], val[1], val[2], val[3]};
 	};
 
-	return read_val(idx);
+	return read_val(image_pos(pos, resolution));
 }
 
 __global__ void compute_loss_kernel_train_nerf(
@@ -1363,9 +1357,9 @@ __global__ void compute_loss_kernel_train_nerf(
 	}
 
 	if (error_map) {
-		Vector2f pos = (xy.cwiseProduct(error_map_res.cast<float>()) - Vector2f::Constant(0.5f)).cwiseMax(0.0f).cwiseMin(error_map_res.cast<float>() - Vector2f::Constant(1.0f + 1e-4f));
-		Vector2i pos_int = pos.cast<int>();
-		auto weight = pos - pos_int.cast<float>();
+		const Vector2f pos = (xy.cwiseProduct(error_map_res.cast<float>()) - Vector2f::Constant(0.5f)).cwiseMax(0.0f).cwiseMin(error_map_res.cast<float>() - Vector2f::Constant(1.0f + 1e-4f));
+		const Vector2i pos_int = pos.cast<int>();
+		const Vector2f weight = pos - pos_int.cast<float>();
 
 		Vector2i idx = pos_int.cwiseMin(resolution - Vector2i::Constant(2)).cwiseMax(0);
 
