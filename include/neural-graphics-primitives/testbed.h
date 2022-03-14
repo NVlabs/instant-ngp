@@ -620,6 +620,7 @@ public:
 			size_t max_size = 1 << 24;
 			bool did_generate_more_training_data = false;
 			bool generate_sdf_data_online = true;
+			float surface_offset_scale = 1.0f;
 			tcnn::GPUMemory<Eigen::Vector3f> positions;
 			tcnn::GPUMemory<Eigen::Vector3f> positions_shuffled;
 			tcnn::GPUMemory<float> distances;

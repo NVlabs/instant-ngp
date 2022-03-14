@@ -1058,7 +1058,7 @@ void Testbed::generate_training_samples_sdf(Vector3f* positions, float* distance
 	// If we have an octree, generate uniform samples within that octree.
 	// Otherwise, at least confine uniform samples to the AABB.
 	// (For the uniform_only case, we always use the AABB, then the IoU kernel checks against the octree later)
-	float stddev = m_bounding_radius/1024.0f ; // * 8.f;
+	float stddev = m_bounding_radius/1024.0f * m_sdf.training.surface_offset_scale;
 	if (!uniform_only && (m_sdf.uses_takikawa_encoding || m_sdf.use_triangle_octree)) {
 		linear_kernel(uniform_octree_sample_kernel, 0, stream,
 			n_to_generate_uniform,

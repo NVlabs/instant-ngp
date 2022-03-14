@@ -521,6 +521,7 @@ PYBIND11_MODULE(pyngp, m) {
 
 	py::class_<Testbed::Sdf::Training>(sdf, "Training")
 		.def_readwrite("generate_sdf_data_online", &Testbed::Sdf::Training::generate_sdf_data_online)
+		.def_readwrite("surface_offset_scale", &Testbed::Sdf::Training::surface_offset_scale)
 		;
 
 	py::class_<Testbed::Image> image(testbed, "Image");
