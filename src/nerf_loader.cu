@@ -371,7 +371,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 
 		for (int j = 0; j < json["frames"].size(); ++j) {
 			nlohmann::json& jsonmatrix = json["frames"][j]["transform_matrix"];
-			auto p = Vector3f{float(jsonmatrix[0][3]), float(jsonmatrix[1][3]), float(jsonmatrix[2][3])} * result.scale + result.offset;
+			const Vector3f p = Vector3f{float(jsonmatrix[0][3]), float(jsonmatrix[1][3]), float(jsonmatrix[2][3])} * result.scale + result.offset;
 			cam_aabb.enlarge(p);
 		}
 
