@@ -37,7 +37,7 @@ public:
 
 	virtual ~TrainableBuffer() { }
 
-	void inference(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<float>& output) override {
+	void inference_mixed_precision(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<T>& output, bool use_inference_matrices = true) override {
 		throw std::runtime_error{"The trainable buffer does not support inference(). Its content is meant to be used externally."};
 	}
 
@@ -53,7 +53,7 @@ public:
 		const tcnn::GPUMatrixDynamic<T>& dL_doutput,
 		tcnn::GPUMatrixDynamic<float>* dL_dinput = nullptr,
 		bool use_inference_matrices = false,
-		bool compute_param_gradients = true
+		tcnn::EGradientMode param_gradients_mode = tcnn::EGradientMode::Overwrite
 	) override {
 		throw std::runtime_error{"The trainable buffer does not support backward(). Its content is meant to be used externally."};
 	}
@@ -73,6 +73,10 @@ public:
 
 	size_t n_params() const override {
 		return m_resolution.prod() * N_DIMS;
+	}
+
+	uint32_t input_width() const override {
+		return RANK;
 	}
 
 	uint32_t padded_output_width() const override {

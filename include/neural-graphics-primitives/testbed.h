@@ -129,6 +129,7 @@ public:
 			const Eigen::Vector2f& focal_length,
 			const Eigen::Matrix<float, 3, 4>& camera_matrix0,
 			const Eigen::Matrix<float, 3, 4>& camera_matrix1,
+			const Eigen::Vector4f& rolling_shutter,
 			Eigen::Vector2f screen_center,
 			bool snap_to_pixel_centers,
 			const BoundingBox& render_aabb,
@@ -152,7 +153,7 @@ public:
 			const BoundingBox& render_aabb,
 			const BoundingBox& train_aabb,
 			const uint32_t n_training_images,
-			const Eigen::Matrix<float, 3, 4>* training_xforms,
+			const TrainingXForm* training_xforms,
 			const Eigen::Vector2f& focal_length,
 			float cone_angle_constant,
 			const uint8_t* grid,
@@ -259,9 +260,9 @@ public:
 		const Eigen::Vector2f& screen_center,
 		cudaStream_t stream
 	);
-	void render_nerf(CudaRenderBuffer& render_buffer, const Eigen::Vector2i& max_res, const Eigen::Vector2f& focal_length, const Eigen::Matrix<float, 3, 4>& camera_matrix0, const Eigen::Matrix<float, 3, 4>& camera_matrix1, const Eigen::Vector2f& screen_center, cudaStream_t stream);
+	void render_nerf(CudaRenderBuffer& render_buffer, const Eigen::Vector2i& max_res, const Eigen::Vector2f& focal_length, const Eigen::Matrix<float, 3, 4>& camera_matrix0, const Eigen::Matrix<float, 3, 4>& camera_matrix1, const Eigen::Vector4f& rolling_shutter, const Eigen::Vector2f& screen_center, cudaStream_t stream);
 	void render_image(CudaRenderBuffer& render_buffer, cudaStream_t stream);
-	void render_frame(const Eigen::Matrix<float, 3, 4>& camera_matrix0, const Eigen::Matrix<float, 3, 4>& camera_matrix1, CudaRenderBuffer& render_buffer, bool to_srgb = true) ;
+	void render_frame(const Eigen::Matrix<float, 3, 4>& camera_matrix0, const Eigen::Matrix<float, 3, 4>& camera_matrix1, const Eigen::Vector4f& nerf_rolling_shutter, CudaRenderBuffer& render_buffer, bool to_srgb = true) ;
 	void visualize_nerf_cameras(const Eigen::Matrix<float, 4, 4>& world2proj);
 	nlohmann::json load_network_config(const filesystem::path& network_config_path);
 	void reload_network_from_file(const std::string& network_config_path);
@@ -326,6 +327,7 @@ public:
 #ifdef NGP_PYTHON
 	pybind11::dict compute_marching_cubes_mesh(Eigen::Vector3i res3d = Eigen::Vector3i::Constant(128), BoundingBox aabb = BoundingBox{Eigen::Vector3f::Zero(), Eigen::Vector3f::Ones()}, float thresh=2.5f);
 	pybind11::array_t<float> render_to_cpu(int width, int height, int spp, bool linear, float start_t, float end_t, float fps, float shutter_fraction);
+	pybind11::array_t<float> render_with_rolling_shutter_to_cpu(const Eigen::Matrix<float, 3, 4>& camera_transform_start, const Eigen::Matrix<float, 3, 4>& camera_transform_end, const Eigen::Vector4f& rolling_shutter, int width, int height, int spp, bool linear);
 	pybind11::array_t<float> screenshot(bool linear) const;
 	void override_sdf_training_data(pybind11::array_t<float> points, pybind11::array_t<float> distances);
 #endif
@@ -472,8 +474,8 @@ public:
 
 			tcnn::GPUMemory<TrainingImageMetadata> metadata_gpu;
 
-			std::vector<Eigen::Matrix<float, 3, 4>> transforms;
-			tcnn::GPUMemory<Eigen::Matrix<float, 3, 4>> transforms_gpu;
+			std::vector<TrainingXForm> transforms;
+			tcnn::GPUMemory<TrainingXForm> transforms_gpu;
 
 			std::vector<Eigen::Vector3f> cam_pos_gradient;
 			tcnn::GPUMemory<Eigen::Vector3f> cam_pos_gradient_gpu;
@@ -497,20 +499,26 @@ public:
 			float intrinsic_l2_reg = 1e-4f;
 			float exposure_l2_reg = 0.0f;
 
-			tcnn::GPUMemory<uint32_t> numsteps_counter; // number of steps each ray took
-			tcnn::GPUMemory<uint32_t> numsteps_counter_compacted; // number of steps each ray took
-			tcnn::GPUMemory<uint32_t> ray_counter;
-			tcnn::GPUMemory<float> loss;
+			struct Counters {
+				tcnn::GPUMemory<uint32_t> numsteps_counter; // number of steps each ray took
+				tcnn::GPUMemory<uint32_t> numsteps_counter_compacted; // number of steps each ray took
+				tcnn::GPUMemory<float> loss;
 
-			uint32_t rays_per_batch = 1<<12;
-			uint32_t n_rays_total = 0;
-			uint32_t measured_batch_size = 0;
-			uint32_t measured_batch_size_before_compaction = 0;
+				uint32_t rays_per_batch = 1<<12;
+				uint32_t n_rays_total = 0;
+				uint32_t measured_batch_size = 0;
+				uint32_t measured_batch_size_before_compaction = 0;
+
+				void prepare_for_training_steps(uint32_t n_training_steps, cudaStream_t stream);
+				float update_after_training(uint32_t target_batch_size, uint32_t n_training_steps, cudaStream_t stream);
+			};
+
+			Counters counters_rgb;
+
 			bool random_bg_color = true;
 			bool linear_colors = false;
 			ELossType loss_type = ELossType::L2;
 			bool snap_to_pixel_centers = true;
-
 			bool train_envmap = false;
 
 			bool optimize_distortion = false;
@@ -573,6 +581,7 @@ public:
 
 		bool visualize_cameras = false;
 		bool render_with_camera_distortion = false;
+		CameraDistortion render_distortion = {};
 
 		float rendering_min_alpha = 0.01f;
 	} m_nerf;
@@ -620,6 +629,7 @@ public:
 			size_t max_size = 1 << 24;
 			bool did_generate_more_training_data = false;
 			bool generate_sdf_data_online = true;
+			float surface_offset_scale = 1.0f;
 			tcnn::GPUMemory<Eigen::Vector3f> positions;
 			tcnn::GPUMemory<Eigen::Vector3f> positions_shuffled;
 			tcnn::GPUMemory<float> distances;

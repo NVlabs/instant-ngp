@@ -74,34 +74,35 @@ __global__ void kernel_takikawa(
 				}
 			}
 
-			// Tri-linear interpolation
-
-			tcnn::vector_t<T, N_FEATURES_PER_LEVEL> result = {0};
-
-			#pragma unroll
-			for (uint32_t idx = 0; idx < 8; ++idx) {
-				float weight = 1;
+			if (data_out) {
+				// Tri-linear interpolation
+				tcnn::vector_t<T, N_FEATURES_PER_LEVEL> result = {0};
 
 				#pragma unroll
-				for (uint32_t dim = 0; dim < 3; ++dim) {
-					if ((idx & (1<<dim)) == 0) {
-						weight *= 1 - pos[dim];
-					} else {
-						weight *= pos[dim];
+				for (uint32_t idx = 0; idx < 8; ++idx) {
+					float weight = 1;
+
+					#pragma unroll
+					for (uint32_t dim = 0; dim < 3; ++dim) {
+						if ((idx & (1<<dim)) == 0) {
+							weight *= 1 - pos[dim];
+						} else {
+							weight *= pos[dim];
+						}
+					}
+
+					int param_idx = node.vertices[idx] * N_FEATURES_PER_LEVEL;
+					auto val = *(tcnn::vector_t<T, N_FEATURES_PER_LEVEL>*)&grid[param_idx];
+
+					// Read params
+					#pragma unroll
+					for (uint32_t feature = 0; feature < N_FEATURES_PER_LEVEL; ++feature) {
+						((T*)&result)[feature] += (T)(weight * (float)((T*)&val)[feature]);
 					}
 				}
 
-				int param_idx = node.vertices[idx] * N_FEATURES_PER_LEVEL;
-				auto val = *(tcnn::vector_t<T, N_FEATURES_PER_LEVEL>*)&grid[param_idx];
-
-				// Read params
-				#pragma unroll
-				for (uint32_t feature = 0; feature < N_FEATURES_PER_LEVEL; ++feature) {
-					((T*)&result)[feature] += (T)(weight * (float)((T*)&val)[feature]);
-				}
+				*(tcnn::vector_t<T, N_FEATURES_PER_LEVEL>*)&data_out(i)[level * N_FEATURES_PER_LEVEL] = result;
 			}
-
-			*(tcnn::vector_t<T, N_FEATURES_PER_LEVEL>*)&data_out(i)[level * N_FEATURES_PER_LEVEL] = result;
 
 			// Gradient
 			if (dy_dx) {
@@ -148,12 +149,14 @@ __global__ void kernel_takikawa(
 		}
 	);
 
-	// Set output to zero for levels that were not reached
-	level = max(0, level-(int)starting_level);
-	for (; level < n_levels; ++level) {
-		#pragma unroll
-		for (uint32_t f = 0; f < N_FEATURES_PER_LEVEL; ++f) {
-			data_out(i)[level * N_FEATURES_PER_LEVEL + f] = (T)0.0f;
+	if (data_out) {
+		// Set output to zero for levels that were not reached
+		level = max(0, level-(int)starting_level);
+		for (; level < n_levels; ++level) {
+			#pragma unroll
+			for (uint32_t f = 0; f < N_FEATURES_PER_LEVEL; ++f) {
+				data_out(i)[level * N_FEATURES_PER_LEVEL + f] = (T)0.0f;
+			}
 		}
 	}
 }
@@ -163,8 +166,7 @@ __global__ void kernel_takikawa_backward_input(
 	const uint32_t num_elements,
 	const uint32_t num_grid_features,
 	const tcnn::PitchedPtr<const T> dL_dy,
-	const float* __restrict__ dy_dx_pos,
-	const float* __restrict__ dy_dx_oneblob,
+	const float* __restrict__ dy_dx,
 	tcnn::PitchedPtr<float> dL_dx
 ) {
 	const uint32_t input_index = threadIdx.x + blockIdx.x * blockDim.x;
@@ -177,7 +179,7 @@ __global__ void kernel_takikawa_backward_input(
 
 	float result = 0;
 	for (int k = 0; k < num_grid_features; ++k) {
-		result += (float)dL_dy(i)[k] * dy_dx_pos[i * fan_out_grad + j * num_grid_features + k];
+		result += (float)dL_dy(i)[k] * dy_dx[i * fan_out_grad + j * num_grid_features + k];
 	}
 	dL_dx(i)[j] = result;
 }
@@ -301,43 +303,57 @@ public:
 
 	virtual ~TakikawaEncoding() { }
 
-	void encode(
+	std::unique_ptr<tcnn::Context> forward(
 		cudaStream_t stream,
-		const uint32_t num_elements,
-		tcnn::PitchedPtr<const float> inputs,
-		tcnn::PitchedPtr<T> outputs,
-		float* dy_dx = nullptr,
-		bool is_inference = false
-	) const override {
+		const tcnn::GPUMatrixDynamic<float>& input,
+		tcnn::GPUMatrixDynamic<T>* output = nullptr,
+		bool use_inference_params = false,
+		bool prepare_input_gradients = false
+	) override {
+		auto forward = std::make_unique<ForwardContext>();
+
+		if ((!output && !prepare_input_gradients) || m_n_padded_output_dims == 0) {
+			return forward;
+		}
+
+		if (prepare_input_gradients) {
+			forward->dy_dx = tcnn::GPUMatrix<float>{3 * N_FEATURES_PER_LEVEL * n_levels(), input.n(), stream};
+		}
+
 		tcnn::linear_kernel(kernel_takikawa<T, N_FEATURES_PER_LEVEL>, 0, stream,
-			num_elements,
+			input.n(),
 			n_levels(),
 			m_starting_level,
 			m_interpolation_type,
 			m_octree->nodes_gpu(),
 			m_octree->dual_nodes_gpu(),
-			is_inference ? m_params_inference : m_params,
-			inputs,
-			outputs,
-			dy_dx
+			use_inference_params ? m_params_inference : m_params,
+			input.pitched_ptr(),
+			output ? output->pitched_ptr() : tcnn::PitchedPtr<T>{},
+			forward->dy_dx.data()
 		);
+
+		return forward;
 	}
 
 	void backward(
 		cudaStream_t stream,
-		const uint32_t num_elements,
-		tcnn::PitchedPtr<const T> dL_dy, // Same shape as outputs
-		const float* dy_dx, // encoded output dims x num_elements
-		tcnn::PitchedPtr<float> dL_dx, // Same shape as inputs
-		tcnn::PitchedPtr<const float> inputs,
-		bool accumulate_param_gradients, // whether to accumulate parameter gradients on top of the last backward() call
-		bool compute_param_gradients
+		const tcnn::Context& ctx,
+		const tcnn::GPUMatrixDynamic<float>& input,
+		const tcnn::GPUMatrixDynamic<T>& output,
+		const tcnn::GPUMatrixDynamic<T>& dL_doutput,
+		tcnn::GPUMatrixDynamic<float>* dL_dinput = nullptr,
+		bool use_inference_params = false,
+		tcnn::EGradientMode param_gradients_mode = tcnn::EGradientMode::Overwrite
 	) override {
-		if (m_n_padded_output_dims == 0) {
+		const uint32_t num_elements = input.n();
+		if (m_n_padded_output_dims == 0 || num_elements == 0) {
 			return;
 		}
 
-		if (compute_param_gradients) {
+		const auto& forward = dynamic_cast<const ForwardContext&>(ctx);
+
+		if (param_gradients_mode != tcnn::EGradientMode::Ignore) {
 			// We accumulate gradients with grad_t precision, which, for performance reasons, is not always T.
 			// If not, accumulate in a temporary buffer and cast later.
 			grad_t* params_gradient;
@@ -347,7 +363,7 @@ public:
 				params_gradient = (grad_t*)m_params_gradient;
 			}
 
-			if (!accumulate_param_gradients) {
+			if (param_gradients_mode == tcnn::EGradientMode::Overwrite) {
 				CUDA_CHECK_THROW(cudaMemsetAsync(params_gradient, 0, n_params() * sizeof(grad_t), stream));
 			}
 
@@ -359,8 +375,8 @@ public:
 				m_octree->nodes_gpu(),
 				m_octree->dual_nodes_gpu(),
 				params_gradient,
-				inputs,
-				dL_dy
+				input.pitched_ptr(),
+				dL_doutput.pitched_ptr()
 			);
 
 			if (!std::is_same<grad_t, T>::value) {
@@ -371,30 +387,31 @@ public:
 		}
 
 		// Gradient computation w.r.t. input
-		if (dy_dx) {
-			assert(dL_dx);
-
+		if (dL_dinput) {
 			tcnn::linear_kernel(kernel_takikawa_backward_input<T>, 0, stream,
-				num_elements * num_dims_to_encode(),
+				num_elements * input_width(),
 				N_FEATURES_PER_LEVEL * n_levels(),
-				dL_dy,
-				dy_dx,
-				dy_dx + 3 * N_FEATURES_PER_LEVEL * n_levels() * num_elements,
-				dL_dx
+				dL_doutput.pitched_ptr(),
+				forward.dy_dx.data(),
+				dL_dinput->pitched_ptr()
 			);
 		}
 	}
 
-	uint32_t num_dims_to_encode() const override {
+	uint32_t input_width() const override {
 		return 3;
 	}
 
-	uint32_t num_encoded_dims() const override {
+	uint32_t padded_output_width() const override {
 		return m_n_padded_output_dims;
 	}
 
-	uint32_t num_forward_gradient_dims() const override {
-		return 3 * N_FEATURES_PER_LEVEL * n_levels();
+	uint32_t output_width() const override {
+		return m_n_padded_output_dims;
+	}
+
+	uint32_t required_input_alignment() const override {
+		return 1;
 	}
 
 	void set_alignment(uint32_t alignment) override {
@@ -428,10 +445,8 @@ public:
 		return m_octree->depth() - m_starting_level;
 	}
 
-	std::vector<std::pair<uint32_t, uint32_t>> layer_sizes() const override {
-		// Even though we have parameters, they can't really be considered a "layer".
-		// So we return an empty array here.
-		return {};
+	tcnn::MatrixLayout preferred_output_layout() const override {
+		return tcnn::AoS;
 	}
 
 	tcnn::json hyperparams() const override {
@@ -444,6 +459,10 @@ public:
 	}
 
 private:
+	struct ForwardContext : public tcnn::Context {
+		tcnn::GPUMatrix<float> dy_dx;
+	};
+
 	uint32_t m_starting_level;
 	bool m_sum_instead_of_concat;
 

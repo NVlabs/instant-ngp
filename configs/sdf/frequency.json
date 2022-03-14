@@ -2,7 +2,10 @@
 	"parent" : "base.json",
 	"encoding": {
 		"otype": "Frequency",
-		"n_frequencies": 8
+		"n_frequencies": 10
+	},
+	"loss": {
+		"otype": "RelativeL2"
 	},
 	"optimizer": {
 		"nested": {
@@ -16,6 +19,6 @@
 		"activation": "ReLU",
 		"output_activation": "None",
 		"n_neurons": 128,
-		"n_hidden_layers": 6
+		"n_hidden_layers": 8
 	}
 }
