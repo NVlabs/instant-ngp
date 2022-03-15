@@ -292,7 +292,12 @@ if __name__ == "__main__":
 	if args.save_mesh:
 		res = args.marching_cubes_res or 256
 		print(f"Generating mesh via marching cubes and saving to {args.save_mesh}. Resolution=[{res},{res},{res}]")
-		testbed.compute_and_save_marching_cubes_mesh(args.save_mesh, [res, res, res])
+		if args.mode == "sdf":
+			# thresh is 2.5 by default which works for nerf but produces 0 verts/indices for sdf
+			# 0.0 thresh should be set for sdf mode
+			testbed.compute_and_save_marching_cubes_mesh(args.save_mesh, [res, res, res], thresh=0.0)
+		elif args.mode == "nerf":
+			testbed.compute_and_save_marching_cubes_mesh(args.save_mesh, [res, res, res])
 
 	if args.width:
 		if ref_transforms:
