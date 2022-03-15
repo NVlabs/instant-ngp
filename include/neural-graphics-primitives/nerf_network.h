@@ -208,7 +208,7 @@ public:
 			density_network_output = tcnn::GPUMatrixDynamic<T>{m_density_network->padded_output_width(), batch_size, stream, tcnn::CM};
 		} else {
 			// If SoA, the density network output is just at the beginning of the RGB network input
-			density_network_output = tcnn::GPUMatrixDynamic<T>{rgb_network_input.data(), m_density_network->padded_output_width(), batch_size, tcnn::RM};
+			density_network_output = rgb_network_input.slice_rows(0, m_density_network->padded_output_width());
 		}
 
 		tcnn::GPUMatrixDynamic<T> rgb_network_output{output.data(), m_rgb_network->padded_output_width(), batch_size, output.layout()};
@@ -273,8 +273,8 @@ public:
 			stream,
 			input.slice_rows(0, m_pos_encoding->input_width()),
 			&forward->density_network_input,
-			prepare_input_gradients,
-			use_inference_params
+			use_inference_params,
+			prepare_input_gradients
 		);
 
 		auto dir_out = forward->rgb_network_input.slice_rows(m_density_network->padded_output_width(), m_dir_encoding->padded_output_width());
@@ -282,15 +282,16 @@ public:
 			stream,
 			input.slice_rows(m_dir_offset, m_dir_encoding->input_width()),
 			&dir_out,
-			prepare_input_gradients,
-			use_inference_params
+			use_inference_params,
+			prepare_input_gradients
 		);
 
 		if (m_dir_encoding->preferred_output_layout() == tcnn::AoS) {
+			// TODO: when tcnn's networks have support for strided outputs, unify this
 			forward->density_network_output = tcnn::GPUMatrixDynamic<T>{m_density_network->padded_output_width(), batch_size, stream, tcnn::CM};
 		} else {
 			// If SoA, the density network output is just at the beginning of the RGB network input
-			forward->density_network_output = tcnn::GPUMatrixDynamic<T>{forward->rgb_network_input.data(), m_density_network->padded_output_width(), batch_size, tcnn::RM};
+			forward->density_network_output = forward->rgb_network_input.slice_rows(0, m_density_network->padded_output_width());
 		}
 
 		forward->density_network_ctx = m_density_network->forward(stream, forward->density_network_input, &forward->density_network_output, use_inference_params, prepare_input_gradients);
@@ -347,20 +348,7 @@ public:
 
 		// Backprop through dir encoding if it is trainable or if we need input gradients
 		if (m_dir_encoding->n_params() > 0 || dL_dinput) {
-			tcnn::GPUMatrixDynamic<T> dL_ddir_encoding_output;
-
-			if (m_dir_encoding->preferred_output_layout() == tcnn::AoS) {
-				dL_ddir_encoding_output = tcnn::GPUMatrixDynamic<T>{m_dir_encoding->padded_output_width(), batch_size, stream, tcnn::CM};
-				tcnn::linear_kernel(extract_dir_gradient<T>, 0, stream,
-					dL_ddir_encoding_output.n_elements(), m_density_network->padded_output_width(), dL_ddir_encoding_output.m(), dL_drgb_network_input.m(), dL_drgb_network_input.data(), dL_ddir_encoding_output.data()
-				);
-			} else {
-				dL_ddir_encoding_output = tcnn::GPUMatrixDynamic<T>{
-					dL_drgb_network_input.data() + m_density_network->padded_output_width() * (m_dir_encoding->preferred_output_layout() == tcnn::SoA ? batch_size : 1),
-					m_dir_encoding->padded_output_width(), batch_size, tcnn::RM
-				};
-			}
-
+			tcnn::GPUMatrixDynamic<T> dL_ddir_encoding_output = dL_drgb_network_input.slice_rows(m_density_network->padded_output_width(), m_dir_encoding->padded_output_width());
 			tcnn::GPUMatrixDynamic<float> dL_ddir_encoding_input;
 			if (dL_dinput) {
 				dL_ddir_encoding_input = dL_dinput->slice_rows(m_dir_offset, m_dir_encoding->input_width());
@@ -464,8 +452,8 @@ public:
 			stream,
 			input.slice_rows(0, m_pos_encoding->input_width()),
 			&forward->density_network_input,
-			prepare_input_gradients,
-			use_inference_params
+			use_inference_params,
+			prepare_input_gradients
 		);
 
 		if (output) {
