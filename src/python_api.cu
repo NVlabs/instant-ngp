@@ -221,6 +221,8 @@ py::array_t<float> Testbed::screenshot(bool linear) const {
 PYBIND11_MODULE(pyngp, m) {
 	m.doc() = "Instant neural graphics primitives";
 
+	m.def("free_temporary_memory", &tcnn::free_all_gpu_memory_arenas);
+
 	py::enum_<ETestbedMode>(m, "TestbedMode")
 		.value("Nerf", ETestbedMode::Nerf)
 		.value("Sdf", ETestbedMode::Sdf)
