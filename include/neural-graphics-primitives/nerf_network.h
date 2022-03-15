@@ -29,55 +29,7 @@
 NGP_NAMESPACE_BEGIN
 
 template <typename T>
-__global__ void split_inputs_nerf(
-	const uint32_t n_elements,
-	const uint32_t n_partition_1_dims,
-	const uint32_t n_partition_2_dims,
-	const uint32_t stride,
-	const T* __restrict__ inputs,
-	T* __restrict__ partition_1,
-	T* __restrict__ partition_2
-) {
-	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
-	if (i >= n_elements) return;
-
-	const uint32_t elem_idx = i / stride;
-	const uint32_t dim_idx = i - elem_idx * stride;
-
-	T value = inputs[i];
-	if (dim_idx < n_partition_1_dims) {
-		partition_1[elem_idx * n_partition_1_dims + dim_idx] = value;
-	} else {
-		partition_2[elem_idx * n_partition_2_dims + dim_idx - n_partition_1_dims] = value;
-	}
-}
-
-template <typename T>
-__global__ void grab_density_network_output(
-	const uint32_t n_elements,
-	const uint32_t n_partition_1_dims,
-	const uint32_t stride,
-	const T* __restrict__ partition_1,
-	T* __restrict__ inputs
-) {
-	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
-	if (i >= n_elements) return;
-
-	const uint32_t elem_idx = i / n_partition_1_dims;
-	const uint32_t dim_idx = i - elem_idx * n_partition_1_dims;
-
-// #define RELU_NON_DENSITY
-#ifdef RELU_NON_DENSITY
-	// ReLU for non-density dims, i.e. dim_idx > 0
-	inputs[elem_idx * stride + dim_idx] = (dim_idx == 0 || partition_1[i] > (T)0.0f) ? partition_1[i] : (T)0.0f;
-#else
-	// ReLU for non-density dims, i.e. dim_idx > 0
-	inputs[elem_idx * stride + dim_idx] = partition_1[i];
-#endif
-}
-
-template <typename T>
-__global__ void assemble_rgbd(
+__global__ void extract_density(
 	const uint32_t n_elements,
 	const uint32_t density_stride,
 	const uint32_t rgbd_stride,
@@ -87,7 +39,7 @@ __global__ void assemble_rgbd(
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_elements) return;
 
-	rgbd[i * rgbd_stride + 3] = density[i * density_stride];
+	rgbd[i * rgbd_stride] = density[i * density_stride];
 }
 
 template <typename T>
@@ -108,63 +60,17 @@ __global__ void extract_rgb(
 }
 
 template <typename T>
-__global__ void extract_density_gradient(
-	const uint32_t n_elements,
-	const uint32_t width,
-	const uint32_t stride,
-	const uint32_t rgbd_stride,
-	const T* __restrict__ rgbd,
-	const T* __restrict__ rgb_in,
-	const T* __restrict__ rgb_in_grad,
-	T* __restrict__ density_out
-) {
-	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
-	if (i >= n_elements) return;
-
-	const uint32_t elem_idx = i / width;
-	const uint32_t dim_idx = i - elem_idx * width;
-
-#ifdef RELU_NON_DENSITY
-	// Backprop through ReLU if not the density dimension.
-	float value = (dim_idx == 0 || rgb_in[i] > (T)0.0f) ? rgb_in_grad[elem_idx*stride + dim_idx] : (T)0.0f;
-#else
-	float value = rgb_in_grad[elem_idx*stride + dim_idx];
-#endif
-	if (dim_idx == 0) {
-		value += (float)rgbd[elem_idx*rgbd_stride+3]; // Add density gradient
-	}
-	density_out[i] = (T)value;
-}
-
-template <typename T>
 __global__ void add_density_gradient(
 	const uint32_t n_elements,
 	const uint32_t rgbd_stride,
 	const T* __restrict__ rgbd,
+	const uint32_t density_stride,
 	T* __restrict__ density
 ) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_elements) return;
 
-	density[i] += rgbd[i*rgbd_stride+3];
-}
-
-template <typename T>
-__global__ void extract_dir_gradient(
-	const uint32_t n_elements,
-	const uint32_t offset,
-	const uint32_t width,
-	const uint32_t stride,
-	const T* __restrict__ rgb_in,
-	T* __restrict__ density_out
-) {
-	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
-	if (i >= n_elements) return;
-
-	const uint32_t elem_idx = i / width;
-	const uint32_t dim_idx = i - elem_idx * width;
-
-	density_out[i] = rgb_in[offset + elem_idx*stride + dim_idx];
+	density[i * density_stride] += rgbd[i * rgbd_stride + 3];
 }
 
 template <typename T>
@@ -174,7 +80,7 @@ public:
 
 	NerfNetwork(uint32_t n_pos_dims, uint32_t n_dir_dims, uint32_t n_extra_dims, uint32_t dir_offset, const json& pos_encoding, const json& dir_encoding, const json& density_network, const json& rgb_network) : m_n_pos_dims{n_pos_dims}, m_n_dir_dims{n_dir_dims}, m_dir_offset{dir_offset}, m_n_extra_dims{n_extra_dims} {
 		m_pos_encoding.reset(tcnn::create_encoding<T>(n_pos_dims, pos_encoding, density_network.contains("otype") && (tcnn::equals_case_insensitive(density_network["otype"], "FullyFusedMLP") || tcnn::equals_case_insensitive(density_network["otype"], "MegakernelMLP")) ? 16u : 8u));
-		uint32_t rgb_alignment = rgb_network.contains("otype") && (tcnn::equals_case_insensitive(rgb_network["otype"], "FullyFusedMLP") || tcnn::equals_case_insensitive(rgb_network["otype"], "MegakernelMLP")) ? 16u : 8u;
+		uint32_t rgb_alignment = tcnn::minimum_alignment(rgb_network);
 		m_dir_encoding.reset(tcnn::create_encoding<T>(m_n_dir_dims + m_n_extra_dims, dir_encoding, rgb_alignment));
 
 		json local_density_network_config = density_network;
@@ -203,53 +109,40 @@ public:
 		tcnn::GPUMatrixDynamic<T> density_network_input{m_pos_encoding->padded_output_width(), batch_size, stream, m_pos_encoding->preferred_output_layout()};
 		tcnn::GPUMatrixDynamic<T> rgb_network_input{m_rgb_network_input_width, batch_size, stream, m_dir_encoding->preferred_output_layout()};
 
-		tcnn::GPUMatrixDynamic<T> density_network_output;
-		if (m_dir_encoding->preferred_output_layout() == tcnn::AoS) {
-			density_network_output = tcnn::GPUMatrixDynamic<T>{m_density_network->padded_output_width(), batch_size, stream, tcnn::CM};
-		} else {
-			// If SoA, the density network output is just at the beginning of the RGB network input
-			density_network_output = rgb_network_input.slice_rows(0, m_density_network->padded_output_width());
-		}
-
+		tcnn::GPUMatrixDynamic<T> density_network_output = rgb_network_input.slice_rows(0, m_density_network->padded_output_width());
 		tcnn::GPUMatrixDynamic<T> rgb_network_output{output.data(), m_rgb_network->padded_output_width(), batch_size, output.layout()};
 
 		// Perform directional encoding and density network query in parallel
 		{
-			tcnn::SyncedMultiStream synced_streams{stream, 2};
+			// tcnn::SyncedMultiStream synced_streams{stream, 2};
 
 			m_pos_encoding->inference_mixed_precision(
-				synced_streams.get(0),
+				stream,
 				input.slice_rows(0, m_pos_encoding->input_width()),
 				density_network_input,
 				use_inference_params
 			);
 
+			m_density_network->inference_mixed_precision(stream, density_network_input, density_network_output, use_inference_params);
+
 			auto dir_out = rgb_network_input.slice_rows(m_density_network->padded_output_width(), m_dir_encoding->padded_output_width());
 			m_dir_encoding->inference_mixed_precision(
-				synced_streams.get(1),
+				stream,
 				input.slice_rows(m_dir_offset, m_dir_encoding->input_width()),
 				dir_out,
 				use_inference_params
 			);
-
-			m_density_network->inference_mixed_precision(synced_streams.get(0), density_network_input, density_network_output, use_inference_params);
-
-			if (m_dir_encoding->preferred_output_layout() == tcnn::AoS) {
-				tcnn::linear_kernel(grab_density_network_output<T>, 0, synced_streams.get(0),
-					density_network_output.n_elements(), density_network_output.m(), rgb_network_input.m() /* stride */, density_network_output.data(), rgb_network_input.data()
-				);
-			}
 		}
 
 		m_rgb_network->inference_mixed_precision(stream, rgb_network_input, rgb_network_output, use_inference_params);
 
-		if (output.layout() == tcnn::CM) {
-			tcnn::linear_kernel(assemble_rgbd<T>, 0, stream,
-				batch_size, m_dir_encoding->preferred_output_layout() == tcnn::AoS ? density_network_output.m() : 1, padded_output_width(), density_network_output.data(), output.data()
-			);
-		} else {
-			CUDA_CHECK_THROW(cudaMemcpyAsync(output.data() + batch_size * 3, density_network_output.data(), batch_size * sizeof(T), cudaMemcpyDeviceToDevice, stream));
-		}
+		tcnn::linear_kernel(extract_density<T>, 0, stream,
+			batch_size,
+			density_network_output.layout() == tcnn::AoS ? density_network_output.stride() : 1,
+			output.layout() == tcnn::AoS ? padded_output_width() : 1,
+			density_network_output.data(),
+			output.data() + 3 * (output.layout() == tcnn::AoS ? 1 : batch_size)
+		);
 	}
 
 	uint32_t padded_density_output_width() const {
@@ -277,6 +170,9 @@ public:
 			prepare_input_gradients
 		);
 
+		forward->density_network_output = forward->rgb_network_input.slice_rows(0, m_density_network->padded_output_width());
+		forward->density_network_ctx = m_density_network->forward(stream, forward->density_network_input, &forward->density_network_output, use_inference_params, prepare_input_gradients);
+
 		auto dir_out = forward->rgb_network_input.slice_rows(m_density_network->padded_output_width(), m_dir_encoding->padded_output_width());
 		forward->dir_encoding_ctx = m_dir_encoding->forward(
 			stream,
@@ -286,22 +182,6 @@ public:
 			prepare_input_gradients
 		);
 
-		if (m_dir_encoding->preferred_output_layout() == tcnn::AoS) {
-			// TODO: when tcnn's networks have support for strided outputs, unify this
-			forward->density_network_output = tcnn::GPUMatrixDynamic<T>{m_density_network->padded_output_width(), batch_size, stream, tcnn::CM};
-		} else {
-			// If SoA, the density network output is just at the beginning of the RGB network input
-			forward->density_network_output = forward->rgb_network_input.slice_rows(0, m_density_network->padded_output_width());
-		}
-
-		forward->density_network_ctx = m_density_network->forward(stream, forward->density_network_input, &forward->density_network_output, use_inference_params, prepare_input_gradients);
-
-		if (m_dir_encoding->preferred_output_layout() == tcnn::AoS) {
-			tcnn::linear_kernel(grab_density_network_output<T>, 0, stream,
-				forward->density_network_output.n_elements(), forward->density_network_output.m(), forward->rgb_network_input.m() /* stride */, forward->density_network_output.data(), forward->rgb_network_input.data()
-			);
-		}
-
 		if (output) {
 			forward->rgb_network_output = tcnn::GPUMatrixDynamic<T>{output->data(), m_rgb_network->padded_output_width(), batch_size, output->layout()};
 		}
@@ -309,8 +189,8 @@ public:
 		forward->rgb_network_ctx = m_rgb_network->forward(stream, forward->rgb_network_input, output ? &forward->rgb_network_output : nullptr, use_inference_params, prepare_input_gradients);
 
 		if (output) {
-			tcnn::linear_kernel(assemble_rgbd<T>, 0, stream,
-				batch_size, m_dir_encoding->preferred_output_layout() == tcnn::AoS ? forward->density_network_output.m() : 1, padded_output_width(), forward->density_network_output.data(), output->data()
+			tcnn::linear_kernel(extract_density<T>, 0, stream,
+				batch_size, m_dir_encoding->preferred_output_layout() == tcnn::AoS ? forward->density_network_output.stride() : 1, padded_output_width(), forward->density_network_output.data(), output->data()+3
 			);
 		}
 
@@ -366,30 +246,14 @@ public:
 			);
 		}
 
-		tcnn::GPUMatrixDynamic<T> dL_ddensity_network_output;
-		if (m_dir_encoding->preferred_output_layout() == tcnn::AoS) {
-			dL_ddensity_network_output = tcnn::GPUMatrixDynamic<T>{m_density_network->padded_output_width(), batch_size, stream, tcnn::CM};
-
-			tcnn::linear_kernel(extract_density_gradient<T>, 0, stream,
-				dL_ddensity_network_output.n_elements(),
-				dL_ddensity_network_output.m(),
-				dL_drgb_network_input.m(),
-				dL_doutput.m(),
-				dL_doutput.data(),
-				forward.density_network_output.data(),
-				dL_drgb_network_input.data(),
-				dL_ddensity_network_output.data()
-			);
-		} else {
-			dL_ddensity_network_output = tcnn::GPUMatrixDynamic<T>{dL_drgb_network_input.data(), m_density_network->padded_output_width(), batch_size, tcnn::RM};
-
-			tcnn::linear_kernel(add_density_gradient<T>, 0, stream,
-				batch_size,
-				dL_doutput.m(),
-				dL_doutput.data(),
-				dL_ddensity_network_output.data()
-			);
-		}
+		tcnn::GPUMatrixDynamic<T> dL_ddensity_network_output = dL_drgb_network_input.slice_rows(0, m_density_network->padded_output_width());
+		tcnn::linear_kernel(add_density_gradient<T>, 0, stream,
+			batch_size,
+			dL_doutput.m(),
+			dL_doutput.data(),
+			dL_ddensity_network_output.layout() == tcnn::RM ? 1 : dL_ddensity_network_output.stride(),
+			dL_ddensity_network_output.data()
+		);
 
 		tcnn::GPUMatrixDynamic<T> dL_ddensity_network_input;
 		if (m_pos_encoding->n_params() > 0 || dL_dinput) {
