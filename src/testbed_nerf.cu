@@ -3095,6 +3095,10 @@ int Testbed::marching_cubes(Vector3i res3d, const BoundingBox& aabb, float thres
 	res3d.y() = next_multiple((unsigned int)res3d.y(), 16u);
 	res3d.z() = next_multiple((unsigned int)res3d.z(), 16u);
 
+	if (thresh == std::numeric_limits<float>::max()) {
+		thresh = m_mesh.thresh;
+	}
+
 	GPUMemory<float> density = get_density_on_grid(res3d, aabb);
 	marching_cubes_gpu(m_inference_stream, m_render_aabb, res3d, thresh, density, m_mesh.verts, m_mesh.indices);
 

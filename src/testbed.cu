@@ -271,7 +271,7 @@ std::string get_filename_in_data_path_with_suffix(fs::path data_path, fs::path n
 
 void Testbed::compute_and_save_marching_cubes_mesh(const char* filename, Vector3i res3d , BoundingBox aabb, float thresh, bool unwrap_it) {
 	if (aabb.is_empty()) {
-		aabb = (m_testbed_mode==ETestbedMode::Nerf) ? m_render_aabb : m_aabb;
+		aabb = m_testbed_mode == ETestbedMode::Nerf ? m_render_aabb : m_aabb;
 	}
 	marching_cubes(res3d, aabb, thresh);
 	save_mesh(m_mesh.verts, m_mesh.vert_normals, m_mesh.vert_colors, m_mesh.indices, filename, unwrap_it, m_nerf.training.dataset.scale, m_nerf.training.dataset.offset);
@@ -705,7 +705,7 @@ void Testbed::imgui() {
 			auto res3d = get_marching_cubes_res(m_mesh.res, aabb);
 			if (imgui_colored_button("Mesh it!", 0.4f)) {
 				marching_cubes(res3d, aabb, m_mesh.thresh);
-				m_nerf.render_with_camera_distortion=false;
+				m_nerf.render_with_camera_distortion = false;
 			}
 			if (m_mesh.indices.size()>0) {
 				ImGui::SameLine();

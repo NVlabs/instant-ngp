@@ -103,7 +103,7 @@ void Testbed::override_sdf_training_data(py::array_t<float> points, py::array_t<
 
 pybind11::dict Testbed::compute_marching_cubes_mesh(Eigen::Vector3i res3d, BoundingBox aabb, float thresh) {
 	if (aabb.is_empty()) {
-		aabb = (m_testbed_mode == ETestbedMode::Nerf) ? m_render_aabb : m_aabb;
+		aabb = m_testbed_mode == ETestbedMode::Nerf ? m_render_aabb : m_aabb;
 	}
 
 	marching_cubes(res3d, aabb, thresh);
@@ -371,7 +371,7 @@ PYBIND11_MODULE(pyngp, m) {
 			py::arg("filename"),
 			py::arg("resolution") = Eigen::Vector3i::Constant(256),
 			py::arg("aabb") = BoundingBox{},
-			py::arg("thresh") = 2.5f,
+			py::arg("thresh") = std::numeric_limits<float>::max(),
 			py::arg("generate_uvs_for_obj_file") = false,
 			"Compute & save a marching cubes mesh from the current SDF or NeRF model. "
 			"Supports OBJ and PLY format. Note that UVs are only supported by OBJ files. "
@@ -381,7 +381,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("compute_marching_cubes_mesh", &Testbed::compute_marching_cubes_mesh,
 			py::arg("resolution") = Eigen::Vector3i::Constant(256),
 			py::arg("aabb") = BoundingBox{},
-			py::arg("thresh") = 2.5f,
+			py::arg("thresh") = std::numeric_limits<float>::max(),
 			"Compute a marching cubes mesh from the current SDF or NeRF model. "
 			"Returns a python dict with numpy arrays V (vertices), N (vertex normals), C (vertex colors), and F (triangular faces). "
 			"`thresh` is the density threshold; use 0 for SDF; 2.5 works well for NeRF. "
