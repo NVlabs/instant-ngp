@@ -774,7 +774,7 @@ void Testbed::FiniteDifferenceNormalsApproximator::enlarge(uint32_t n_elements) 
 void Testbed::FiniteDifferenceNormalsApproximator::normal(uint32_t n_elements, const distance_fun_t& distance_function, GPUMemory<Vector3f>& pos, GPUMemory<Vector3f>& normal, float epsilon, cudaStream_t stream) {
 	enlarge(n_elements);
 
-	parallel_for_gpu(stream, n_elements, [=, *this] __device__ (size_t i) {
+	parallel_for_gpu(stream, n_elements, [pos=pos.data(), dx=dx.data(), dy=dy.data(), dz=dz.data(), epsilon] __device__ (size_t i) {
 		Vector3f p = pos[i];
 		dx[i] = Vector3f{p.x() + epsilon, p.y(), p.z()};
 		dy[i] = Vector3f{p.x(), p.y() + epsilon, p.z()};
@@ -785,7 +785,7 @@ void Testbed::FiniteDifferenceNormalsApproximator::normal(uint32_t n_elements, c
 	distance_function(n_elements, dy, dist_dy_pos, stream);
 	distance_function(n_elements, dz, dist_dz_pos, stream);
 
-	parallel_for_gpu(stream, n_elements, [=, *this] __device__ (size_t i) {
+	parallel_for_gpu(stream, n_elements, [pos=pos.data(), dx=dx.data(), dy=dy.data(), dz=dz.data(), epsilon] __device__ (size_t i) {
 		Vector3f p = pos[i];
 		dx[i] = Vector3f{p.x() - epsilon, p.y(), p.z()};
 		dy[i] = Vector3f{p.x(), p.y() - epsilon, p.z()};
@@ -796,7 +796,7 @@ void Testbed::FiniteDifferenceNormalsApproximator::normal(uint32_t n_elements, c
 	distance_function(n_elements, dy, dist_dy_neg, stream);
 	distance_function(n_elements, dz, dist_dz_neg, stream);
 
-	parallel_for_gpu(stream, n_elements, [=, *this] __device__ (size_t i) {
+	parallel_for_gpu(stream, n_elements, [normal=normal.data(), dist_dx_pos=dist_dx_pos.data(), dist_dx_neg=dist_dx_neg.data(), dist_dy_pos=dist_dy_pos.data(), dist_dy_neg=dist_dy_neg.data(), dist_dz_pos=dist_dz_pos.data(), dist_dz_neg=dist_dz_neg.data()] __device__ (size_t i) {
 		normal[i] = {dist_dx_pos[i] - dist_dx_neg[i], dist_dy_pos[i] - dist_dy_neg[i], dist_dz_pos[i] - dist_dz_neg[i]};
 	});
 }
