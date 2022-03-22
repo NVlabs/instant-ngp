@@ -175,16 +175,23 @@ if __name__ == "__main__":
 			p2 = 0
 			cx = w / 2
 			cy = h / 2
-			if (els[1] =="SIMPLE_RADIAL"):
+			if els[1] == "SIMPLE_PINHOLE":
+				cx = float(els[5])
+				cy = float(els[6])
+			elif els[1] == "PINHOLE":
+				fl_y = float(els[5])
+				cx = float(els[6])
+				cy = float(els[7])
+			elif els[1] == "SIMPLE_RADIAL":
 				cx = float(els[5])
 				cy = float(els[6])
 				k1 = float(els[7])
-			elif (els[1] =="RADIAL"):
+			elif els[1] == "RADIAL":
 				cx = float(els[5])
 				cy = float(els[6])
 				k1 = float(els[7])
 				k2 = float(els[8])
-			elif (els[1] =="OPENCV"):
+			elif els[1] == "OPENCV":
 				fl_y = float(els[5])
 				cx = float(els[6])
 				cy = float(els[7])
