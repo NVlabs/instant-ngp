@@ -799,7 +799,7 @@ __global__ void composite_kernel_nerf(
 			// The normal is then in the opposite direction of the density gradient (i.e. the direction of decreasing density)
 			Vector3f normal = -network_to_density_derivative(float(local_network_output[3]), density_activation) * warped_pos;
 			rgb = normal.normalized().array();
-		} else if (render_mode == ERenderMode::Positions || render_mode == ERenderMode::EncodingVis) {
+		} else if (render_mode == ERenderMode::Positions) {
 			if (show_accel>=0) {
 				uint32_t mip = max(show_accel, mip_from_pos(pos));
 				uint32_t res = NERF_GRIDSIZE() >> mip;
@@ -811,11 +811,13 @@ __global__ void composite_kernel_nerf(
 				rgb.y() = rng.next_float();
 				rgb.z() = rng.next_float();
 			} else {
-				rgb = pos.array() * 16.f;
+				rgb = pos.array();
 				rgb.x() -= floorf(rgb.x());
 				rgb.y() -= floorf(rgb.y());
 				rgb.z() -= floorf(rgb.z());
 			}
+		} else if (render_mode == ERenderMode::EncodingVis) {
+			rgb = warped_pos.array();
 		} else if (render_mode == ERenderMode::Depth) {
 			float z=cam_fwd.dot(pos-origin) * depth_scale;
 			rgb = {z,z,z};
