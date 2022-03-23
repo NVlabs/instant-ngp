@@ -100,11 +100,7 @@ public:
 
 	virtual ~NerfNetwork() { }
 
-	void inference_mixed_precision(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<T>& output, bool use_inference_params = true) override {
-		if (input.layout() != tcnn::CM) {
-			throw std::runtime_error("NerfNetwork::inference_mixed_precision input must be in column major format.");
-		}
-
+	void inference_mixed_precision_impl(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<T>& output, bool use_inference_params = true) override {
 		uint32_t batch_size = input.n();
 		tcnn::GPUMatrixDynamic<T> density_network_input{m_pos_encoding->padded_output_width(), batch_size, stream, m_pos_encoding->preferred_output_layout()};
 		tcnn::GPUMatrixDynamic<T> rgb_network_input{m_rgb_network_input_width, batch_size, stream, m_dir_encoding->preferred_output_layout()};
@@ -144,11 +140,7 @@ public:
 		return m_density_network->padded_output_width();
 	}
 
-	std::unique_ptr<tcnn::Context> forward(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<T>* output = nullptr, bool use_inference_params = false, bool prepare_input_gradients = false) override {
-		if (input.layout() != tcnn::CM || (output && output->layout() != tcnn::CM)) {
-			throw std::runtime_error("NerfNetwork::forward input and output must be in column major format.");
-		}
-
+	std::unique_ptr<tcnn::Context> forward_impl(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<T>* output = nullptr, bool use_inference_params = false, bool prepare_input_gradients = false) override {
 		// Make sure our temporary buffers have the correct size for the given batch size
 		uint32_t batch_size = input.n();
 
@@ -192,7 +184,7 @@ public:
 		return forward;
 	}
 
-	void backward(
+	void backward_impl(
 		cudaStream_t stream,
 		const tcnn::Context& ctx,
 		const tcnn::GPUMatrixDynamic<float>& input,
@@ -202,10 +194,6 @@ public:
 		bool use_inference_params = false,
 		tcnn::EGradientMode param_gradients_mode = tcnn::EGradientMode::Overwrite
 	) override {
-		if (input.layout() != tcnn::CM || output.layout() != tcnn::CM || dL_doutput.layout() != tcnn::CM || (dL_dinput && dL_dinput->layout() != tcnn::CM)) {
-			throw std::runtime_error("NerfNetwork::backward input and output must be in column major format.");
-		}
-
 		const auto& forward = dynamic_cast<const ForwardContext&>(ctx);
 
 		// Make sure our teporary buffers have the correct size for the given batch size

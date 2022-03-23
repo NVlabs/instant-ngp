@@ -1751,7 +1751,6 @@ void Testbed::reset_network() {
 
 			m_encoding.reset(new TakikawaEncoding<precision_t>(
 				encoding_config["starting_level"],
-				encoding_config["sum_instead_of_concat"],
 				m_sdf.triangle_octree,
 				tcnn::string_to_interpolation_type(encoding_config.value("interpolation", "linear"))
 			));
