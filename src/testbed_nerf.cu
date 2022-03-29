@@ -67,9 +67,9 @@ static constexpr uint32_t MAX_STEPS_INBETWEEN_COMPACTION = 8;
 
 Testbed::NetworkDims Testbed::network_dims_nerf() const {
 	NetworkDims dims;
-	dims.n_input = 3;
+	dims.n_input = sizeof(NerfCoordinate) / sizeof(float);
 	dims.n_output = 4;
-	dims.n_pos = 3;
+	dims.n_pos = sizeof(NerfPosition) / sizeof(float);
 	return dims;
 }
 

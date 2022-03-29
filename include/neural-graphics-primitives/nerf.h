@@ -55,8 +55,13 @@ struct RaysNerfSoa {
 
 
 struct NerfPosition {
-	NGP_HOST_DEVICE NerfPosition(const Eigen::Vector3f& pos, float dt) : p{pos} {}
+	NGP_HOST_DEVICE NerfPosition(const Eigen::Vector3f& pos, float dt)
+	:
+	p{pos}
+	// x{pos.x()}
+	{}
 	Eigen::Vector3f p;
+	// float x;
 };
 
 struct NerfDirection {

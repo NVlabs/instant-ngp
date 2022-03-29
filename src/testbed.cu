@@ -1697,7 +1697,7 @@ void Testbed::reset_network() {
 			dims.n_pos,
 			n_dir_dims,
 			n_extra_dims,
-			4, // The offset of 4 comes from the dt member variable of NerfCoordinate. HACKY
+			dims.n_pos + 1, // The offset of 1 comes from the dt member variable of NerfCoordinate. HACKY
 			encoding_config,
 			dir_encoding_config,
 			network_config,
