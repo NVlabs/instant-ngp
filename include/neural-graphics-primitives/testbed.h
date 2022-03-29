@@ -730,10 +730,10 @@ public:
 
 	// Hashgrid encoding analysis
 	float m_quant_percent = 0.f;
-	LevelStats m_level_stats[32] = {};
+	std::vector<LevelStats> m_level_stats;
 	int m_num_levels = 0;
 	int m_histo_level = 0; // collect a histogram for this level
-	int m_base_grid_resolution;
+	uint32_t m_base_grid_resolution;
 	float m_per_level_scale;
 	float m_histo[257] = {};
 	float m_histo_scale = 1.f;
@@ -741,7 +741,7 @@ public:
 	uint32_t m_training_step = 0;
 	float m_loss_scalar = 0.f;
 	float m_loss_graph[256] = {};
-	int m_loss_graph_samples = 0;
+	uint32_t m_loss_graph_samples = 0;
 
 	bool m_train_encoding = true;
 	bool m_train_network = true;

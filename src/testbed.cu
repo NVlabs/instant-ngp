@@ -362,7 +362,7 @@ void Testbed::imgui() {
 			ImGui::Text("Rays per batch: %d, Batch size: %d/%d", m_nerf.training.counters_rgb.rays_per_batch, m_nerf.training.counters_rgb.measured_batch_size, m_nerf.training.counters_rgb.measured_batch_size_before_compaction);
 		}
 		ImGui::Text("Steps: %d, Loss: %0.6f (%0.2f dB)", m_training_step, m_loss_scalar, linear_to_db(m_loss_scalar));
-		ImGui::PlotLines("loss graph", m_loss_graph, std::min(m_loss_graph_samples, 256), (m_loss_graph_samples < 256) ? 0 : (m_loss_graph_samples&255), 0, FLT_MAX, FLT_MAX, ImVec2(0, 50.f));
+		ImGui::PlotLines("loss graph", m_loss_graph, std::min(m_loss_graph_samples, 256u), (m_loss_graph_samples < 256u) ? 0 : (m_loss_graph_samples & 255u), 0, FLT_MAX, FLT_MAX, ImVec2(0, 50.f));
 
 		if (m_testbed_mode == ETestbedMode::Nerf && ImGui::TreeNode("NeRF training options")) {
 			ImGui::Checkbox("Random bg color", &m_nerf.training.random_bg_color);
@@ -432,7 +432,7 @@ void Testbed::imgui() {
 		ImGui::SameLine();
 		const auto& render_tex = m_render_surfaces.front();
 		ImGui::Text("%dx%d at %d spp", render_tex.resolution().x(), render_tex.resolution().y(), render_tex.spp());
-		ImGui::SliderInt("Max spp", &m_max_spp,0,1024, "%d", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat );
+		ImGui::SliderInt("Max spp", &m_max_spp, 0, 1024, "%d", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat );
 
 		if (!m_dynamic_res) {
 			ImGui::SliderInt("Fixed resolution factor", &m_fixed_res_factor, 8, 64);
@@ -1646,6 +1646,8 @@ void Testbed::reset_network() {
 			m_num_levels = encoding_config.value("n_levels", 16u);
 		}
 
+		m_level_stats.resize(m_num_levels);
+
 		const uint32_t log2_hashmap_size = encoding_config.value("log2_hashmap_size", 15);
 
 		m_base_grid_resolution = encoding_config.value("base_resolution", 0);
@@ -2125,22 +2127,24 @@ void Testbed::gather_histograms() {
 	int first_encoder = first_encoder_param();
 	int n_encoding_params = n_params - first_encoder;
 
-	if (n_encoding_params > 0 && m_trainer->params()) {
-		std::vector<float> grid; grid.resize(n_encoding_params);
+	auto hg_enc = dynamic_cast<GridEncoding<network_precision_t>*>(m_encoding.get());
+	if (hg_enc && m_trainer->params()) {
+		std::vector<float> grid;
+		grid.resize(n_encoding_params);
 		CUDA_CHECK_THROW(cudaMemcpyAsync(grid.data(), m_trainer->params() + first_encoder, n_encoding_params * sizeof(float), cudaMemcpyDeviceToHost, m_training_stream));
 		CUDA_CHECK_THROW(cudaStreamSynchronize(m_training_stream));
 
-		int nperlevel = (int)(grid.size() / m_num_levels);
 		int numquant = 0;
-		for (int l = 0; l < m_num_levels && l<32; ++l) {
+		for (int l = 0; l < m_num_levels; ++l) {
+			size_t nperlevel = hg_enc->level_n_params(l);
 			LevelStats s = {};
-			const float* d = grid.data() + nperlevel * l;
-			for (int i = 0; i < nperlevel; ++i) {
+			const float* d = grid.data() + hg_enc->level_params_offset(l);
+			for (size_t i = 0; i < nperlevel; ++i) {
 				float v = *d++;
 				float av = fabsf(v);
-				if (av < 0.00001f)
+				if (av < 0.00001f) {
 					s.numzero++;
-				else {
+				} else {
 					if (s.count == 0) s.min = s.max = v;
 					s.count++;
 					s.x += v;
@@ -2153,7 +2157,8 @@ void Testbed::gather_histograms() {
 		}
 		m_quant_percent = float(numquant * 100) / (float)n_encoding_params;
 		if (m_histo_level < m_num_levels) {
-			const float* d = grid.data() + m_histo_level * nperlevel;
+			size_t nperlevel = hg_enc->level_n_params(m_histo_level);
+			const float* d = grid.data() + hg_enc->level_params_offset(m_histo_level);
 			float scale = 128.f / (m_histo_scale); // fixed scale for now to make it more comparable between levels
 			memset(m_histo, 0, sizeof(m_histo));
 			for (int i = 0; i < nperlevel; ++i) {
