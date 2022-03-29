@@ -753,7 +753,7 @@ __global__ void composite_kernel_nerf(
 	ENerfActivation rgb_activation,
 	ENerfActivation density_activation,
 	int show_accel,
-	float min_alpha
+	float min_transmittance
 ) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_elements) return;
@@ -834,7 +834,7 @@ __global__ void composite_kernel_nerf(
 		local_rgba.head<3>() += rgb * weight;
 		local_rgba.w() += weight;
 
-		if (local_rgba.w() > (1.0f - min_alpha)) {
+		if (local_rgba.w() > (1.0f - min_transmittance)) {
 			local_rgba /= local_rgba.w();
 			break;
 		}
@@ -1886,7 +1886,7 @@ uint32_t Testbed::NerfTracer::trace(
 	ENerfActivation rgb_activation,
 	ENerfActivation density_activation,
 	int show_accel,
-	float min_alpha,
+	float min_transmittance,
 	const Eigen::Vector3f& light_dir,
 	cudaStream_t stream
 ) {
@@ -1974,7 +1974,7 @@ uint32_t Testbed::NerfTracer::trace(
 			rgb_activation,
 			density_activation,
 			show_accel,
-			min_alpha
+			min_transmittance
 		);
 
 		i += n_steps_between_compaction;
@@ -2074,7 +2074,7 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 			m_nerf.rgb_activation,
 			m_nerf.density_activation,
 			m_nerf.show_accel,
-			m_nerf.rendering_min_alpha,
+			m_nerf.rendering_min_transmittance,
 			m_nerf.light_dir.normalized(),
 			stream
 		);

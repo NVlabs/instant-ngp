@@ -165,7 +165,7 @@ public:
 			ENerfActivation rgb_activation,
 			ENerfActivation density_activation,
 			int show_accel,
-			float min_alpha,
+			float min_transmittance,
 			const Eigen::Vector3f& light_dir,
 			cudaStream_t stream
 		);
@@ -583,7 +583,7 @@ public:
 		bool render_with_camera_distortion = false;
 		CameraDistortion render_distortion = {};
 
-		float rendering_min_alpha = 0.01f;
+		float rendering_min_transmittance = 0.01f;
 	} m_nerf;
 
 	struct Sdf {

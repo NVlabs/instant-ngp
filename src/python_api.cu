@@ -458,7 +458,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("sharpen", &Testbed::Nerf::sharpen)
 		.def_readwrite("render_with_camera_distortion", &Testbed::Nerf::render_with_camera_distortion)
 		.def_readwrite("render_distortion", &Testbed::Nerf::render_distortion)
-		.def_readwrite("rendering_min_alpha", &Testbed::Nerf::rendering_min_alpha)
+		.def_readwrite("rendering_min_transmittance", &Testbed::Nerf::rendering_min_transmittance)
 		.def_readwrite("cone_angle_constant", &Testbed::Nerf::cone_angle_constant)
 		.def_readwrite("visualize_cameras", &Testbed::Nerf::visualize_cameras)
 		;
