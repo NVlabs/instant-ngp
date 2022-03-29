@@ -21,6 +21,7 @@
 #include <neural-graphics-primitives/render_buffer.h>
 #include <neural-graphics-primitives/takikawa_encoding.cuh>
 #include <neural-graphics-primitives/testbed.h>
+#include <neural-graphics-primitives/tinyexr_wrapper.h>
 #include <neural-graphics-primitives/trainable_buffer.cuh>
 #include <neural-graphics-primitives/triangle_bvh.cuh>
 #include <neural-graphics-primitives/triangle_octree.cuh>
@@ -279,6 +280,33 @@ void Testbed::compute_and_save_marching_cubes_mesh(const char* filename, Vector3
 
 inline float linear_to_db(float x) {
 	return -10.f*logf(x)/logf(10.f);
+}
+
+void Testbed::dump_parameters_as_images() {
+	size_t non_layer_params_width = 2048;
+
+	size_t layer_params = 0;
+	for (auto size : m_network->layer_sizes()) {
+		layer_params += size.first * size.second;
+	}
+
+	size_t non_layer_params = m_network->n_params() - layer_params;
+
+	float* params = m_trainer->params();
+	std::vector<float> params_cpu(layer_params + next_multiple(non_layer_params, non_layer_params_width), 0.0f);
+	CUDA_CHECK_THROW(cudaMemcpy(params_cpu.data(), params, m_network->n_params() * sizeof(float), cudaMemcpyDeviceToHost));
+
+	size_t offset = 0;
+	size_t layer_id = 0;
+	for (auto size : m_network->layer_sizes()) {
+		std::string filename = std::string{"layer-"} + std::to_string(layer_id) + ".exr";
+		save_exr(params_cpu.data() + offset, size.second, size.first, 1, 1, filename.c_str());
+		offset += size.first * size.second;
+		++layer_id;
+	}
+
+	std::string filename = "non-layer.exr";
+	save_exr(params_cpu.data() + offset, non_layer_params_width, non_layer_params / non_layer_params_width, 1, 1, filename.c_str());
 }
 
 #ifdef NGP_GUI
@@ -686,6 +714,10 @@ void Testbed::imgui() {
 				ImGui::OpenPopup("Snapshot load error");
 				snapshot_load_error_string = std::string{"Failed to load snapshot: "} + e.what();
 			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Dump parameters as images")) {
+			dump_parameters_as_images();
 		}
 		if (ImGui::BeginPopupModal("Snapshot load error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
 			ImGui::Text("%s", snapshot_load_error_string.c_str());

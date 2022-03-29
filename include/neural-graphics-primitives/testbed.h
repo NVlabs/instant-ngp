@@ -303,6 +303,7 @@ public:
 	void train_sdf(size_t target_batch_size, size_t n_steps, cudaStream_t stream);
 	void train_image(size_t target_batch_size, size_t n_steps, cudaStream_t stream);
 	void set_train(bool mtrain);
+	void dump_parameters_as_images();
 	void imgui();
 	void training_prep_nerf(uint32_t batch_size, uint32_t n_training_steps, cudaStream_t stream);
 	void training_prep_sdf(uint32_t batch_size, uint32_t n_training_steps, cudaStream_t stream);
