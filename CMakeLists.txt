@@ -8,13 +8,6 @@
 
 cmake_minimum_required(VERSION 3.19)
 
-if (CMAKE_VERSION EQUAL "3.23.0-rc1")
-	message(FATAL_ERROR
-		"Installed CMake version ${CMAKE_VERSION} is unable to build this project. "
-		"You must install the latest stable version 3.22.2 instead."
-	)
-endif()
-
 PROJECT(instant-ngp
 	VERSION 1.0
 	DESCRIPTION "Instant neural graphics primitives"
