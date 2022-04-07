@@ -321,7 +321,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def(py::init<ETestbedMode, const std::string&, const std::string&>())
 		.def(py::init<ETestbedMode, const std::string&, const json&>())
 		.def("create_empty_nerf_dataset", &Testbed::create_empty_nerf_dataset, "Allocate memory for a nerf dataset with a given size", py::arg("n_images"), py::arg("image_resolution"), py::arg("aabb_scale")=1, py::arg("is_hdr")=false)
-		.def("load_training_data", &Testbed::load_training_data, "Load training data from a given path.")
+		.def("load_training_data", &Testbed::load_training_data, py::call_guard<py::gil_scoped_release>(), "Load training data from a given path.")
 		.def("clear_training_data", &Testbed::clear_training_data, "Clears training data to free up GPU memory.")
 		// General control
 		.def("init_window", &Testbed::init_window, "Init a GLFW window that shows real-time progress and a GUI.",
@@ -330,8 +330,8 @@ PYBIND11_MODULE(pyngp, m) {
 			py::arg("hidden") = false
 		)
 		.def("want_repl", &Testbed::want_repl, "returns true if the user clicked the 'I want a repl' button")
-		.def("frame", &Testbed::frame, "Process a single frame. Renders if a window was previously created.")
-		.def("render", &Testbed::render_to_cpu, "Renders an image at the requested resolution. Does not require a window.",
+		.def("frame", &Testbed::frame, py::call_guard<py::gil_scoped_release>(), "Process a single frame. Renders if a window was previously created.")
+		.def("render", &Testbed::render_to_cpu, py::call_guard<py::gil_scoped_release>(), "Renders an image at the requested resolution. Does not require a window.",
 			py::arg("width") = 1920,
 			py::arg("height") = 1080,
 			py::arg("spp") = 1,
@@ -352,7 +352,7 @@ PYBIND11_MODULE(pyngp, m) {
 		)
 		.def("screenshot", &Testbed::screenshot, "Takes a screenshot of the current window contents.", py::arg("linear")=true)
 		.def("destroy_window", &Testbed::destroy_window, "Destroy the window again.")
-		.def("train", &Testbed::train, "Perform a specified number of training steps.")
+		.def("train", &Testbed::train, py::call_guard<py::gil_scoped_release>(), "Perform a specified number of training steps.")
 		.def("reset", &Testbed::reset_network, "Reset training.")
 		.def("reset_accumulation", &Testbed::reset_accumulation, "Reset rendering accumulation.")
 		.def("reload_network_from_file", &Testbed::reload_network_from_file, py::arg("path")="", "Reload the network from a config file.")
@@ -369,7 +369,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("save_snapshot", &Testbed::save_snapshot, py::arg("path"), py::arg("include_optimizer_state")=false, "Save a snapshot of the currently trained model")
 		.def("load_snapshot", &Testbed::load_snapshot, py::arg("path"), "Load a previously saved snapshot")
 		.def("load_camera_path", &Testbed::load_camera_path, "Load a camera path", py::arg("path"))
-		.def("compute_and_save_marching_cubes_mesh", &Testbed::compute_and_save_marching_cubes_mesh,
+		.def("compute_and_save_marching_cubes_mesh", &Testbed::compute_and_save_marching_cubes_mesh, py::call_guard<py::gil_scoped_release>(),
 			py::arg("filename"),
 			py::arg("resolution") = Eigen::Vector3i::Constant(256),
 			py::arg("aabb") = BoundingBox{},
@@ -380,7 +380,7 @@ PYBIND11_MODULE(pyngp, m) {
 			"`thresh` is the density threshold; use 0 for SDF; 2.5 works well for NeRF. "
 			"If the aabb parameter specifies an inside-out (\"empty\") box (default), the current render_aabb bounding box is used."
 		)
-		.def("compute_marching_cubes_mesh", &Testbed::compute_marching_cubes_mesh,
+		.def("compute_marching_cubes_mesh", &Testbed::compute_marching_cubes_mesh, py::call_guard<py::gil_scoped_release>(),
 			py::arg("resolution") = Eigen::Vector3i::Constant(256),
 			py::arg("aabb") = BoundingBox{},
 			py::arg("thresh") = std::numeric_limits<float>::max(),
@@ -539,7 +539,7 @@ PYBIND11_MODULE(pyngp, m) {
 			"Set up the camera extrinsics for the given training image index, from the given 3x4 transformation matrix."
 		)
 		.def("get_camera_extrinsics", &Testbed::Nerf::Training::get_camera_extrinsics, py::arg("frame_idx"), "return the 3x4 transformation matrix of given training frame")
-		.def("set_image", &Testbed::Nerf::Training::set_image,
+		.def("set_image", &Testbed::Nerf::Training::set_image, py::call_guard<py::gil_scoped_release>(),
 			py::arg("frame_idx"),
 			py::arg("img"),
 			"set one of the training images. must be a floating point numpy array of (H,W,C) with 4 channels; linear color space; W and H must match image size of the rest of the dataset"
