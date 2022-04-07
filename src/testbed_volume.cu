@@ -198,18 +198,15 @@ void Testbed::train_volume(size_t target_batch_size, size_t n_steps, cudaStream_
 	uint32_t n_loss_samples = 0;
 
 	for (size_t i = 0; i < n_steps; i += GRAPH_SIZE) {
-		float loss_value;
 		for (uint32_t j = 0; j < GRAPH_SIZE; ++j) {
 			uint32_t training_offset = (uint32_t)((i+j) % n_batches) * batch_size;
 
 			GPUMatrix<float> training_batch_matrix((float*)(m_volume.training.positions.data()+training_offset), n_input_dims, batch_size);
 			GPUMatrix<float> training_target_matrix((float*)(m_volume.training.targets.data()+training_offset), n_output_dims, batch_size);
 
-			float* p_loss = j == (GRAPH_SIZE - 1) ? &loss_value : nullptr;
-			m_trainer->training_step(stream, training_batch_matrix, training_target_matrix, p_loss);
-
-			if (p_loss) {
-				total_loss += loss_value;
+			auto ctx = m_trainer->training_step(stream, training_batch_matrix, training_target_matrix);
+			if (j == (GRAPH_SIZE - 1)) {
+				total_loss += m_trainer->loss(stream, *ctx);
 				++n_loss_samples;
 			}
 
