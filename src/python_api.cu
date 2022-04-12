@@ -331,7 +331,7 @@ PYBIND11_MODULE(pyngp, m) {
 		)
 		.def("want_repl", &Testbed::want_repl, "returns true if the user clicked the 'I want a repl' button")
 		.def("frame", &Testbed::frame, py::call_guard<py::gil_scoped_release>(), "Process a single frame. Renders if a window was previously created.")
-		.def("render", &Testbed::render_to_cpu, py::call_guard<py::gil_scoped_release>(), "Renders an image at the requested resolution. Does not require a window.",
+		.def("render", &Testbed::render_to_cpu, "Renders an image at the requested resolution. Does not require a window.",
 			py::arg("width") = 1920,
 			py::arg("height") = 1080,
 			py::arg("spp") = 1,
