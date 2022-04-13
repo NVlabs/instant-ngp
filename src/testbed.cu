@@ -2049,7 +2049,7 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 				m_nerf.training.dataset.image_resolution,
 				m_fov_axis,
 				m_zoom,
-				m_screen_center,
+				Vector2f::Constant(0.5f),
 				m_inference_stream
 			);
 		}
