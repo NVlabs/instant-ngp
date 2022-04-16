@@ -539,7 +539,7 @@ PYBIND11_MODULE(pyngp, m) {
 			"Set up the camera extrinsics for the given training image index, from the given 3x4 transformation matrix."
 		)
 		.def("get_camera_extrinsics", &Testbed::Nerf::Training::get_camera_extrinsics, py::arg("frame_idx"), "return the 3x4 transformation matrix of given training frame")
-		.def("set_image", &Testbed::Nerf::Training::set_image, py::call_guard<py::gil_scoped_release>(),
+		.def("set_image", &Testbed::Nerf::Training::set_image,
 			py::arg("frame_idx"),
 			py::arg("img"),
 			"set one of the training images. must be a floating point numpy array of (H,W,C) with 4 channels; linear color space; W and H must match image size of the rest of the dataset"
