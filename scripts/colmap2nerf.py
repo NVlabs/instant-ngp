@@ -47,14 +47,15 @@ def do_system(arg):
 def run_ffmpeg(args):
 	if not os.path.isabs(args.images):
 		args.images = os.path.join(os.path.dirname(args.video_in), args.images)
-	images = args.images
-	video = args.video_in
+	images = "\"" + args.images + "\""
+	video =  "\"" + args.video_in + "\""
 	fps = float(args.video_fps) or 1.0
 	print(f"running ffmpeg with input video file={video}, output image folder={images}, fps={fps}.")
 	if (input(f"warning! folder '{images}' will be deleted/replaced. continue? (Y/n)").lower().strip()+"y")[:1] != "y":
 		sys.exit(1)
 	try:
-		shutil.rmtree(images)
+		#Passing Images' Path Without Double Quotes
+		shutil.rmtree(args.images)
 	except:
 		pass
 	do_system(f"mkdir {images}")
@@ -68,7 +69,7 @@ def run_ffmpeg(args):
 
 def run_colmap(args):
 	db=args.colmap_db
-	images=args.images
+	images= "\"" + args.images + "\""
 	db_noext=str(Path(db).with_suffix(""))
 
 	if args.text=="text":
