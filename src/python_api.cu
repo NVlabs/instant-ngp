@@ -369,7 +369,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("save_snapshot", &Testbed::save_snapshot, py::arg("path"), py::arg("include_optimizer_state")=false, "Save a snapshot of the currently trained model")
 		.def("load_snapshot", &Testbed::load_snapshot, py::arg("path"), "Load a previously saved snapshot")
 		.def("load_camera_path", &Testbed::load_camera_path, "Load a camera path", py::arg("path"))
-		.def("compute_and_save_marching_cubes_mesh", &Testbed::compute_and_save_marching_cubes_mesh, py::call_guard<py::gil_scoped_release>(),
+		.def("compute_and_save_marching_cubes_mesh", &Testbed::compute_and_save_marching_cubes_mesh,
 			py::arg("filename"),
 			py::arg("resolution") = Eigen::Vector3i::Constant(256),
 			py::arg("aabb") = BoundingBox{},
@@ -380,7 +380,7 @@ PYBIND11_MODULE(pyngp, m) {
 			"`thresh` is the density threshold; use 0 for SDF; 2.5 works well for NeRF. "
 			"If the aabb parameter specifies an inside-out (\"empty\") box (default), the current render_aabb bounding box is used."
 		)
-		.def("compute_marching_cubes_mesh", &Testbed::compute_marching_cubes_mesh, py::call_guard<py::gil_scoped_release>(),
+		.def("compute_marching_cubes_mesh", &Testbed::compute_marching_cubes_mesh,
 			py::arg("resolution") = Eigen::Vector3i::Constant(256),
 			py::arg("aabb") = BoundingBox{},
 			py::arg("thresh") = std::numeric_limits<float>::max(),
