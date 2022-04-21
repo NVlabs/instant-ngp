@@ -54,7 +54,7 @@ def run_ffmpeg(args):
 	if (input(f"warning! folder '{images}' will be deleted/replaced. continue? (Y/n)").lower().strip()+"y")[:1] != "y":
 		sys.exit(1)
 	try:
-		#Passing Images' Path Without Double Quotes
+		# Passing Images' Path Without Double Quotes
 		shutil.rmtree(args.images)
 	except:
 		pass
@@ -63,13 +63,13 @@ def run_ffmpeg(args):
 	time_slice_value = ""
 	time_slice = args.time_slice
 	if time_slice:
-	    start, end = time_slice.split(",")
-	    time_slice_value = f",select='between(t\,{start}\,{end})'"
+		start, end = time_slice.split(",")
+		time_slice_value = f",select='between(t\,{start}\,{end})'"
 	do_system(f"ffmpeg -i {video} -qscale:v 1 -qmin 1 -vf \"fps={fps}{time_slice_value}\" {images}/%04d.jpg")
 
 def run_colmap(args):
-	db=args.colmap_db
-	images= "\"" + args.images + "\""
+	db = args.colmap_db
+	images = "\"" + args.images + "\""
 	db_noext=str(Path(db).with_suffix(""))
 
 	if args.text=="text":

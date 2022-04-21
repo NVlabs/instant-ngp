@@ -169,7 +169,6 @@ if __name__ == "__main__":
 		# testbed.background_color = [1.0, 1.0, 1.0, 1.0]
 		# testbed.nerf.training.random_bg_color = False
 
-
 	old_training_step = 0
 	n_steps = args.n_steps
 	if n_steps < 0:
