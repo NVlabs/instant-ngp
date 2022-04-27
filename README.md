@@ -218,6 +218,8 @@ instant-ngp$ git submodule update --init --recursive
 If __instant-ngp__ still fails to compile, update CUDA as well as your compiler to the latest versions you can install on your system. It is crucial that you update _both_, as newer CUDA versions are not always compatible with earlier compilers and vice versa.
 If your problem persists, consult the following table of known issues.
 
+**\*After each step, delete the `build` folder and let CMake regenerate it before trying again.\***
+
 | Problem | Resolution |
 |---------|------------|
 | __CMake error:__ No CUDA toolset found / CUDA_ARCHITECTURES is empty for target "cmTC_0c70f" | __Windows:__ the Visual Studio CUDA integration was not installed correctly. Follow [these instructions](https://github.com/mitsuba-renderer/mitsuba2/issues/103#issuecomment-618378963) to fix the problem without re-installing CUDA. ([#18](https://github.com/NVlabs/instant-ngp/issues/18)) |
