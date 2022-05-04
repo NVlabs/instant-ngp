@@ -928,43 +928,45 @@ void save_mesh(
 	fclose(f);
 }
 
-void save_density_grid_to_png(const GPUMemory<float>& density, const char* filename, Vector3i res3d, float thresh, bool swap_y_z) {
+void save_density_grid_to_png(const GPUMemory<float>& density, const char* filename, Vector3i res3d, float thresh, bool swap_y_z, float density_range) {
+	float density_scale = 128.f / density_range; // map from -density_range to density_range into 0-255
 	std::vector<float> density_cpu;
 	density_cpu.resize(density.size());
 	density.copy_to_host(density_cpu);
 	uint32_t num_voxels = 0;
 	uint32_t num_lattice_points_near_zero_crossing = 0;
+	uint32_t N = res3d.x()*res3d.y()*res3d.z();
 	for (int z = 1; z < res3d.z() - 1; ++z) {
 		for (int y = 1; y < res3d.y() - 1; ++y) {
-			for (int x = 1; x < res3d.z() - 1; ++x) {
+			for (int x = 1; x < res3d.x() - 1; ++x) {
 				int count = 0;
-				count += density_cpu[(x+0)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh;
-				count += density_cpu[(x+1)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh;
-				count += density_cpu[(x+0)+(y+1)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh;
-				count += density_cpu[(x+1)+(y+1)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh;
-				count += density_cpu[(x+0)+(y+0)*res3d.x()+(z+1)*res3d.x()*res3d.z()] < thresh;
-				count += density_cpu[(x+1)+(y+0)*res3d.x()+(z+1)*res3d.x()*res3d.z()] < thresh;
-				count += density_cpu[(x+0)+(y+1)*res3d.x()+(z+1)*res3d.x()*res3d.z()] < thresh;
-				count += density_cpu[(x+1)+(y+1)*res3d.x()+(z+1)*res3d.x()*res3d.z()] < thresh;
+				count += density_cpu[(x+0)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.y()] < thresh;
+				count += density_cpu[(x+1)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.y()] < thresh;
+				count += density_cpu[(x+0)+(y+1)*res3d.x()+(z+0)*res3d.x()*res3d.y()] < thresh;
+				count += density_cpu[(x+1)+(y+1)*res3d.x()+(z+0)*res3d.x()*res3d.y()] < thresh;
+				count += density_cpu[(x+0)+(y+0)*res3d.x()+(z+1)*res3d.x()*res3d.y()] < thresh;
+				count += density_cpu[(x+1)+(y+0)*res3d.x()+(z+1)*res3d.x()*res3d.y()] < thresh;
+				count += density_cpu[(x+0)+(y+1)*res3d.x()+(z+1)*res3d.x()*res3d.y()] < thresh;
+				count += density_cpu[(x+1)+(y+1)*res3d.x()+(z+1)*res3d.x()*res3d.y()] < thresh;
 				if (count>0 && count<8) {
 					num_voxels++;
 				}
 
-				bool mysign = density_cpu[(x+0)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh;
+				bool mysign = density_cpu[(x+0)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.y()] < thresh;
 				bool near_zero_crossing=false;
-				near_zero_crossing |= (density_cpu[(x+1)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh) != mysign;
-				near_zero_crossing |= (density_cpu[(x-1)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh) != mysign;
-				near_zero_crossing |= (density_cpu[(x+0)+(y+1)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh) != mysign;
-				near_zero_crossing |= (density_cpu[(x+0)+(y-1)*res3d.x()+(z+0)*res3d.x()*res3d.z()] < thresh) != mysign;
-				near_zero_crossing |= (density_cpu[(x+0)+(y+0)*res3d.x()+(z+1)*res3d.x()*res3d.z()] < thresh) != mysign;
-				near_zero_crossing |= (density_cpu[(x+0)+(y+0)*res3d.x()+(z-1)*res3d.x()*res3d.z()] < thresh) != mysign;
+				near_zero_crossing |= (density_cpu[(x+1)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.y()] < thresh) != mysign;
+				near_zero_crossing |= (density_cpu[(x-1)+(y+0)*res3d.x()+(z+0)*res3d.x()*res3d.y()] < thresh) != mysign;
+				near_zero_crossing |= (density_cpu[(x+0)+(y+1)*res3d.x()+(z+0)*res3d.x()*res3d.y()] < thresh) != mysign;
+				near_zero_crossing |= (density_cpu[(x+0)+(y-1)*res3d.x()+(z+0)*res3d.x()*res3d.y()] < thresh) != mysign;
+				near_zero_crossing |= (density_cpu[(x+0)+(y+0)*res3d.x()+(z+1)*res3d.x()*res3d.y()] < thresh) != mysign;
+				near_zero_crossing |= (density_cpu[(x+0)+(y+0)*res3d.x()+(z-1)*res3d.x()*res3d.y()] < thresh) != mysign;
 				if (near_zero_crossing) {
 					num_lattice_points_near_zero_crossing++;
 				}
 			}
 		}
 	}
-	uint32_t N = res3d.x()*res3d.y()*res3d.z();
+
 
 	if (swap_y_z) {
 		res3d = {res3d.x(), res3d.z(), res3d.y()};
