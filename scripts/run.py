@@ -108,7 +108,7 @@ if __name__ == "__main__":
 		testbed.tonemap_curve = ngp.TonemapCurve.ACES
 
 	if args.scene:
-		scene=args.scene
+		scene = args.scene
 		if not os.path.exists(args.scene) and args.scene in scenes:
 			scene = os.path.join(scenes[args.scene]["data_dir"], scenes[args.scene]["dataset"])
 		testbed.load_training_data(scene)

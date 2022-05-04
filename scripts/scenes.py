@@ -69,7 +69,7 @@ scenes_sdf = {
 }
 
 
-def ours_image(name,infolder=True):
+def ours_image(name, infolder=True):
 	data_dir = os.path.join(IMAGE_DATA_FOLDER, f"{name}") if infolder else IMAGE_DATA_FOLDER
 	dataset = f"{name}.bin"
 	if not os.path.exists(os.path.join(data_dir, dataset)):
@@ -87,6 +87,8 @@ def ours_image(name,infolder=True):
 scenes_image = {
 	"albert"        : ours_image("albert", False),
 }
+
+
 
 def ours_volume(name, ds):
 	return {
@@ -203,3 +205,4 @@ def setup_colored_sdf(testbed, scene, softshadow=True):
 	col = list(testbed.background_color)
 	testbed.sdf.brdf.ambientcolor = np.multiply(col,col)[0:3]
 	testbed.sdf.shadow_sharpness = 16 if softshadow else 2048
+	testbed.scale = testbed.scale * 1.13
