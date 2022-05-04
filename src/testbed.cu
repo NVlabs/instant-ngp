@@ -1486,12 +1486,12 @@ void Testbed::init_window(int resw, int resh, bool hidden) {
 #ifdef NGP_VULKAN
 	try {
 		vulkan_and_ngx_init();
-		m_dlss_supported = m_dlss = true;
+		m_dlss_supported = true;
 	} catch (const std::runtime_error& e) {
 		tlog::warning() << "Could not initialize Vulkan and NGX. DLSS not supported. (" << e.what() << ")";
 	}
 #else
-	m_dlss_supported = m_dlss = false;
+	m_dlss_supported = false;
 #endif
 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
