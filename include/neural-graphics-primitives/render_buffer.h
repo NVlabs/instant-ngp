@@ -15,6 +15,8 @@
 #pragma once
 
 #include <neural-graphics-primitives/common.h>
+#include <neural-graphics-primitives/common_device.cuh>
+#include <neural-graphics-primitives/dlss.h>
 
 #include <tiny-cuda-nn/gpu_memory.h>
 
@@ -166,11 +168,15 @@ public:
 		return m_surface_provider->surface();
 	}
 
-	Eigen::Vector2i resolution() const {
+	Eigen::Vector2i in_resolution() const {
+		return m_in_resolution;
+	}
+
+	Eigen::Vector2i out_resolution() const {
 		return m_surface_provider->resolution();
 	}
 
-	void resize(const Eigen::Vector2i& size);
+	void resize(const Eigen::Vector2i& res);
 
 	void reset_accumulation() {
 		m_spp = 0;
@@ -184,13 +190,17 @@ public:
 		return m_frame_buffer.data();
 	}
 
+	float* depth_buffer() const {
+		return m_depth_buffer.data();
+	}
+
 	Eigen::Array4f* accumulate_buffer() const {
 		return m_accumulate_buffer.data();
 	}
 
-	void clear_frame_buffer(cudaStream_t stream);
+	void clear_frame(cudaStream_t stream);
 
-	void accumulate(cudaStream_t stream);
+	void accumulate(float exposure, cudaStream_t stream);
 
 	void tonemap(float exposure, const Eigen::Array4f& background_color, EColorSpace output_color_space, cudaStream_t stream);
 
@@ -227,12 +237,24 @@ public:
 		}
 	}
 
+	void enable_dlss(const Eigen::Vector2i& out_res);
+	void disable_dlss();
+
+	const std::shared_ptr<IDlss>& dlss() const {
+		return m_dlss;
+	}
+
 private:
 	uint32_t m_spp = 0;
 	EColorSpace m_color_space = EColorSpace::Linear;
 	ETonemapCurve m_tonemap_curve = ETonemapCurve::Identity;
 
+	std::shared_ptr<IDlss> m_dlss;
+
+	Eigen::Vector2i m_in_resolution = Eigen::Vector2i::Zero();
+
 	tcnn::GPUMemory<Eigen::Array4f> m_frame_buffer;
+	tcnn::GPUMemory<float> m_depth_buffer;
 	tcnn::GPUMemory<Eigen::Array4f> m_accumulate_buffer;
 
 	std::shared_ptr<SurfaceProvider> m_surface_provider;

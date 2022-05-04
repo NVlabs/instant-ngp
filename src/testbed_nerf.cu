@@ -592,13 +592,12 @@ __global__ void bitfield_max_pool(const uint32_t n_elements,
 	next_level[tcnn::morton3D(x, y, z)] |= bits;
 }
 
-
 __global__ void advance_pos_nerf(
 	const uint32_t n_elements,
 	BoundingBox render_aabb,
 	Vector3f camera_fwd,
 	Vector2f focal_length,
-	uint32_t spp,
+	uint32_t sample_index,
 	NerfPayload* __restrict__ payloads,
 	const uint8_t* __restrict__ density_grid,
 	uint32_t min_mip,
@@ -621,7 +620,7 @@ __global__ void advance_pos_nerf(
 
 	float t = payload.t;
 	float dt = calc_dt(t, cone_angle);
-	t += ld_random_val(spp, i * 786433) * dt;
+	t += ld_random_val(sample_index, i * 786433) * dt;
 	Vector3f pos;
 
 	while (1) {
@@ -737,19 +736,22 @@ __global__ void composite_kernel_nerf(
 	const uint32_t stride,
 	const uint32_t current_step,
 	BoundingBox aabb,
+	float glow_y_cutoff,
+	int glow_mode,
 	const uint32_t n_training_images,
-	const TrainingXForm* training_xforms,
+	const TrainingXForm* __restrict__ training_xforms,
 	Matrix<float, 3, 4> camera_matrix,
 	Vector2f focal_length,
 	float depth_scale,
-	Array4f* rgba,
+	Array4f* __restrict__ rgba,
+	float* __restrict__ depth,
 	NerfPayload* payloads,
 	PitchedPtr<NerfCoordinate> network_input,
-	const tcnn::network_precision_t* network_output,
+	const tcnn::network_precision_t* __restrict__ network_output,
 	uint32_t padded_output_width,
 	uint32_t n_steps,
 	ERenderMode render_mode,
-	const uint8_t* density_grid,
+	const uint8_t* __restrict__ density_grid,
 	ENerfActivation rgb_activation,
 	ENerfActivation density_activation,
 	int show_accel,
@@ -765,6 +767,7 @@ __global__ void composite_kernel_nerf(
 	}
 
 	Array4f local_rgba = rgba[i];
+	float local_depth = depth[i];
 	Vector3f origin = payload.origin;
 	Vector3f cam_fwd = camera_matrix.col(2);
 	// Composite in the last n steps
@@ -781,17 +784,113 @@ __global__ void composite_kernel_nerf(
 		Vector3f warped_pos = input->pos.p;
 		Vector3f pos = unwarp_position(warped_pos, aabb);
 
-		//Vector3f pos2 = pos-Vector3f::Constant(0.5f);
-		//float fog_scale = 1.f/max(1.f,pos2.dot(pos2)*4.f);
-
 		float T = 1.f - local_rgba.w();
 		float dt = unwarp_dt(input->dt);
-		float alpha = 1.f - __expf(-network_to_density(float(local_network_output[3]), density_activation) * dt /* * fog_scale*/);
-		if (show_accel>=0)
-		alpha=1.f;
+		float alpha = 1.f - __expf(-network_to_density(float(local_network_output[3]), density_activation) * dt);
+		if (show_accel >= 0) {
+			alpha = 1.f;
+		}
 		float weight = alpha * T;
 
 		Array3f rgb = network_to_rgb(local_network_output, rgb_activation);
+
+		if (glow_mode) { // random grid visualizations ftw!
+#if 0
+			if (0) {  // extremely startrek edition
+				float glow_y = (pos.y() - (glow_y_cutoff - 0.5f)) * 2.f;
+				if (glow_y>1.f) glow_y=max(0.f,21.f-glow_y*20.f);
+				if (glow_y>0.f) {
+					float line;
+					line =max(0.f,cosf(pos.y()*2.f*3.141592653589793f * 16.f)-0.95f);
+					line+=max(0.f,cosf(pos.x()*2.f*3.141592653589793f * 16.f)-0.95f);
+					line+=max(0.f,cosf(pos.z()*2.f*3.141592653589793f * 16.f)-0.95f);
+					line+=max(0.f,cosf(pos.y()*4.f*3.141592653589793f * 16.f)-0.975f);
+					line+=max(0.f,cosf(pos.x()*4.f*3.141592653589793f * 16.f)-0.975f);
+					line+=max(0.f,cosf(pos.z()*4.f*3.141592653589793f * 16.f)-0.975f);
+					glow_y=glow_y*glow_y*0.5f + glow_y*line*25.f;
+					rgb.y()+=glow_y;
+					rgb.z()+=glow_y*0.5f;
+					rgb.x()+=glow_y*0.25f;
+				}
+			}
+#endif
+			float glow = 0.f;
+
+			bool green_grid = glow_mode & 1;
+			bool green_cutline = glow_mode & 2;
+			bool mask_to_alpha = glow_mode & 4;
+
+			// less used?
+			bool radial_mode = glow_mode & 8;
+			bool grid_mode = glow_mode & 16; // makes object rgb go black!
+
+			{
+				float dist;
+				if (radial_mode) {
+					dist = (pos - camera_matrix.col(3)).norm();
+					dist = min(dist, (4.5f - pos.y()) * 0.333f);
+				} else {
+					dist = pos.y();
+				}
+
+				if (grid_mode) {
+					glow = 1.f / max(1.f, dist);
+				} else {
+					float y = glow_y_cutoff - dist; // - (ii*0.005f);
+					float mask = 0.f;
+					if (y > 0.f) {
+						y *= 80.f;
+						mask = min(1.f, y);
+						//if (mask_mode) {
+						//	rgb.x()=rgb.y()=rgb.z()=mask; // mask mode
+						//} else
+						{
+							if (green_cutline) {
+								glow += max(0.f, 1.f - abs(1.f -y)) * 4.f;
+							}
+
+							if (y>1.f) {
+								y = 1.f - (y - 1.f) * 0.05f;
+							}
+
+							if (green_grid) {
+								glow += max(0.f, y / max(1.f, dist));
+							}
+						}
+					}
+					if (mask_to_alpha) {
+						weight *= mask;
+					}
+				}
+			}
+
+			if (glow > 0.f) {
+				float line;
+				line  = max(0.f,cosf(pos.y()*2.f*3.141592653589793f * 16.f)-0.975f);
+				line += max(0.f,cosf(pos.x()*2.f*3.141592653589793f * 16.f)-0.975f);
+				line += max(0.f,cosf(pos.z()*2.f*3.141592653589793f * 16.f)-0.975f);
+				line += max(0.f,cosf(pos.y()*4.f*3.141592653589793f * 16.f)-0.975f);
+				line += max(0.f,cosf(pos.x()*4.f*3.141592653589793f * 16.f)-0.975f);
+				line += max(0.f,cosf(pos.z()*4.f*3.141592653589793f * 16.f)-0.975f);
+				line += max(0.f,cosf(pos.y()*8.f*3.141592653589793f * 16.f)-0.975f);
+				line += max(0.f,cosf(pos.x()*8.f*3.141592653589793f * 16.f)-0.975f);
+				line += max(0.f,cosf(pos.z()*8.f*3.141592653589793f * 16.f)-0.975f);
+				line += max(0.f,cosf(pos.y()*16.f*3.141592653589793f * 16.f)-0.975f);
+				line += max(0.f,cosf(pos.x()*16.f*3.141592653589793f * 16.f)-0.975f);
+				line += max(0.f,cosf(pos.z()*16.f*3.141592653589793f * 16.f)-0.975f);
+				if (grid_mode) {
+					glow = /*glow*glow*0.75f + */ glow*line*15.f;
+					rgb.y() = glow;
+					rgb.z() = glow*0.5f;
+					rgb.x() = glow*0.25f;
+				} else {
+					glow=glow*glow*0.25f + glow*line*15.f;
+					rgb.y() += glow;
+					rgb.z() += glow*0.5f;
+					rgb.x() += glow*0.25f;
+				}
+			}
+		} // glow
 
 		if (render_mode == ERenderMode::Normals) {
 			// Network input contains the gradient of the network output w.r.t. input.
@@ -812,18 +911,15 @@ __global__ void composite_kernel_nerf(
 				rgb.z() = rng.next_float();
 			} else {
 				rgb = (pos.array() - Array3f::Constant(0.5f)) / 2.0f + Array3f::Constant(0.5f);
-				// rgb.x() -= floorf(rgb.x());
-				// rgb.y() -= floorf(rgb.y());
-				// rgb.z() -= floorf(rgb.z());
 			}
 		} else if (render_mode == ERenderMode::EncodingVis) {
 			rgb = warped_pos.array();
 		} else if (render_mode == ERenderMode::Depth) {
-			float z=cam_fwd.dot(pos-origin) * depth_scale;
-			rgb = {z,z,z};
+			float z = cam_fwd.dot(pos-origin) * depth_scale;
+			rgb = {z, z, z};
 		} else if (render_mode == ERenderMode::Distance) {
-			float z=(pos-origin).norm() * depth_scale;
-			rgb = {z,z,z};
+			float z = (pos-origin).norm() * depth_scale;
+			rgb = {z, z, z};
 		} else if (render_mode == ERenderMode::Stepsize) {
 			float warped_dt = warp_dt(dt);
 			rgb = {warped_dt,warped_dt,warped_dt};
@@ -833,6 +929,10 @@ __global__ void composite_kernel_nerf(
 
 		local_rgba.head<3>() += rgb * weight;
 		local_rgba.w() += weight;
+		if (weight > payload.max_weight) {
+			payload.max_weight = weight;
+			local_depth = cam_fwd.dot(pos - camera_matrix.col(3));
+		}
 
 		if (local_rgba.w() > (1.0f - min_transmittance)) {
 			local_rgba /= local_rgba.w();
@@ -846,6 +946,7 @@ __global__ void composite_kernel_nerf(
 	}
 
 	rgba[i] = local_rgba;
+	depth[i] = local_depth;
 }
 
 static constexpr float UNIFORM_SAMPLING_FRACTION = 0.5f;
@@ -1592,7 +1693,16 @@ __global__ void compute_cam_gradient_train_nerf(
 	}
 }
 
-__global__ void shade_kernel_nerf(const uint32_t n_elements, Array4f* rgba, NerfPayload* payloads, ERenderMode render_mode, bool train_in_linear_colors, Array4f* frame_buffer) {
+__global__ void shade_kernel_nerf(
+	const uint32_t n_elements,
+	Array4f* __restrict__ rgba,
+	float* __restrict__ depth,
+	NerfPayload* __restrict__ payloads,
+	ERenderMode render_mode,
+	bool train_in_linear_colors,
+	Array4f* __restrict__ frame_buffer,
+	float* __restrict__ depth_buffer
+) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_elements) return;
 	NerfPayload& payload = payloads[i];
@@ -1613,13 +1723,16 @@ __global__ void shade_kernel_nerf(const uint32_t n_elements, Array4f* rgba, Nerf
 	}
 
 	frame_buffer[payload.idx] = tmp + frame_buffer[payload.idx] * (1.0f - tmp.w());
+	if (render_mode != ERenderMode::Slice && tmp.w() > 0.2f) {
+		depth_buffer[payload.idx] = depth[i];
+	}
 }
 
 __global__ void compact_kernel_nerf(
 	const uint32_t n_elements,
-	Array4f* src_rgba, NerfPayload* src_payloads,
-	Array4f* dst_rgba, NerfPayload* dst_payloads,
-	Array4f* dst_final_rgba, NerfPayload* dst_final_payloads,
+	Array4f* src_rgba, float* src_depth, NerfPayload* src_payloads,
+	Array4f* dst_rgba, float* dst_depth, NerfPayload* dst_payloads,
+	Array4f* dst_final_rgba, float* dst_final_depth, NerfPayload* dst_final_payloads,
 	uint32_t* counter, uint32_t* finalCounter
 ) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
@@ -1631,15 +1744,17 @@ __global__ void compact_kernel_nerf(
 		uint32_t idx = atomicAdd(counter, 1);
 		dst_payloads[idx] = src_payload;
 		dst_rgba[idx] = src_rgba[i];
+		dst_depth[idx] = src_depth[i];
 	} else if (src_rgba[i].w() > 0.001f) {
 		uint32_t idx = atomicAdd(finalCounter, 1);
 		dst_final_payloads[idx] = src_payload;
 		dst_final_rgba[idx] = src_rgba[i];
+		dst_final_depth[idx] = src_depth[i];
 	}
 }
 
 __global__ void init_rays_with_payload_kernel_nerf(
-	uint32_t spp,
+	uint32_t sample_index,
 	NerfPayload* __restrict__ payloads,
 	Vector2i resolution,
 	Vector2f focal_length,
@@ -1655,6 +1770,7 @@ __global__ void init_rays_with_payload_kernel_nerf(
 	const float* __restrict__ envmap_data,
 	const Vector2i envmap_resolution,
 	Array4f* __restrict__ framebuffer,
+	float* __restrict__ depthbuffer,
 	const float* __restrict__ distortion_data,
 	const Vector2i distortion_resolution,
 	ERenderMode render_mode
@@ -1675,9 +1791,9 @@ __global__ void init_rays_with_payload_kernel_nerf(
 	// TODO: pixel_to_ray also immediately computes u,v for the pixel, so this is somewhat redundant
 	float u = (x+0.5f) * (1.f / resolution.x());
 	float v = (y+0.5f) * (1.f / resolution.y());
-	float ray_time = rolling_shutter.x() + rolling_shutter.y() * u + rolling_shutter.z() * v + rolling_shutter.w() * ld_random_val(spp, idx*72239731);
+	float ray_time = rolling_shutter.x() + rolling_shutter.y() * u + rolling_shutter.z() * v + rolling_shutter.w() * ld_random_val(sample_index, idx * 72239731);
 	Ray ray = pixel_to_ray(
-		spp,
+		sample_index,
 		{x, y},
 		resolution,
 		focal_length,
@@ -1691,17 +1807,22 @@ __global__ void init_rays_with_payload_kernel_nerf(
 		distortion_resolution
 	);
 
+	NerfPayload& payload = payloads[idx];
+	payload.max_weight = 0.0f;
+
 	if (plane_z < 0) {
 		float n = ray.d.norm();
-		NerfPayload& payload = payloads[idx];
 		payload.origin = ray.o;
 		payload.dir = (1.0f/n) * ray.d;
 		payload.t = -plane_z*n;
 		payload.idx = idx;
 		payload.n_steps = 0;
 		payload.alive = false;
+		depthbuffer[idx] = -plane_z;
 		return;
 	}
+
+	depthbuffer[idx] = 1e10f;
 
 	ray.d = ray.d.normalized();
 
@@ -1711,7 +1832,6 @@ __global__ void init_rays_with_payload_kernel_nerf(
 
 	float t = fmaxf(aabb.ray_intersect(ray.o, ray.d).x(), NERF_RENDERING_NEAR_DISTANCE()) + 1e-6f;
 
-	NerfPayload& payload = payloads[idx];
 	if (!aabb.contains(ray.o + ray.d * t)) {
 		payload.origin = ray.o;
 		payload.alive = false;
@@ -1725,6 +1845,7 @@ __global__ void init_rays_with_payload_kernel_nerf(
 			framebuffer[idx].head<2>() = Vector2f{0.5f, 0.5f};
 		}
 		framebuffer[idx].tail<2>() = Vector2f{0.5f, 1.0f};
+		depthbuffer[idx] = 1.0f;
 		payload.origin = ray.o + ray.d * 10000.0f;
 		payload.alive = false;
 		return;
@@ -1804,7 +1925,7 @@ __global__ void safe_divide(const uint32_t num_elements, float* __restrict__ ino
 }
 
 void Testbed::NerfTracer::init_rays_from_camera(
-	uint32_t spp,
+	uint32_t sample_index,
 	uint32_t padded_output_width,
 	uint32_t n_extra_dims,
 	const Vector2i& resolution,
@@ -1823,6 +1944,7 @@ void Testbed::NerfTracer::init_rays_from_camera(
 	const float* distortion_data,
 	const Vector2i& distortion_resolution,
 	Eigen::Array4f* frame_buffer,
+	float* depth_buffer,
 	uint8_t *grid,
 	int show_accel,
 	float cone_angle_constant,
@@ -1836,7 +1958,7 @@ void Testbed::NerfTracer::init_rays_from_camera(
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)resolution.x(), threads.x), div_round_up((uint32_t)resolution.y(), threads.y), 1 };
 	init_rays_with_payload_kernel_nerf<<<blocks, threads, 0, stream>>>(
-		spp,
+		sample_index,
 		m_rays[0].payload,
 		resolution,
 		focal_length,
@@ -1852,6 +1974,7 @@ void Testbed::NerfTracer::init_rays_from_camera(
 		envmap_data,
 		envmap_resolution,
 		frame_buffer,
+		depth_buffer,
 		distortion_data,
 		distortion_resolution,
 		render_mode
@@ -1860,13 +1983,14 @@ void Testbed::NerfTracer::init_rays_from_camera(
 	m_n_rays_initialized = resolution.x() * resolution.y();
 
 	CUDA_CHECK_THROW(cudaMemsetAsync(m_rays[0].rgba, 0, m_n_rays_initialized * sizeof(Array4f), stream));
+	CUDA_CHECK_THROW(cudaMemsetAsync(m_rays[0].depth, 0, m_n_rays_initialized * sizeof(float), stream));
 
 	linear_kernel(advance_pos_nerf, 0, stream,
 		m_n_rays_initialized,
 		render_aabb,
 		camera_matrix1.col(2),
 		focal_length,
-		spp,
+		sample_index,
 		m_rays[0].payload,
 		grid,
 		(show_accel >= 0) ? show_accel : 0,
@@ -1892,6 +2016,8 @@ uint32_t Testbed::NerfTracer::trace(
 	ENerfActivation density_activation,
 	int show_accel,
 	float min_transmittance,
+	float glow_y_cutoff,
+	int glow_mode,
 	const Eigen::Vector3f& light_dir,
 	cudaStream_t stream
 ) {
@@ -1916,9 +2042,9 @@ uint32_t Testbed::NerfTracer::trace(
 			CUDA_CHECK_THROW(cudaMemsetAsync(m_alive_counter.data(), 0, sizeof(uint32_t), stream));
 			linear_kernel(compact_kernel_nerf, 0, stream,
 				n_alive,
-				rays_tmp.rgba, rays_tmp.payload,
-				rays_current.rgba, rays_current.payload,
-				m_rays_hit.rgba, m_rays_hit.payload,
+				rays_tmp.rgba, rays_tmp.depth, rays_tmp.payload,
+				rays_current.rgba, rays_current.depth, rays_current.payload,
+				m_rays_hit.rgba, m_rays_hit.depth, m_rays_hit.payload,
 				m_alive_counter.data(), m_hit_counter.data()
 			);
 			CUDA_CHECK_THROW(cudaMemcpyAsync(&n_alive, m_alive_counter.data(), sizeof(uint32_t), cudaMemcpyDeviceToHost, stream));
@@ -1963,12 +2089,15 @@ uint32_t Testbed::NerfTracer::trace(
 			n_elements,
 			i,
 			train_aabb,
+			glow_y_cutoff,
+			glow_mode,
 			n_training_images,
 			training_xforms,
 			camera_matrix,
 			focal_length,
 			depth_scale,
 			rays_current.rgba,
+			rays_current.depth,
 			rays_current.payload,
 			input_data,
 			m_network_output,
@@ -1995,27 +2124,27 @@ void Testbed::NerfTracer::enlarge(size_t n_elements, uint32_t padded_output_widt
 	n_elements = next_multiple(n_elements, size_t(tcnn::batch_size_granularity));
 	size_t num_floats = sizeof(NerfCoordinate) / 4 + n_extra_dims;
 	auto scratch = allocate_workspace_and_distribute<
-		Array4f, NerfPayload, // m_rays[0]
-		Array4f, NerfPayload, // m_rays[1]
-		Array4f, NerfPayload, // m_rays_hit
+		Array4f, float, NerfPayload, // m_rays[0]
+		Array4f, float, NerfPayload, // m_rays[1]
+		Array4f, float, NerfPayload, // m_rays_hit
 
 		network_precision_t,
 		float
 	>(
 		stream, &m_scratch_alloc,
-		n_elements, n_elements,
-		n_elements, n_elements,
-		n_elements, n_elements,
+		n_elements, n_elements, n_elements,
+		n_elements, n_elements, n_elements,
+		n_elements, n_elements, n_elements,
 		n_elements * MAX_STEPS_INBETWEEN_COMPACTION * padded_output_width,
 		n_elements * MAX_STEPS_INBETWEEN_COMPACTION * num_floats
 	);
 
-	m_rays[0].set(std::get<0>(scratch), std::get<1>(scratch), n_elements);
-	m_rays[1].set(std::get<2>(scratch), std::get<3>(scratch), n_elements);
-	m_rays_hit.set(std::get<4>(scratch), std::get<5>(scratch), n_elements);
+	m_rays[0].set(std::get<0>(scratch), std::get<1>(scratch), std::get<2>(scratch), n_elements);
+	m_rays[1].set(std::get<3>(scratch), std::get<4>(scratch), std::get<5>(scratch), n_elements);
+	m_rays_hit.set(std::get<6>(scratch), std::get<7>(scratch), std::get<8>(scratch), n_elements);
 
-	m_network_output = std::get<6>(scratch);
-	m_network_input = std::get<7>(scratch);
+	m_network_output = std::get<9>(scratch);
+	m_network_input = std::get<10>(scratch);
 }
 
 void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_res, const Vector2f& focal_length, const Matrix<float, 3, 4>& camera_matrix0, const Matrix<float, 3, 4>& camera_matrix1, const Vector4f& rolling_shutter, const Vector2f& screen_center, cudaStream_t stream) {
@@ -2030,11 +2159,15 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 		m_nerf.tracer.clear();
 	}};
 
+	// Our motion vector code can't undo f-theta and grid distortions -- so don't render these if DLSS is enabled.
+	bool render_opencv_camera_distortion = m_nerf.render_with_camera_distortion && (!render_buffer.dlss() || m_nerf.render_distortion.mode == ECameraDistortionMode::Iterative);
+	bool render_grid_camera_distortion = m_nerf.render_with_camera_distortion && !render_buffer.dlss();
+
 	m_nerf.tracer.init_rays_from_camera(
 		render_buffer.spp(),
 		m_network->padded_output_width(),
 		m_nerf_network->n_extra_dims(),
-		render_buffer.resolution(),
+		render_buffer.in_resolution(),
 		focal_length,
 		camera_matrix0,
 		camera_matrix1,
@@ -2044,12 +2177,13 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 		m_render_aabb,
 		plane_z,
 		m_dof,
-		m_nerf.render_with_camera_distortion ? m_nerf.render_distortion : CameraDistortion{},
+		render_opencv_camera_distortion ? m_nerf.render_distortion : CameraDistortion{},
 		m_envmap.envmap->params_inference(),
 		m_envmap.resolution,
-		m_nerf.render_with_camera_distortion ? m_distortion.map->params_inference() : nullptr,
+		render_grid_camera_distortion ? m_distortion.map->params_inference() : nullptr,
 		m_distortion.resolution,
 		render_buffer.frame_buffer(),
+		render_buffer.depth_buffer(),
 		m_nerf.density_grid_bitfield.data(),
 		m_nerf.show_accel,
 		m_nerf.cone_angle_constant,
@@ -2061,7 +2195,7 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 	if (m_render_mode == ERenderMode::Slice) {
 		n_hit = m_nerf.tracer.n_rays_initialized();
 	} else {
-		float depth_scale = 1.f/m_nerf.training.dataset.scale;
+		float depth_scale = 1.0f / m_nerf.training.dataset.scale;
 		n_hit = m_nerf.tracer.trace(
 			*m_nerf_network,
 			m_render_aabb,
@@ -2080,6 +2214,8 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 			m_nerf.density_activation,
 			m_nerf.show_accel,
 			m_nerf.rendering_min_transmittance,
+			m_nerf.m_glow_y_cutoff,
+			m_nerf.m_glow_mode,
 			m_nerf.light_dir.normalized(),
 			stream
 		);
@@ -2109,10 +2245,12 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 		linear_kernel(shade_kernel_nerf, 0, stream,
 			n_hit,
 			m_nerf.vis_rgba.data(),
+			nullptr,
 			rays_hit.payload,
 			m_render_mode,
 			m_nerf.training.linear_colors,
-			render_buffer.frame_buffer()
+			render_buffer.frame_buffer(),
+			render_buffer.depth_buffer()
 		);
 		return;
 	}
@@ -2120,10 +2258,12 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 	linear_kernel(shade_kernel_nerf, 0, stream,
 		n_hit,
 		rays_hit.rgba,
+		rays_hit.depth,
 		rays_hit.payload,
 		m_render_mode,
 		m_nerf.training.linear_colors,
-		render_buffer.frame_buffer()
+		render_buffer.frame_buffer(),
+		render_buffer.depth_buffer()
 	);
 
 	if (render_mode == ERenderMode::Cost) {
@@ -2822,7 +2962,6 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 		sample_focal_plane_proportional_to_error ? m_nerf.training.error_map.cdf_y.data() : nullptr,
 		sample_image_proportional_to_error ? m_nerf.training.error_map.cdf_img.data() : nullptr,
 		m_nerf.training.error_map.cdf_resolution,
-		m_nerf.training.near_distance,
 		m_nerf.training.dataset.images_data.data()
 	);
 
@@ -2884,7 +3023,8 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 		m_nerf.density_grid.data(),
 		m_nerf.density_grid_mean.data(),
 		m_nerf.training.cam_exposure_gpu.data(),
-		m_nerf.training.optimize_exposure ? m_nerf.training.cam_exposure_gradient_gpu.data() : nullptr
+		m_nerf.training.optimize_exposure ? m_nerf.training.cam_exposure_gradient_gpu.data() : nullptr,
+		m_nerf.training.near_distance
 	);
 
 	fill_rollover_and_rescale<network_precision_t><<<n_blocks_linear(target_batch_size*padded_output_width), n_threads_linear, 0, stream>>>(

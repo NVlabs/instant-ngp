@@ -296,7 +296,22 @@ __global__ void write_shadow_ray_result(const uint32_t n_elements, BoundingBox a
 	shadow_factors[shadow_payloads[i].idx] = aabb.contains(positions[i]) ? 0.0f : min_visibility[i];
 }
 
-__global__ void shade_kernel_sdf(const uint32_t n_elements, BoundingBox aabb, float floor_y, const ERenderMode mode, const BRDFParams brdf, Vector3f sun_dir, Vector3f up_dir, Matrix<float, 3, 4> camera_matrix, Vector3f* positions, Vector3f* normals, float* distances, SdfPayload* payloads, Array4f* frame_buffer) {
+__global__ void shade_kernel_sdf(
+	const uint32_t n_elements,
+	BoundingBox aabb,
+	float floor_y,
+	const ERenderMode mode,
+	const BRDFParams brdf,
+	Vector3f sun_dir,
+	Vector3f up_dir,
+	Matrix<float, 3, 4> camera_matrix,
+	Vector3f* __restrict__ positions,
+	Vector3f* __restrict__ normals,
+	float* __restrict__ distances,
+	SdfPayload* __restrict__ payloads,
+	Array4f* __restrict__ frame_buffer,
+	float* __restrict__ depth_buffer
+) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_elements) return;
 
@@ -308,11 +323,11 @@ __global__ void shade_kernel_sdf(const uint32_t n_elements, BoundingBox aabb, fl
 	// The normal in memory isn't normalized yet
 	Vector3f normal = normals[i].normalized();
 
-	Vector3f pos=positions[i];
-	bool floor=false;
-	if (pos.y()<floor_y+0.001f && payload.dir.y()<0.f) {
-		normal=Vector3f(0.f,1.f,0.f);
-		floor=true;
+	Vector3f pos = positions[i];
+	bool floor = false;
+	if (pos.y() < floor_y+0.001f && payload.dir.y() < 0.f) {
+		normal = Vector3f(0.f, 1.f, 0.f);
+		floor = true;
 	}
 	Vector3f cam_pos = camera_matrix.col(3);
 	Vector3f cam_fwd = camera_matrix.col(2);
@@ -334,16 +349,16 @@ __global__ void shade_kernel_sdf(const uint32_t n_elements, BoundingBox aabb, fl
 			color = col.array();
 		} break;
 		case ERenderMode::Depth: {
-			float z=cam_fwd.dot(pos-cam_pos);
-			color = {z,z,z};
+			float z = cam_fwd.dot(pos - cam_pos);
+			color = {z, z, z};
 		} break;
 		case ERenderMode::Distance: {
-			float z=(pos-cam_pos).norm();
-			color = {z,z,z};
+			float z = (pos-cam_pos).norm();
+			color = {z, z, z};
 		} break;
 		case ERenderMode::Positions: {
-			pos=pos*10.f;
-			color = {pos.x()-floorf(pos.x()),pos.y()-floorf(pos.y()),pos.z()-floorf(pos.z())};
+			pos = pos * 10.f;
+			color = {pos.x() - floorf(pos.x()), pos.y() - floorf(pos.y()), pos.z() - floorf(pos.z())};
 		} break;
 		case ERenderMode::Normals: {
 			// Hack to make normals look nicer: treat them as sRGB valued and map that to linear.
@@ -360,6 +375,7 @@ __global__ void shade_kernel_sdf(const uint32_t n_elements, BoundingBox aabb, fl
 	}
 
 	frame_buffer[payload.idx] = {color.x(), color.y(), color.z(), 1.0f};
+	depth_buffer[payload.idx] = cam_fwd.dot(pos - cam_pos);
 }
 
 __global__ void compact_kernel_shadow_sdf(
@@ -495,7 +511,7 @@ __global__ void assign_float(uint32_t n_elements, float value, float* __restrict
 }
 
 __global__ void init_rays_with_payload_kernel_sdf(
-	uint32_t spp,
+	uint32_t sample_index,
 	Vector3f* __restrict__ positions,
 	float* __restrict__ distances,
 	SdfPayload* __restrict__ payloads,
@@ -511,6 +527,7 @@ __global__ void init_rays_with_payload_kernel_sdf(
 	const float* __restrict__ envmap_data,
 	const Vector2i envmap_resolution,
 	Array4f* __restrict__ framebuffer,
+	float* __restrict__ depthbuffer,
 	const TriangleOctreeNode* __restrict__ octree_nodes = nullptr,
 	int max_depth = 0
 ) {
@@ -527,7 +544,9 @@ __global__ void init_rays_with_payload_kernel_sdf(
 		dof = 0.0;
 	}
 
-	Ray ray = pixel_to_ray(spp, {x, y}, resolution, focal_length, camera_matrix, screen_center, snap_to_pixel_centers, plane_z, dof);
+	Ray ray = pixel_to_ray(sample_index, {x, y}, resolution, focal_length, camera_matrix, screen_center, snap_to_pixel_centers, plane_z, dof);
+
+	distances[idx] = 10000.0f;
 
 	if (plane_z < 0) {
 		float n = ray.d.norm();
@@ -537,9 +556,11 @@ __global__ void init_rays_with_payload_kernel_sdf(
 		payload.n_steps = 0;
 		payload.alive = false;
 		positions[idx] = ray.o - plane_z * ray.d;
-		distances[idx] = 10000.0f;
+		depthbuffer[idx] = -plane_z;
 		return;
 	}
+
+	depthbuffer[idx] = 1e10f;
 
 	ray.d = ray.d.normalized();
 	float t = max(aabb.ray_intersect(ray.o, ray.d).x(), 0.0f);
@@ -564,12 +585,10 @@ __global__ void init_rays_with_payload_kernel_sdf(
 
 	SdfPayload& payload = payloads[idx];
 	if (!aabb.contains(ray.o)) {
-		distances[idx] = 10000.0f;
 		payload.alive = false;
 		return;
 	}
 
-	distances[idx] = 10000.0f;
 	payload.dir = ray.d;
 	payload.idx = idx;
 	payload.n_steps = 0;
@@ -590,7 +609,7 @@ __global__ void sample_uniform_on_triangle_kernel(uint32_t n_elements, const flo
 	sampled_positions[i] = triangles[tri_idx].sample_uniform_position(sample.tail<2>());
 }
 
-void Testbed::SphereTracer::init_rays_from_camera(uint32_t spp,
+void Testbed::SphereTracer::init_rays_from_camera(uint32_t sample_index,
 	const Vector2i& resolution,
 	const Vector2f& focal_length,
 	const Matrix<float, 3, 4>& camera_matrix,
@@ -603,6 +622,7 @@ void Testbed::SphereTracer::init_rays_from_camera(uint32_t spp,
 	const float* envmap_data,
 	const Vector2i& envmap_resolution,
 	Array4f* frame_buffer,
+	float* depth_buffer,
 	const TriangleOctree* octree, cudaStream_t stream
 ) {
 	// Make sure we have enough memory reserved to render at the requested resolution
@@ -612,7 +632,7 @@ void Testbed::SphereTracer::init_rays_from_camera(uint32_t spp,
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)resolution.x(), threads.x), div_round_up((uint32_t)resolution.y(), threads.y), 1 };
 	init_rays_with_payload_kernel_sdf<<<blocks, threads, 0, stream>>>(
-		spp,
+		sample_index,
 		m_rays[0].pos.data(),
 		m_rays[0].distance.data(),
 		m_rays[0].payload.data(),
@@ -628,6 +648,7 @@ void Testbed::SphereTracer::init_rays_from_camera(uint32_t spp,
 		envmap_data,
 		envmap_resolution,
 		frame_buffer,
+		depth_buffer,
 		octree ? octree->nodes_gpu() : nullptr,
 		octree ? octree->depth() : 0
 	);
@@ -824,7 +845,7 @@ void Testbed::render_sdf(
 	sdf_bounding_box.inflate(m_sdf.zero_offset);
 	m_sdf.tracer.init_rays_from_camera(
 		render_buffer.spp(),
-		render_buffer.resolution(),
+		render_buffer.in_resolution(),
 		focal_length,
 		camera_matrix,
 		screen_center,
@@ -836,6 +857,7 @@ void Testbed::render_sdf(
 		m_envmap.envmap->params_inference(),
 		m_envmap.resolution,
 		render_buffer.frame_buffer(),
+		render_buffer.depth_buffer(),
 		octree_ptr,
 		stream
 	);
@@ -887,7 +909,7 @@ void Testbed::render_sdf(
 			normals_function(n_hit, rays_hit.pos, rays_hit.normal, stream);
 		} else {
 			// Prevent spurious enlargements by reserving enough memory to hold a full-res image in any case.
-			m_sdf.fd_normals.enlarge(render_buffer.resolution().x() * render_buffer.resolution().y());
+			m_sdf.fd_normals.enlarge(render_buffer.in_resolution().x() * render_buffer.in_resolution().y());
 			m_sdf.fd_normals.normal(n_hit, distance_function, rays_hit.pos, rays_hit.normal, m_sdf.fd_normals_epsilon, stream);
 		}
 
@@ -947,7 +969,8 @@ void Testbed::render_sdf(
 		rays_hit.normal.data(),
 		rays_hit.distance.data(),
 		rays_hit.payload.data(),
-		render_buffer.frame_buffer()
+		render_buffer.frame_buffer(),
+		render_buffer.depth_buffer()
 	);
 
 	if (render_mode == ERenderMode::Cost) {

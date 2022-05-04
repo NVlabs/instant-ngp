@@ -86,6 +86,7 @@ public:
 			const float* envmap_data,
 			const Eigen::Vector2i& envmap_resolution,
 			Eigen::Array4f* frame_buffer,
+			float* depth_buffer,
 			const TriangleOctree* octree, cudaStream_t stream
 		);
 
@@ -141,6 +142,7 @@ public:
 			const float* distortion_data,
 			const Eigen::Vector2i& distortion_resolution,
 			Eigen::Array4f* frame_buffer,
+			float* depth_buffer,
 			uint8_t *grid,
 			int show_accel,
 			float cone_angle_constant,
@@ -166,6 +168,8 @@ public:
 			ENerfActivation density_activation,
 			int show_accel,
 			float min_transmittance,
+			float glow_y_cutoff,
+			int glow_mode,
 			const Eigen::Vector3f& light_dir,
 			cudaStream_t stream
 		);
@@ -400,7 +404,6 @@ public:
 		}
 	};
 	MeshState m_mesh;
-
 	bool m_want_repl = false;
 
 	bool m_render_window = false;
@@ -420,7 +423,8 @@ public:
 	bool m_dynamic_res=true;
 	int m_fixed_res_factor=8;
 	float m_last_render_res_factor = 1.0f;
-	float m_scale = 1;
+	float m_scale = 1.0;
+	float m_prev_scale = 1.0;
 	float m_dof = 0.0f;
 	Eigen::Vector2f m_relative_focal_length = Eigen::Vector2f::Ones();
 	uint32_t m_fov_axis = 1;
@@ -429,6 +433,7 @@ public:
 
 	Eigen::Matrix<float, 3, 4> m_camera = Eigen::Matrix<float, 3, 4>::Zero();
 	Eigen::Matrix<float, 3, 4> m_smoothed_camera = Eigen::Matrix<float, 3, 4>::Zero();
+	Eigen::Matrix<float, 3, 4> m_prev_camera = Eigen::Matrix<float, 3, 4>::Zero();
 	bool m_fps_camera = false;
 	bool m_camera_smoothing = false;
 	bool m_autofocus = false;
@@ -587,6 +592,9 @@ public:
 		CameraDistortion render_distortion = {};
 
 		float rendering_min_transmittance = 0.01f;
+
+		float m_glow_y_cutoff = 0.f;
+		int m_glow_mode = 0;
 	} m_nerf;
 
 	struct Sdf {
@@ -647,6 +655,7 @@ public:
 	};
 	struct Image {
 		Eigen::Vector2f pos = Eigen::Vector2f::Constant(0.0f);
+		Eigen::Vector2f prev_pos = Eigen::Vector2f::Constant(0.0f);
 		tcnn::GPUMemory<char> data;
 
 		EDataType type = EDataType::Float;
@@ -698,6 +707,8 @@ public:
 	float m_camera_velocity = 1.0f;
 	EColorSpace m_color_space = EColorSpace::Linear;
 	ETonemapCurve m_tonemap_curve = ETonemapCurve::Identity;
+	bool m_dlss = false;
+	bool m_dlss_supported = false;
 
 	// 3D stuff
 	float m_slice_plane_z = 0.0f;
@@ -734,6 +745,7 @@ public:
 	// Hashgrid encoding analysis
 	float m_quant_percent = 0.f;
 	std::vector<LevelStats> m_level_stats;
+	std::vector<LevelStats> m_first_layer_column_stats;
 	int m_num_levels = 0;
 	int m_histo_level = 0; // collect a histogram for this level
 	uint32_t m_base_grid_resolution;

@@ -287,7 +287,34 @@ inline __host__ __device__ float ld_random_val(uint32_t index, uint32_t seed, ui
 	return (float)nested_uniform_scramble_base2(sobol(index, dim), hash_combine(seed, dim)) * S;
 }
 
-inline __host__ __device__ Eigen::Vector2f ld_random_pixel_offset(const uint32_t spp, const uint32_t /*x*/, const uint32_t /*y*/) {
+template <uint32_t base>
+__host__ __device__ float halton(size_t idx) {
+	float f = 1;
+	float result = 0;
+
+	while (idx > 0) {
+		f /= base;
+		result += f * (idx % base);
+		idx /= base;
+	}
+
+	return result;
+}
+
+inline __host__ __device__ Eigen::Vector2f halton23(size_t idx) {
+	return {halton<2>(idx), halton<3>(idx)};
+}
+
+// Halton
+// inline __host__ __device__ Eigen::Vector2f ld_random_pixel_offset(const uint32_t spp) {
+// 	Eigen::Vector2f offset = Eigen::Vector2f::Constant(0.5f) - halton23(0) + halton23(spp);
+// 	offset.x() = fractf(offset.x());
+// 	offset.y() = fractf(offset.y());
+// 	return offset;
+// }
+
+// Scrambled Sobol
+inline __host__ __device__ Eigen::Vector2f ld_random_pixel_offset(const uint32_t spp) {
 	Eigen::Vector2f offset = Eigen::Vector2f::Constant(0.5f) - ld_random_val_2d(0, 0xdeadbeef) + ld_random_val_2d(spp, 0xdeadbeef);
 	offset.x() = fractf(offset.x());
 	offset.y() = fractf(offset.y());

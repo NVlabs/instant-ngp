@@ -19,3 +19,6 @@
 [submodule "dependencies/imgui"]
 	path = dependencies/imgui
 	url = https://github.com/ocornut/imgui.git
+[submodule "dependencies/dlss"]
+	path = dependencies/dlss
+	url = https://github.com/NVIDIA/DLSS
