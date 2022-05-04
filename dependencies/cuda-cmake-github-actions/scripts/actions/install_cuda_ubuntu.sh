@@ -8,7 +8,7 @@
 # @todo - GCC support matrix?
 
 # List of sub-packages to install.
-# @todo - pass this in from outside the script? 
+# @todo - pass this in from outside the script?
 # @todo - check the specified subpackages exist via apt pre-install?  apt-rdepends cuda-9-0 | grep "^cuda-"?
 
 # Ideally choose from the list of meta-packages to minimise variance between cuda versions (although it does change too)
@@ -90,7 +90,7 @@ fi
 ## -------------------------------
 CUDA_PACKAGES=""
 for package in "${CUDA_PACKAGES_IN[@]}"
-do : 
+do :
     # @todo This is not perfect. Should probably provide a separate list for diff versions
     # cuda-compiler-X-Y if CUDA >= 9.1 else cuda-nvcc-X-Y
     if [[ "${package}" == "nvcc" ]] && version_ge "$CUDA_VERSION_MAJOR_MINOR" "9.1" ; then
@@ -109,7 +109,7 @@ echo "CUDA_PACKAGES ${CUDA_PACKAGES}"
 
 PIN_FILENAME="cuda-ubuntu${UBUNTU_VERSION}.pin"
 PIN_URL="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu${UBUNTU_VERSION}/x86_64/${PIN_FILENAME}"
-APT_KEY_URL="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu${UBUNTU_VERSION}/x86_64/7fa2af80.pub"
+APT_KEY_URL="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu${UBUNTU_VERSION}/x86_64/3bf863cc.pub"
 REPO_URL="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu${UBUNTU_VERSION}/x86_64/"
 
 echo "PIN_FILENAME ${PIN_FILENAME}"
