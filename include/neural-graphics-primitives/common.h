@@ -195,4 +195,13 @@ inline NGP_HOST_DEVICE uint32_t binary_search(float val, const float* data, uint
 	return std::min(first, length-1);
 }
 
+inline std::string replace_all(std::string str, const std::string& a, const std::string& b) {
+	std::string::size_type n = 0;
+	while ((n = str.find(a, n)) != std::string::npos) {
+		str.replace(n, a.length(), b);
+		n += b.length();
+	}
+	return str;
+}
+
 NGP_NAMESPACE_END
