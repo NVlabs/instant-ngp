@@ -428,7 +428,9 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("screen_center", &Testbed::m_screen_center)
 		.def("set_nerf_camera_matrix", &Testbed::set_nerf_camera_matrix)
 		.def("set_camera_to_training_view", &Testbed::set_camera_to_training_view)
-		.def("compute_image_mse", &Testbed::compute_image_mse)
+		.def("compute_image_mse", &Testbed::compute_image_mse,
+			py::arg("quantize") = false
+		)
 		.def_readwrite("camera_matrix", &Testbed::m_camera)
 		.def_readwrite("up_dir", &Testbed::m_up_dir)
 		.def_readwrite("sun_dir", &Testbed::m_sun_dir)

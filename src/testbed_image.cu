@@ -495,15 +495,20 @@ __global__ void image_coords_from_idx(const uint32_t n_elements, uint32_t offset
 	pos[i] = (Vector2i{x, y}.cwiseMax(0).cwiseMin(resolution - Vector2i::Ones()).cast<float>() + Vector2f::Constant(0.5f)).cwiseQuotient(resolution.cast<float>());
 }
 
-__global__ void image_mse_kernel(const uint32_t n_elements, const Array3f* __restrict__ target, const Array3f* __restrict__ prediction, float* __restrict__ result) {
+__global__ void image_mse_kernel(const uint32_t n_elements, const Array3f* __restrict__ target, const Array3f* __restrict__ prediction, float* __restrict__ result, bool quantize_to_byte) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i >= n_elements) return;
 
-	const Array3f diff = target[i] - prediction[i];
+	Array3f pred = prediction[i];
+	if (quantize_to_byte) {
+		pred = (pred * 255.0f + Array3f::Constant(0.5f)).cast<int>().cwiseMax(0).cwiseMin(255).cast<float>() / 255.0f;
+	}
+
+	const Array3f diff = target[i] - pred;
 	result[i] = (diff * diff).mean();
 }
 
-float Testbed::compute_image_mse() {
+float Testbed::compute_image_mse(bool quantize_to_byte) {
 	const uint32_t n_output_dims = 3;
 	const uint32_t n_input_dims = 2;
 
@@ -559,7 +564,8 @@ float Testbed::compute_image_mse() {
 			batch_size,
 			targets.data(),
 			predictions.data(),
-			se.data() + offset
+			se.data() + offset,
+			quantize_to_byte
 		);
 	}
 
