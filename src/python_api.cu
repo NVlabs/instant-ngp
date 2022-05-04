@@ -369,6 +369,15 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("save_snapshot", &Testbed::save_snapshot, py::arg("path"), py::arg("include_optimizer_state")=false, "Save a snapshot of the currently trained model")
 		.def("load_snapshot", &Testbed::load_snapshot, py::arg("path"), "Load a previously saved snapshot")
 		.def("load_camera_path", &Testbed::load_camera_path, "Load a camera path", py::arg("path"))
+		.def("compute_and_save_png_slices", &Testbed::compute_and_save_png_slices,
+			py::arg("filename"),
+			py::arg("resolution") = Eigen::Vector3i::Constant(256),
+			py::arg("aabb") = BoundingBox{},
+			py::arg("thresh") = std::numeric_limits<float>::max(),
+			py::arg("density_range") = 4.f,
+			py::arg("flip_y_and_z_axes") = false,
+			"Compute & save a PNG file representing the 3D density or distance field from the current SDF or NeRF model. "
+		)
 		.def("compute_and_save_marching_cubes_mesh", &Testbed::compute_and_save_marching_cubes_mesh,
 			py::arg("filename"),
 			py::arg("resolution") = Eigen::Vector3i::Constant(256),
