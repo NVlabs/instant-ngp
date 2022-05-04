@@ -228,7 +228,7 @@ int CameraPath::imgui(char path_filename_buf[128], float frame_milliseconds, Mat
 }
 
 bool DebugProject(const Matrix<float, 4, 4>&proj, Vector3f p, ImVec2& o) {
-	Vector4f ph; ph << p,1.f;
+	Vector4f ph; ph << p, 1.f;
 	Vector4f pa = proj * ph;
 	if (pa.w() <= 0.f) return false;
 	o.x = pa.x() / pa.w();

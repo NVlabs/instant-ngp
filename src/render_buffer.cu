@@ -490,34 +490,55 @@ __global__ void tonemap_kernel(Vector2i resolution, float exposure, Array4f back
 	color.w() += weight;
 
 	color.head<3>() = tonemap(color.head<3>(), Array3f::Constant(exposure), tonemap_curve, color_space, output_color_space);
+	color = color.cwiseMax(0.0f).cwiseMin(1.0f);
 
 	surf2Dwrite(to_float4(color), surface, x * sizeof(float4), y);
 }
 
-void CudaRenderBuffer::resize(const Vector2i& size) {
-	auto prev_res = resolution();
+__global__ void dlss_splat_kernel(
+	Vector2i resolution,
+	cudaSurfaceObject_t dlss_surface,
+	cudaSurfaceObject_t surface
+) {
+	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
+	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
 
-	m_surface_provider->resize(size);
+	if (x >= resolution.x() || y >= resolution.y()) {
+		return;
+	}
 
-	auto res = resolution();
-	m_frame_buffer.enlarge((size_t)res.x() * res.y());
-	m_accumulate_buffer.enlarge((size_t)res.x() * res.y());
+	float4 color;
+	surf2Dread(&color, dlss_surface, x * sizeof(float4), y);
+	surf2Dwrite(color, surface, x * sizeof(float4), y);
+}
 
-	if (res != prev_res) {
+void CudaRenderBuffer::resize(const Vector2i& res) {
+	m_in_resolution = res;
+	m_frame_buffer.enlarge(res.x() * res.y());
+	m_depth_buffer.enlarge(res.x() * res.y());
+	m_accumulate_buffer.enlarge(res.x() * res.y());
+
+	Vector2i out_res = m_dlss ? m_dlss->out_resolution() : res;
+	auto prev_out_res = out_resolution();
+	m_surface_provider->resize(out_res);
+
+	if (out_resolution() != prev_out_res) {
 		reset_accumulation();
 	}
 }
 
-void CudaRenderBuffer::clear_frame_buffer(cudaStream_t stream) {
-	auto res = resolution();
-	CUDA_CHECK_THROW(cudaMemsetAsync(frame_buffer(), 0, sizeof(Array4f) * res.x() * res.y(), stream));
+void CudaRenderBuffer::clear_frame(cudaStream_t stream) {
+	CUDA_CHECK_THROW(cudaMemsetAsync(m_frame_buffer.data(), 0, m_frame_buffer.bytes(), stream));
+	CUDA_CHECK_THROW(cudaMemsetAsync(m_depth_buffer.data(), 0, m_depth_buffer.bytes(), stream));
 }
 
-void CudaRenderBuffer::accumulate(cudaStream_t stream) {
-	auto res = resolution();
+void CudaRenderBuffer::accumulate(float exposure, cudaStream_t stream) {
+	Vector2i res = in_resolution();
 
-	if (m_spp == 0) {
-		CUDA_CHECK_THROW(cudaMemsetAsync(accumulate_buffer(), 0, sizeof(Array4f) * res.x() * res.y(), stream));
+	uint32_t accum_spp = m_dlss ? 0 : m_spp;
+
+	if (accum_spp == 0) {
+		CUDA_CHECK_THROW(cudaMemsetAsync(m_accumulate_buffer.data(), 0, m_accumulate_buffer.bytes(), stream));
 	}
 
 	const dim3 threads = { 16, 8, 1 };
@@ -526,7 +547,7 @@ void CudaRenderBuffer::accumulate(cudaStream_t stream) {
 		res,
 		frame_buffer(),
 		accumulate_buffer(),
-		(float)m_spp,
+		(float)accum_spp,
 		m_color_space
 	);
 
@@ -534,7 +555,9 @@ void CudaRenderBuffer::accumulate(cudaStream_t stream) {
 }
 
 void CudaRenderBuffer::tonemap(float exposure, const Array4f& background_color, EColorSpace output_color_space, cudaStream_t stream) {
-	auto res = resolution();
+	assert(m_dlss || out_resolution() == in_resolution());
+
+	auto res = m_dlss ? in_resolution() : out_resolution();
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
 	tonemap_kernel<<<blocks, threads, 0, stream>>>(
@@ -545,8 +568,26 @@ void CudaRenderBuffer::tonemap(float exposure, const Array4f& background_color, 
 		m_color_space,
 		output_color_space,
 		m_tonemap_curve,
-		surface()
+		m_dlss ? m_dlss->frame() : surface()
 	);
+
+	if (m_dlss) {
+		assert(out_resolution() == m_dlss->out_resolution());
+
+		assert(m_spp >= 1);
+		uint32_t sample_index = m_spp - 1;
+
+		m_dlss->run(
+			res,
+			output_color_space == EColorSpace::Linear, /* HDR mode */
+			Vector2f::Constant(0.5f) - ld_random_pixel_offset(sample_index), /* jitter offset in [-0.5, 0.5] */
+			sample_index == 0 /* reset history */
+		);
+
+		auto out_res = out_resolution();
+		const dim3 out_blocks = { div_round_up((uint32_t)out_res.x(), threads.x), div_round_up((uint32_t)out_res.y(), threads.y), 1 };
+		dlss_splat_kernel<<<out_blocks, threads, 0, stream>>>(out_res, m_dlss->output(), surface());
+	}
 }
 
 void CudaRenderBuffer::overlay_image(
@@ -561,7 +602,7 @@ void CudaRenderBuffer::overlay_image(
 	const Eigen::Vector2f& screen_center,
 	cudaStream_t stream
 ) {
-	auto res = resolution();
+	auto res = out_resolution();
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
 	overlay_image_kernel<<<blocks, threads, 0, stream>>>(
@@ -582,7 +623,7 @@ void CudaRenderBuffer::overlay_image(
 }
 
 void CudaRenderBuffer::overlay_false_color(Vector2i training_resolution, bool to_srgb, int fov_axis, cudaStream_t stream, const float* error_map, Vector2i error_map_resolution, const float* average, float brightness, bool viridis) {
-	auto res = resolution();
+	auto res = out_resolution();
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
 	overlay_false_color_kernel<<<blocks, threads, 0, stream>>>(
@@ -597,6 +638,21 @@ void CudaRenderBuffer::overlay_false_color(Vector2i training_resolution, bool to
 		brightness,
 		viridis
 	);
+}
+
+void CudaRenderBuffer::enable_dlss(const Eigen::Vector2i& out_res) {
+#ifdef NGP_VULKAN
+	if (!m_dlss || m_dlss->out_resolution() != out_res) {
+		m_dlss = dlss_init(out_res);
+	}
+	resize(in_resolution());
+#else
+	throw std::runtime_error{"NGP was compiled without Vulkan/NGX/DLSS support."};
+#endif
+}
+
+void CudaRenderBuffer::disable_dlss() {
+	m_dlss = nullptr;
 }
 
 NGP_NAMESPACE_END

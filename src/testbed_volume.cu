@@ -219,7 +219,7 @@ void Testbed::train_volume(size_t target_batch_size, size_t n_steps, cudaStream_
 }
 
 __global__ void init_rays_volume(
-	uint32_t spp,
+	uint32_t sample_index,
 	Vector3f* __restrict__ positions,
 	Testbed::VolPayload* __restrict__ payloads,
 	uint32_t *pixel_counter,
@@ -234,6 +234,7 @@ __global__ void init_rays_volume(
 	const float* __restrict__ envmap_data,
 	const Vector2i envmap_resolution,
 	Array4f* __restrict__ framebuffer,
+	float* __restrict__ depthbuffer,
 	default_rng_t rng,
 	const uint8_t *bitgrid,
 	float distance_scale,
@@ -252,7 +253,7 @@ __global__ void init_rays_volume(
 	if (plane_z < 0) {
 		dof = 0.0;
 	}
-	Ray ray = pixel_to_ray(spp, {x, y}, resolution, focal_length, camera_matrix, screen_center, snap_to_pixel_centers, plane_z, dof);
+	Ray ray = pixel_to_ray(sample_index, {x, y}, resolution, focal_length, camera_matrix, screen_center, snap_to_pixel_centers, plane_z, dof);
 	ray.d = ray.d.normalized();
 	auto box_intersection = aabb.ray_intersect(ray.o, ray.d);
 	float t = max(box_intersection.x(), 0.0f);
@@ -260,10 +261,12 @@ __global__ void init_rays_volume(
 	float scale = distance_scale / global_majorant;
 	if (t >= box_intersection.y() || !walk_to_next_event(rng, aabb, ray.o, ray.d, bitgrid, scale)) {
 		framebuffer[idx] = proc_envmap_render(ray.d, up_dir, sun_dir, sky_col);
+		depthbuffer[idx] = 1e10f;
 	} else {
 		uint32_t dstidx = atomicAdd(pixel_counter, 1);
 		positions[dstidx] = ray.o;
 		payloads[dstidx] = {ray.d, Array4f::Constant(0.f), idx};
+		depthbuffer[idx] = camera_matrix.col(2).dot(ray.o - camera_matrix.col(3));
 	}
 }
 
@@ -286,7 +289,8 @@ __global__ void volume_render_kernel_gt(
 	float distance_scale,
 	float albedo,
 	float scattering,
-	Array4f* __restrict__ framebuffer
+	Array4f* __restrict__ framebuffer,
+	float* __restrict__ depthbuffer
 ) {
 	uint32_t idx = threadIdx.x + blockDim.x * blockIdx.x;
 	if (idx>=n_pixels || idx>=pixel_counter_in[0])
@@ -361,6 +365,7 @@ __global__ void volume_render_kernel_step(
 	float albedo,
 	float scattering,
 	Array4f* __restrict__ framebuffer,
+	float* __restrict__ depthbuffer,
 	bool force_finish_ray
 ) {
 	uint32_t idx = threadIdx.x + blockDim.x * blockIdx.x;
@@ -406,7 +411,7 @@ void Testbed::render_volume(CudaRenderBuffer& render_buffer,
 ) {
 	float plane_z = m_slice_plane_z + m_scale;
 	float distance_scale = 1.f/std::max(m_volume.inv_distance_scale,0.01f);
-	auto res = render_buffer.resolution();
+	auto res = render_buffer.in_resolution();
 
 	size_t n_pixels = (size_t)res.x() * res.y();
 	for (uint32_t i=0;i<2;++i) {
@@ -436,6 +441,7 @@ void Testbed::render_volume(CudaRenderBuffer& render_buffer,
 		m_envmap.envmap->params_inference(),
 		m_envmap.resolution,
 		render_buffer.frame_buffer(),
+		render_buffer.depth_buffer(),
 		m_rng,
 		m_volume.bitgrid.data(),
 		distance_scale,
@@ -471,7 +477,8 @@ void Testbed::render_volume(CudaRenderBuffer& render_buffer,
 			distance_scale,
 			std::min(m_volume.albedo,0.995f),
 			m_volume.scattering,
-			render_buffer.frame_buffer()
+			render_buffer.frame_buffer(),
+			render_buffer.depth_buffer()
 		);
 		m_rng.advance(n_pixels*256);
 	} else {
@@ -513,6 +520,7 @@ void Testbed::render_volume(CudaRenderBuffer& render_buffer,
 				std::min(m_volume.albedo,0.995f),
 				m_volume.scattering,
 				render_buffer.frame_buffer(),
+				render_buffer.depth_buffer(),
 				(iter>=max_iter-1)
 			);
 			m_rng.advance(n_pixels*256);

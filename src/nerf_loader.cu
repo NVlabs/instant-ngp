@@ -240,6 +240,9 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 				}
 				mean_sharpness /= (mean_end - mean_start);
 
+				// Compatibility with Windows paths on Linux. (Breaks linux filenames with "\\" in them, which is acceptable for us.)
+				frames_copy[i]["file_path"] = replace_all(frames_copy[i]["file_path"], "\\", "/");
+
 				if ((basepath / fs::path(std::string(frames_copy[i]["file_path"]))).exists() && frames_copy[i]["sharpness"] > sharpness_discard_threshold * mean_sharpness) {
 					frames.emplace_back(frames_copy[i]);
 				} else {

@@ -142,7 +142,7 @@ __device__ void deposit_image_gradient(const Eigen::Matrix<float, N_DIMS, 1>& va
 }
 
 template <typename T>
-__device__ __host__ inline void camera_distortion(const T* extra_params, const T u, const T v, T* du, T* dv) {
+__device__ __host__ inline void apply_camera_distortion(const T* extra_params, const T u, const T v, T* du, T* dv) {
 	const T k1 = extra_params[0];
 	const T k2 = extra_params[1];
 	const T p1 = extra_params[2];
@@ -178,11 +178,11 @@ __device__ __host__ inline void iterative_camera_undistortion(const T* params, T
 	for (uint32_t i = 0; i < kNumIterations; ++i) {
 		const float step0 = std::max(std::numeric_limits<float>::epsilon(), std::abs(kRelStepSize * x(0)));
 		const float step1 = std::max(std::numeric_limits<float>::epsilon(), std::abs(kRelStepSize * x(1)));
-		camera_distortion(params, x(0), x(1), &dx(0), &dx(1));
-		camera_distortion(params, x(0) - step0, x(1), &dx_0b(0), &dx_0b(1));
-		camera_distortion(params, x(0) + step0, x(1), &dx_0f(0), &dx_0f(1));
-		camera_distortion(params, x(0), x(1) - step1, &dx_1b(0), &dx_1b(1));
-		camera_distortion(params, x(0), x(1) + step1, &dx_1f(0), &dx_1f(1));
+		apply_camera_distortion(params, x(0), x(1), &dx(0), &dx(1));
+		apply_camera_distortion(params, x(0) - step0, x(1), &dx_0b(0), &dx_0b(1));
+		apply_camera_distortion(params, x(0) + step0, x(1), &dx_0f(0), &dx_0f(1));
+		apply_camera_distortion(params, x(0), x(1) - step1, &dx_1b(0), &dx_1b(1));
+		apply_camera_distortion(params, x(0), x(1) + step1, &dx_1f(0), &dx_1f(1));
 		J(0, 0) = 1 + (dx_0f(0) - dx_0b(0)) / (2 * step0);
 		J(0, 1) = (dx_1f(0) - dx_1b(0)) / (2 * step1);
 		J(1, 0) = (dx_0f(1) - dx_0b(1)) / (2 * step0);
@@ -255,7 +255,7 @@ inline __host__ __device__ Ray pixel_to_ray(
 	const float* __restrict__ distortion_data = nullptr,
 	const Eigen::Vector2i distortion_resolution = Eigen::Vector2i::Zero()
 ) {
-	Eigen::Vector2f offset = ld_random_pixel_offset(snap_to_pixel_centers ? 0 : spp, pixel.x(), pixel.y());
+	Eigen::Vector2f offset = ld_random_pixel_offset(snap_to_pixel_centers ? 0 : spp);
 	Eigen::Vector2f uv = (pixel.cast<float>() + offset).cwiseQuotient(resolution.cast<float>());
 
 	Eigen::Vector3f dir;
@@ -291,6 +291,153 @@ inline __host__ __device__ Ray pixel_to_ray(
 	dir = (lookat - origin) / focus_z;
 
 	return {origin, dir};
+}
+
+inline __host__ __device__ Eigen::Vector2f pos_to_pixel(
+	const Eigen::Vector3f& pos,
+	const Eigen::Vector2i& resolution,
+	const Eigen::Vector2f& focal_length,
+	const Eigen::Matrix<float, 3, 4>& camera_matrix,
+	const Eigen::Vector2f& screen_center,
+	const CameraDistortion& camera_distortion = {}
+) {
+	// Express ray in terms of camera frame
+	Eigen::Vector3f origin = camera_matrix.col(3);
+
+	Eigen::Vector3f dir = pos - origin;
+	dir = camera_matrix.block<3, 3>(0, 0).inverse() * dir;
+	dir /= dir.z();
+
+	if (camera_distortion.mode == ECameraDistortionMode::Iterative) {
+		float du, dv;
+		apply_camera_distortion(camera_distortion.params, dir.x(), dir.y(), &du, &dv);
+		dir.x() += du;
+		dir.y() += dv;
+	} else if (camera_distortion.mode == ECameraDistortionMode::FTheta) {
+		assert(false);
+	}
+
+	return {
+		dir.x() * focal_length.x() + screen_center.x() * resolution.x(),
+		dir.y() * focal_length.y() + screen_center.y() * resolution.y(),
+	};
+}
+
+inline __host__ __device__ Eigen::Vector2f motion_vector_3d(
+	const uint32_t sample_index,
+	const Eigen::Vector2i& pixel,
+	const Eigen::Vector2i& resolution,
+	const Eigen::Vector2f& focal_length,
+	const Eigen::Matrix<float, 3, 4>& camera,
+	const Eigen::Matrix<float, 3, 4>& prev_camera,
+	const Eigen::Vector2f& screen_center,
+	const bool snap_to_pixel_centers,
+	const float depth,
+	const CameraDistortion& camera_distortion = {}
+) {
+	// Get 3D pos of the given pixel in the current camera frame
+	Ray ray = pixel_to_ray(
+		sample_index,
+		pixel,
+		resolution,
+		focal_length,
+		camera,
+		screen_center,
+		snap_to_pixel_centers,
+		1.0f,
+		0.0f,
+		camera_distortion,
+		nullptr,
+		Eigen::Vector2i::Zero()
+	);
+
+	Eigen::Vector2f prev_pixel = pos_to_pixel(
+		ray.o + ray.d * depth,
+		resolution,
+		focal_length,
+		prev_camera,
+		screen_center,
+		camera_distortion
+	);
+
+	return prev_pixel - (pixel.cast<float>() + ld_random_pixel_offset(sample_index));
+}
+
+inline __host__ __device__ Eigen::Vector2f pixel_to_image_uv(
+	const uint32_t sample_index,
+	const Eigen::Vector2i& pixel,
+	const Eigen::Vector2i& resolution,
+	const Eigen::Vector2i& image_resolution,
+	const Eigen::Vector2f& screen_center,
+	const float view_dist,
+	const Eigen::Vector2f& image_pos,
+	const bool snap_to_pixel_centers
+) {
+	Eigen::Vector2f jit = ld_random_pixel_offset(snap_to_pixel_centers ? 0 : sample_index);
+	Eigen::Vector2f offset = screen_center.cwiseProduct(resolution.cast<float>()) + jit;
+
+	float y_scale = view_dist;
+	float x_scale = y_scale * resolution.x() / resolution.y();
+
+	return {
+		((x_scale * (pixel.x() + offset.x())) / resolution.x() - view_dist * image_pos.x()) / image_resolution.x() * image_resolution.y(),
+		(y_scale * (pixel.y() + offset.y())) / resolution.y() - view_dist * image_pos.y()
+	};
+}
+
+inline __host__ __device__ Eigen::Vector2f image_uv_to_pixel(
+	const Eigen::Vector2f& uv,
+	const Eigen::Vector2i& resolution,
+	const Eigen::Vector2i& image_resolution,
+	const Eigen::Vector2f& screen_center,
+	const float view_dist,
+	const Eigen::Vector2f& image_pos
+) {
+	Eigen::Vector2f offset = screen_center.cwiseProduct(resolution.cast<float>());
+
+	float y_scale = view_dist;
+	float x_scale = y_scale * resolution.x() / resolution.y();
+
+	return {
+		((uv.x() / image_resolution.y() * image_resolution.x()) + view_dist * image_pos.x()) * resolution.x() / x_scale - offset.x(),
+		(uv.y() + view_dist * image_pos.y()) * resolution.y() / y_scale - offset.y()
+	};
+}
+
+inline __host__ __device__ Eigen::Vector2f motion_vector_2d(
+	const uint32_t sample_index,
+	const Eigen::Vector2i& pixel,
+	const Eigen::Vector2i& resolution,
+	const Eigen::Vector2i& image_resolution,
+	const Eigen::Vector2f& screen_center,
+	const float view_dist,
+	const float prev_view_dist,
+	const Eigen::Vector2f& image_pos,
+	const Eigen::Vector2f& prev_image_pos,
+	const bool snap_to_pixel_centers
+) {
+	// Get 3D pos of the given pixel in the current camera frame
+	Eigen::Vector2f uv = pixel_to_image_uv(
+		sample_index,
+		pixel,
+		resolution,
+		image_resolution,
+		screen_center,
+		view_dist,
+		image_pos,
+		snap_to_pixel_centers
+	);
+
+	Eigen::Vector2f prev_pixel = image_uv_to_pixel(
+		uv,
+		resolution,
+		image_resolution,
+		screen_center,
+		prev_view_dist,
+		prev_image_pos
+	);
+
+	return prev_pixel - (pixel.cast<float>() + ld_random_pixel_offset(sample_index));
 }
 
 inline __host__ __device__ float fov_to_focal_length(int resolution, float degrees) {

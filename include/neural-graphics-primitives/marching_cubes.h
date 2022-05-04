@@ -64,7 +64,7 @@ void draw_mesh_gl(
 );
 #endif
 
-void save_density_grid_to_png(const tcnn::GPUMemory<float>& density, const char* filename, Eigen::Vector3i res3d, float thresh, bool swap_y_z = true);
+void save_density_grid_to_png(const tcnn::GPUMemory<float>& density, const char* filename, Eigen::Vector3i res3d, float thresh, bool swap_y_z = true, float density_range = 4.f);
 
 void save_rgba_grid_to_png_sequence(const tcnn::GPUMemory<Eigen::Array4f>& rgba, const char *path, Eigen::Vector3i res3d, bool swap_y_z = true);
 

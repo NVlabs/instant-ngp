@@ -13,7 +13,6 @@
  */
 
 #include <neural-graphics-primitives/common_device.cuh>
-
 #include <neural-graphics-primitives/tinyexr_wrapper.h>
 
 #include <unsupported/Eigen/MatrixFunctions>

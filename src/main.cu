@@ -141,7 +141,7 @@ int main(int argc, char** argv) {
 
 			if (scene_path.is_directory() || equals_case_insensitive(scene_path.extension(), "json")) {
 				mode = ETestbedMode::Nerf;
-			} else if (equals_case_insensitive(scene_path.extension(), "obj")) {
+			} else if (equals_case_insensitive(scene_path.extension(), "obj") || equals_case_insensitive(scene_path.extension(), "stl")) {
 				mode = ETestbedMode::Sdf;
 			} else if (equals_case_insensitive(scene_path.extension(), "nvdb")) {
 				mode = ETestbedMode::Volume;

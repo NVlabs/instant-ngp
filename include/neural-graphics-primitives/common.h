@@ -132,6 +132,18 @@ enum class ETonemapCurve : int {
 };
 static constexpr const char* TonemapCurveStr = "Identity\0ACES\0Hable\0Reinhard\0\0";
 
+enum class EDlssQuality : int {
+	UltraPerformance,
+	MaxPerformance,
+	Balanced,
+	MaxQuality,
+	UltraQuality,
+	NumDlssQualitySettings,
+	None,
+};
+static constexpr const char* DlssQualityStr = "UltraPerformance\0MaxPerformance\0Balanced\0MaxQuality\0UltraQuality\0Invalid\0None\0\0";
+static constexpr const char* DlssQualityStrArray[] = {"UltraPerformance", "MaxPerformance", "Balanced", "MaxQuality", "UltraQuality", "Invalid", "None"};
+
 enum class ETestbedMode : int {
 	Nerf,
 	Sdf,
@@ -193,6 +205,15 @@ inline NGP_HOST_DEVICE uint32_t binary_search(float val, const float* data, uint
 	}
 
 	return std::min(first, length-1);
+}
+
+inline std::string replace_all(std::string str, const std::string& a, const std::string& b) {
+	std::string::size_type n = 0;
+	while ((n = str.find(a, n)) != std::string::npos) {
+		str.replace(n, a.length(), b);
+		n += b.length();
+	}
+	return str;
 }
 
 NGP_NAMESPACE_END
