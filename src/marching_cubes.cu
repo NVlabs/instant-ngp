@@ -985,15 +985,16 @@ void save_density_grid_to_png(const GPUMemory<float>& density, const char* filen
 			int z = (u / res3d.x()) + (v / res3d.y()) * nacross;
 			if (z < res3d.z()) {
 				if (swap_y_z) {
-					*dst++ = (uint8_t)tcnn::clamp((density_cpu[x + z*res3d.x() + y*res3d.x()*res3d.z()]-thresh)*32.f + 128.5f, 0.f, 255.f);
+					*dst++ = (uint8_t)tcnn::clamp((density_cpu[x + z*res3d.x() + y*res3d.x()*res3d.z()]-thresh)*density_scale + 128.5f, 0.f, 255.f);
 				} else {
-					*dst++ = (uint8_t)tcnn::clamp((density_cpu[x + (res3d.y()-1-y)*res3d.x() + z*res3d.x()*res3d.y()]-thresh)*32.f + 128.5f, 0.f, 255.f);
+					*dst++ = (uint8_t)tcnn::clamp((density_cpu[x + (res3d.y()-1-y)*res3d.x() + z*res3d.x()*res3d.y()]-thresh)*density_scale + 128.5f, 0.f, 255.f);
 				}
 			} else {
 				*dst++ = 0;
 			}
 		}
 	}
+
 	stbi_write_png(filename, w, h, 1, pngpixels, w);
 
 	tlog::success() << "Wrote density PNG to " << filename;
