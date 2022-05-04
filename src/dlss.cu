@@ -136,12 +136,9 @@ void vulkan_and_ngx_init() {
 	instance_extensions.emplace_back(VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME);
 
 	for (uint32_t i = 0; i < n_ngx_device_extensions; ++i) {
-		if (std::string{ngx_device_extensions[i]} != "VK_EXT_buffer_device_address") {
-			device_extensions.emplace_back(ngx_device_extensions[i]);
-		}
+		device_extensions.emplace_back(ngx_device_extensions[i]);
 	}
 
-	device_extensions.emplace_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
 	device_extensions.emplace_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
 #ifdef _WIN32
 	device_extensions.emplace_back(VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME);
@@ -273,8 +270,8 @@ void vulkan_and_ngx_init() {
 	device_create_info.enabledLayerCount = static_cast<uint32_t>(validation_layers.size());
 	device_create_info.ppEnabledLayerNames = validation_layers.data();
 
-	VkPhysicalDeviceBufferDeviceAddressFeaturesKHR buffer_device_address_feature = {};
-	buffer_device_address_feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR;
+	VkPhysicalDeviceBufferDeviceAddressFeaturesEXT buffer_device_address_feature = {};
+	buffer_device_address_feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT;
 	buffer_device_address_feature.bufferDeviceAddress = VK_TRUE;
 	device_create_info.pNext = &buffer_device_address_feature;
 

@@ -144,21 +144,23 @@ if (NGP_BUILD_WITH_GUI)
 	##########
 	# Vulkan #
 	##########
-	find_package(Vulkan)
-	if (Vulkan_FOUND)
-		list(APPEND NGP_DEFINITIONS -DNGP_VULKAN -DGLFW_INCLUDE_VULKAN)
-		include_directories("${Vulkan_INCLUDE_DIRS}")
-		set(GUI_LIBRARIES ${GUI_LIBRARIES} ${Vulkan_LIBRARIES})
+	if (CUDA_VERSION VERSION_GREATER_EQUAL 11.0)
+		find_package(Vulkan)
+		if (Vulkan_FOUND)
+			list(APPEND NGP_DEFINITIONS -DNGP_VULKAN -DGLFW_INCLUDE_VULKAN)
+			include_directories("${Vulkan_INCLUDE_DIRS}")
+			set(GUI_LIBRARIES ${GUI_LIBRARIES} ${Vulkan_LIBRARIES})
 
-		set(GUI_SOURCES
-			${GUI_SOURCES}
-			src/dlss.cu
-		)
-	else()
-		message(WARNING
-			"Vulkan was not found. Neural graphics primitives will still compile "
-			"and run correctly, but DLSS will not be supported."
-		)
+			set(GUI_SOURCES
+				${GUI_SOURCES}
+				src/dlss.cu
+			)
+		else()
+			message(WARNING
+				"Vulkan was not found. Neural graphics primitives will still compile "
+				"and run correctly, but DLSS will not be supported."
+			)
+		endif()
 	endif()
 
 	#############################################

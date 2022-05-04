@@ -484,24 +484,26 @@ void Testbed::imgui() {
 		ImGui::SameLine();
 		ImGui::Text(": %dms", (int)m_frame_milliseconds);
 
-		if (!m_dlss_supported || !m_single_view) {
-			ImGui::BeginDisabled();
-			m_dlss = false;
-		}
-
-		if (ImGui::Checkbox("DLSS", &m_dlss)) {
-			accum_reset = true;
-		}
-
 		const auto& render_tex = m_render_surfaces.front();
 
-		if (render_tex.dlss()) {
-			ImGui::SameLine();
-			ImGui::Text("(automatic quality setting: %s)", DlssQualityStrArray[(int)render_tex.dlss()->quality()]);
-		}
+		if (m_dlss_supported) {
+			if (!m_single_view) {
+				ImGui::BeginDisabled();
+				m_dlss = false;
+			}
 
-		if (!m_dlss_supported || !m_single_view) {
-			ImGui::EndDisabled();
+			if (ImGui::Checkbox("DLSS", &m_dlss)) {
+				accum_reset = true;
+			}
+
+			if (render_tex.dlss()) {
+				ImGui::SameLine();
+				ImGui::Text("(automatic quality setting: %s)", DlssQualityStrArray[(int)render_tex.dlss()->quality()]);
+			}
+
+			if (!m_single_view) {
+				ImGui::EndDisabled();
+			}
 		}
 
 		ImGui::Checkbox("Dynamic resolution", &m_dynamic_res);
