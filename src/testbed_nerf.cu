@@ -811,10 +811,10 @@ __global__ void composite_kernel_nerf(
 				rgb.y() = rng.next_float();
 				rgb.z() = rng.next_float();
 			} else {
-				rgb = pos.array();
-				rgb.x() -= floorf(rgb.x());
-				rgb.y() -= floorf(rgb.y());
-				rgb.z() -= floorf(rgb.z());
+				rgb = (pos.array() - Array3f::Constant(0.5f)) / 2.0f + Array3f::Constant(0.5f);
+				// rgb.x() -= floorf(rgb.x());
+				// rgb.y() -= floorf(rgb.y());
+				// rgb.z() -= floorf(rgb.z());
 			}
 		} else if (render_mode == ERenderMode::EncodingVis) {
 			rgb = warped_pos.array();
