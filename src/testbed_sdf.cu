@@ -962,13 +962,39 @@ void Testbed::render_sdf(
 }
 
 void Testbed::load_mesh() {
-	if (!equals_case_insensitive(m_data_path.extension(), "obj")) {
-		throw std::runtime_error{"Sdf data path must be a mesh in .obj format."};
+	std::vector<Vector3f> vertices;
+	if (equals_case_insensitive(m_data_path.extension(), "obj")) {
+		vertices = load_obj(m_data_path.str());
+	} else if (equals_case_insensitive(m_data_path.extension(), "stl")) {
+		FILE* f = fopen(m_data_path.str().c_str(), "rb");
+		if (!f) {
+			throw std::runtime_error{"stl file not found"};
+		}
+		uint32_t buf[21]={};
+		if (fread(buf, 4, 21, f) != 4*21) {
+			throw std::runtime_error{"stl file too small for header"};
+		}
+		uint32_t nfaces = buf[20];
+		if (memcmp(buf,"solid",5)==0 || buf[20]==0) {
+			fclose(f);
+			throw std::runtime_error{"ascii stl files are not supported"};
+		}
+		vertices.reserve(nfaces * 3);
+		for (uint32_t i = 0; i < nfaces; ++i) {
+			if (fread(buf, 1, 50, f) < 50) {
+				nfaces = i;
+				break;
+			}
+			vertices.push_back(*(Vector3f*)(buf + 3));
+			vertices.push_back(*(Vector3f*)(buf + 6));
+			vertices.push_back(*(Vector3f*)(buf + 9));
+		}
+		fclose(f);
+	} else {
+		throw std::runtime_error{"Sdf data path must be a mesh in ascii .obj or binary .stl format."};
 	}
-
 	// The expected format is
 	// [v1.x][v1.y][v1.z][v2.x]...
-	std::vector<Vector3f> vertices = load_obj(m_data_path.str());
 	size_t n_vertices = vertices.size();
 	size_t n_triangles = n_vertices/3;
 
