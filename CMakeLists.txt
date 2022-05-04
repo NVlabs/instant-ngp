@@ -78,69 +78,19 @@ list(APPEND CUDA_NVCC_FLAGS "--extended-lambda")
 list(APPEND CUDA_NVCC_FLAGS "--expt-relaxed-constexpr")
 
 ###############################################################################
-# Dependencies (ordered alphabetically)
+# Dependencies
 ###############################################################################
 
-include_directories("dependencies")
-
-#########
-# Eigen #
-#########
-include_directories("dependencies/eigen")
-include_directories("dependencies/filesystem")
+################
+# tiny-cuda-nn #
+################
+set(TCNN_BUILD_BENCHMARK OFF)
+set(TCNN_BUILD_EXAMPLES OFF)
+add_subdirectory(dependencies/tiny-cuda-nn)
+include_directories("dependencies/tiny-cuda-nn/include")
+include_directories("dependencies/tiny-cuda-nn/dependencies")
 
 if (NGP_BUILD_WITH_GUI)
-	########
-	# GLFW #
-	########
-	set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL " " FORCE)
-	set(GLFW_BUILD_TESTS OFF CACHE BOOL " " FORCE)
-	set(GLFW_BUILD_DOCS OFF CACHE BOOL " " FORCE)
-	set(GLFW_BUILD_INSTALL OFF CACHE BOOL " " FORCE)
-	set(GLFW_INSTALL OFF CACHE BOOL " " FORCE)
-	set(GLFW_USE_CHDIR OFF CACHE BOOL " " FORCE)
-	set(GLFW_VULKAN_STATIC OFF CACHE BOOL " " FORCE)
-	set(BUILD_SHARED_LIBS ON CACHE BOOL " " FORCE)
-
-	add_subdirectory(dependencies/glfw)
-
-	set_target_properties(glfw PROPERTIES EXCLUDE_FROM_ALL 1 EXCLUDE_FROM_DEFAULT_BUILD 1)
-
-	mark_as_advanced(
-		GLFW_BUILD_DOCS GLFW_BUILD_EXAMPLES GLFW_BUILD_INSTALL GLFW_BUILD_TESTS
-		GLFW_DOCUMENT_INTERNALS GLFW_INSTALL GLFW_USE_CHDIR GLFW_USE_MENUBAR
-		GLFW_USE_OSMESA GLFW_VULKAN_STATIC GLFW_USE_RETINA GLFW_USE_MIR
-		BUILD_SHARED_LIBS USE_MSVC_RUNTIME_LIBRARY_DLL
-	)
-
-	include_directories("dependencies/glfw/include")
-	include_directories("dependencies/imgui")
-
-	#############
-	# GL3W/GLEW #
-	#############
-	if (MSVC)
-		include_directories("dependencies/gl3w")
-		link_directories("dependencies")
-		set(GUI_SOURCES "dependencies/gl3w/GL/gl3w.c")
-		set(GUI_LIBRARIES ${GUI_LIBRARIES} opengl32 $<TARGET_OBJECTS:glfw_objects>)
-	else()
-		find_package(GLEW REQUIRED)
-		include_directories(${GLEW_INCLUDE_DIRS})
-		set(GUI_LIBRARIES ${GUI_LIBRARIES} GL ${GLEW_LIBRARIES} $<TARGET_OBJECTS:glfw_objects>)
-	endif()
-
-	set(GUI_SOURCES
-		${GUI_SOURCES}
-		dependencies/imguizmo/ImGuizmo.cpp
-		dependencies/imgui/imgui.cpp
-		dependencies/imgui/backends/imgui_impl_glfw.cpp
-		dependencies/imgui/backends/imgui_impl_opengl3.cpp
-		dependencies/imgui/imgui_draw.cpp
-		dependencies/imgui/imgui_tables.cpp
-		dependencies/imgui/imgui_widgets.cpp
-	)
-
 	##########
 	# Vulkan #
 	##########
@@ -174,11 +124,70 @@ if (NGP_BUILD_WITH_GUI)
 			)
 		endif()
 	else()
-		message(WARNING "CUDA version too old for DLSS support. Requires CUDA 11.X.")
+		message(WARNING "CUDA version too old for DLSS support. Requires CUDA 11.X")
 	endif()
+
+	########
+	# GLFW #
+	########
+	set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL " " FORCE)
+	set(GLFW_BUILD_TESTS OFF CACHE BOOL " " FORCE)
+	set(GLFW_BUILD_DOCS OFF CACHE BOOL " " FORCE)
+	set(GLFW_BUILD_INSTALL OFF CACHE BOOL " " FORCE)
+	set(GLFW_INSTALL OFF CACHE BOOL " " FORCE)
+	set(GLFW_USE_CHDIR OFF CACHE BOOL " " FORCE)
+	set(GLFW_VULKAN_STATIC OFF CACHE BOOL " " FORCE)
+	set(BUILD_SHARED_LIBS ON CACHE BOOL " " FORCE)
+
+	add_subdirectory(dependencies/glfw)
+
+	set_target_properties(glfw PROPERTIES EXCLUDE_FROM_ALL 1 EXCLUDE_FROM_DEFAULT_BUILD 1)
+
+	mark_as_advanced(
+		GLFW_BUILD_DOCS GLFW_BUILD_EXAMPLES GLFW_BUILD_INSTALL GLFW_BUILD_TESTS
+		GLFW_DOCUMENT_INTERNALS GLFW_INSTALL GLFW_USE_CHDIR GLFW_USE_MENUBAR
+		GLFW_USE_OSMESA GLFW_VULKAN_STATIC GLFW_USE_RETINA GLFW_USE_MIR
+		BUILD_SHARED_LIBS USE_MSVC_RUNTIME_LIBRARY_DLL
+	)
+
+	include_directories("dependencies/glfw/include")
+	include_directories("dependencies/imgui")
+
+	#############
+	# GL3W/GLEW #
+	#############
+	if (MSVC)
+		include_directories("dependencies/gl3w")
+		link_directories("dependencies")
+		set(GUI_SOURCES ${GUI_SOURCES} "dependencies/gl3w/GL/gl3w.c")
+		set(GUI_LIBRARIES ${GUI_LIBRARIES} opengl32 $<TARGET_OBJECTS:glfw_objects>)
+	else()
+		find_package(GLEW REQUIRED)
+		include_directories(${GLEW_INCLUDE_DIRS})
+		set(GUI_LIBRARIES ${GUI_LIBRARIES} GL ${GLEW_LIBRARIES} $<TARGET_OBJECTS:glfw_objects>)
+	endif()
+
+	set(GUI_SOURCES
+		${GUI_SOURCES}
+		dependencies/imguizmo/ImGuizmo.cpp
+		dependencies/imgui/imgui.cpp
+		dependencies/imgui/backends/imgui_impl_glfw.cpp
+		dependencies/imgui/backends/imgui_impl_opengl3.cpp
+		dependencies/imgui/imgui_draw.cpp
+		dependencies/imgui/imgui_tables.cpp
+		dependencies/imgui/imgui_widgets.cpp
+	)
 
 	list(APPEND NGP_DEFINITIONS -DNGP_GUI)
 endif(NGP_BUILD_WITH_GUI)
+
+include_directories("dependencies")
+
+#########
+# Eigen #
+#########
+include_directories("dependencies/eigen")
+include_directories("dependencies/filesystem")
 
 ###########
 # nanovdb #
@@ -218,15 +227,6 @@ find_package(Python 3.7 COMPONENTS Interpreter Development)
 if (Python_FOUND)
 	add_subdirectory("dependencies/pybind11")
 endif()
-
-################
-# tiny-cuda-nn #
-################
-set(TCNN_BUILD_BENCHMARK OFF)
-set(TCNN_BUILD_EXAMPLES OFF)
-add_subdirectory(dependencies/tiny-cuda-nn)
-include_directories("dependencies/tiny-cuda-nn/include")
-include_directories("dependencies/tiny-cuda-nn/dependencies")
 
 ##############
 # tinylogger #
