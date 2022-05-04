@@ -313,7 +313,8 @@ public:
 	Eigen::Vector2f render_screen_center() const ;
 	void optimise_mesh_step(uint32_t N_STEPS);
 	void compute_mesh_vertex_colors();
-	tcnn::GPUMemory<float> get_density_on_grid(Eigen::Vector3i res3d, const BoundingBox& aabb);
+	tcnn::GPUMemory<float> get_density_on_grid(Eigen::Vector3i res3d, const BoundingBox& aabb); // network version (nerf or sdf)
+	tcnn::GPUMemory<float> get_sdf_gt_on_grid(Eigen::Vector3i res3d, const BoundingBox& aabb); // sdf gt version (sdf only)
 	tcnn::GPUMemory<Eigen::Array4f> get_rgba_on_grid(Eigen::Vector3i res3d, Eigen::Vector3f ray_dir);
 	int marching_cubes(Eigen::Vector3i res3d, const BoundingBox& aabb, float thresh);
 
@@ -363,7 +364,7 @@ public:
 	void update_loss_graph();
 	void load_camera_path(const std::string& filepath_string);
 
-	float compute_image_mse();
+	float compute_image_mse(bool quantize_to_byte);
 
 	void compute_and_save_marching_cubes_mesh(const char* filename, Eigen::Vector3i res3d = Eigen::Vector3i::Constant(128), BoundingBox aabb = {}, float thresh = 2.5f, bool unwrap_it = false);
 	Eigen::Vector3i compute_and_save_png_slices(const char* filename, int res, BoundingBox aabb = {}, float thresh = 2.5f, float density_range = 4.f, bool flip_y_and_z_axes = false);

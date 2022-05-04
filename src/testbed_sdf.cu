@@ -1149,6 +1149,53 @@ void Testbed::generate_training_samples_sdf(Vector3f* positions, float* distance
 	CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
 }
 
+__global__ void generate_grid_samples_sdf_uniform(Eigen::Vector3i res_3d, BoundingBox aabb, Vector3f* __restrict__ out) {
+	uint32_t x = threadIdx.x + blockIdx.x * blockDim.x;
+	uint32_t y = threadIdx.y + blockIdx.y * blockDim.y;
+	uint32_t z = threadIdx.z + blockIdx.z * blockDim.z;
+	if (x>=res_3d.x() || y>=res_3d.y() || z>=res_3d.z())
+		return;
+	uint32_t i = x+ y*res_3d.x() + z*res_3d.x()*res_3d.y();
+	Vector3f pos = Array3f{(float)x, (float)y, (float)z} * Array3f{1.f/res_3d.x(),1.f/res_3d.y(),1.f/res_3d.z()};
+	pos = pos.cwiseProduct(aabb.max - aabb.min) + aabb.min;
+	out[i] = pos;
+}
+
+GPUMemory<float> Testbed::get_sdf_gt_on_grid(Vector3i res3d, const BoundingBox& aabb) {
+	const uint32_t n_elements = (res3d.x()*res3d.y()*res3d.z());
+	GPUMemory<float> density(n_elements);
+	GPUMemoryArena::Allocation alloc;
+	auto scratch = allocate_workspace_and_distribute<
+		Vector3f
+	>(m_inference_stream, &alloc, n_elements);
+	Vector3f* positions = std::get<0>(scratch);
+	float* sdf_out = density.data();
+	const dim3 threads = { 16, 8, 1 };
+	const dim3 blocks = { div_round_up((uint32_t)res3d.x(), threads.x), div_round_up((uint32_t)res3d.y(), threads.y), div_round_up((uint32_t)res3d.z(), threads.z) };
+	generate_grid_samples_sdf_uniform<<<blocks, threads, 0, m_inference_stream>>>(res3d, aabb, positions);
+	CUDA_CHECK_THROW(cudaStreamSynchronize(m_inference_stream));
+	m_sdf.triangle_bvh->signed_distance_gpu(
+			n_elements,
+			m_sdf.mesh_sdf_mode,
+			positions,
+			sdf_out,
+			m_sdf.triangles_gpu.data(),
+			false,
+			m_inference_stream
+		);
+	CUDA_CHECK_THROW(cudaStreamSynchronize(m_inference_stream));
+	/*
+	std::vector<float> cpudensity(density.size());
+	std::vector<Vector3f> cpupositions(n_elements);
+	density.copy_to_host(cpudensity);
+	cudaMemcpy(cpupositions.data(),positions,n_elements*12,cudaMemcpyDeviceToHost);
+	for (int i=0;i<64;++i)
+		printf("[%0.3f %0.3f %0.3f] -> %0.3f\n", cpupositions[i].x(),cpupositions[i].y(),cpupositions[i].z(),cpudensity[i]);
+	*/
+	return density;
+}
+
+
 void Testbed::train_sdf(size_t target_batch_size, size_t n_steps, cudaStream_t stream) {
 	const uint32_t n_output_dims = 1;
 	const uint32_t n_input_dims = 3;
