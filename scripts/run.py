@@ -56,6 +56,7 @@ def parse_args():
 
 	parser.add_argument("--sharpen", default=0, help="Set amount of sharpening applied to NeRF training images.")
 
+
 	args = parser.parse_args()
 	return args
 
@@ -100,11 +101,10 @@ if __name__ == "__main__":
 	if not os.path.isabs(network):
 		network = os.path.join(configs_dir, network)
 
-
 	testbed = ngp.Testbed(mode)
 	testbed.nerf.sharpen = float(args.sharpen)
 
-	if args.mode == "sdf":
+	if mode == ngp.TestbedMode.Sdf:
 		testbed.tonemap_curve = ngp.TonemapCurve.ACES
 
 	if args.scene:
@@ -112,6 +112,7 @@ if __name__ == "__main__":
 		if not os.path.exists(args.scene) and args.scene in scenes:
 			scene = os.path.join(scenes[args.scene]["data_dir"], scenes[args.scene]["dataset"])
 		testbed.load_training_data(scene)
+
 
 	if args.load_snapshot:
 		print("Loading snapshot ", args.load_snapshot)
