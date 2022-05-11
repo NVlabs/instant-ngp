@@ -26,17 +26,28 @@ For business inquiries, please visit our website and submit the form: [NVIDIA Re
 - __(optional) [OptiX](https://developer.nvidia.com/optix) 7.3 or higher__ for faster mesh SDF training. Set the environment variable `OptiX_INSTALL_DIR` to the installation directory if it is not discovered automatically.
 
 
-If you are using Linux, install the following packages
+If you are using Debian based Linux distribution, install the following packages
 ```sh
 sudo apt-get install build-essential git python3-dev python3-pip libopenexr-dev libxi-dev \
                      libglfw3-dev libglew-dev libomp-dev libxinerama-dev libxcursor-dev
 ```
 
+Alternatively, if you are using Arch or Arch derivatives, install the following packages
+```sh
+sudo pacman -S base-devel cmake openexr libxi glfw openmp libxinerama livxcursor
+```
+
 We also recommend installing [CUDA](https://developer.nvidia.com/cuda-toolkit) and [OptiX](https://developer.nvidia.com/optix) in `/usr/local/` and adding the CUDA installation to your PATH.
+
 For example, if you have CUDA 11.4, add the following to your `~/.bashrc`
 ```sh
 export PATH="/usr/local/cuda-11.4/bin:$PATH"
 export LD_LIBRARY_PATH="/usr/local/cuda-11.4/lib64:$LD_LIBRARY_PATH"
+```
+
+For Arch and derivatives,
+```sh
+sudo pacman -S cuda
 ```
 
 
