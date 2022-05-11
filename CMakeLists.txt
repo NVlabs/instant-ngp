@@ -98,7 +98,7 @@ if (NGP_BUILD_WITH_GUI)
 		if (Vulkan_FOUND)
 			list(APPEND NGP_DEFINITIONS -DNGP_VULKAN -DGLFW_INCLUDE_VULKAN)
 			include_directories("${Vulkan_INCLUDE_DIRS}")
-			set(GUI_LIBRARIES ${GUI_LIBRARIES} ${Vulkan_LIBRARIES})
+			set(NGP_LIBRARIES ${NGP_LIBRARIES} ${Vulkan_LIBRARIES})
 
 			set(GUI_SOURCES
 				${GUI_SOURCES}
@@ -111,10 +111,10 @@ if (NGP_BUILD_WITH_GUI)
 			include_directories("dependencies/dlss/include")
 			if (MSVC)
 				link_directories("${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/x86_64")
-				set(GUI_LIBRARIES ${GUI_LIBRARIES} nvsdk_ngx_d)
+				set(NGP_LIBRARIES ${NGP_LIBRARIES} nvsdk_ngx_d)
 			else()
 				link_directories("${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64")
-				set(GUI_LIBRARIES ${GUI_LIBRARIES} nvsdk_ngx)
+				set(NGP_LIBRARIES ${NGP_LIBRARIES} nvsdk_ngx)
 			endif()
 		else()
 			message(WARNING
@@ -159,11 +159,11 @@ if (NGP_BUILD_WITH_GUI)
 		include_directories("dependencies/gl3w")
 		link_directories("dependencies")
 		set(GUI_SOURCES ${GUI_SOURCES} "dependencies/gl3w/GL/gl3w.c")
-		set(GUI_LIBRARIES ${GUI_LIBRARIES} opengl32 $<TARGET_OBJECTS:glfw_objects>)
+		set(NGP_LIBRARIES ${NGP_LIBRARIES} opengl32 $<TARGET_OBJECTS:glfw_objects>)
 	else()
 		find_package(GLEW REQUIRED)
 		include_directories(${GLEW_INCLUDE_DIRS})
-		set(GUI_LIBRARIES ${GUI_LIBRARIES} GL ${GLEW_LIBRARIES} $<TARGET_OBJECTS:glfw_objects>)
+		set(NGP_LIBRARIES ${NGP_LIBRARIES} GL ${GLEW_LIBRARIES} $<TARGET_OBJECTS:glfw_objects>)
 	endif()
 
 	set(GUI_SOURCES
@@ -309,9 +309,10 @@ if (OptiX_FOUND OR OptiX_INCLUDE)
 endif()
 
 add_library(ngp STATIC ${SOURCES})
+
 set_target_properties(ngp PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
 set_target_properties(ngp PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-target_link_libraries(ngp PUBLIC ${GUI_LIBRARIES} tiny-cuda-nn)
+target_link_libraries(ngp PUBLIC ${NGP_LIBRARIES} tiny-cuda-nn)
 target_compile_options(ngp PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:${CUDA_NVCC_FLAGS}>)
 target_compile_definitions(ngp PUBLIC ${NGP_DEFINITIONS} ${TCNN_DEFINITIONS})
 
@@ -335,6 +336,7 @@ if (Vulkan_FOUND)
 		)
 	endif()
 endif()
+
 
 if (Python_FOUND)
 	add_library(pyngp SHARED src/python_api.cu)
