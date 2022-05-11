@@ -97,7 +97,7 @@ Now you can run:
 instant-ngp$ ./build/testbed --scene data/nerf_synthetic/lego/transforms_train.json
 ```
 
-For more information about preparing datasets for use with our NeRF implementation, please see [this document](docs/nerf_dataset_tips.md).
+**[To prepare your own dataset for use with our NeRF implementation, click here.](docs/nerf_dataset_tips.md)**
 
 ### SDF armadillo
 
