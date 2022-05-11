@@ -709,6 +709,7 @@ public:
 	ETonemapCurve m_tonemap_curve = ETonemapCurve::Identity;
 	bool m_dlss = false;
 	bool m_dlss_supported = false;
+	float m_dlss_sharpening = 0.0f;
 
 	// 3D stuff
 	float m_slice_plane_z = 0.0f;

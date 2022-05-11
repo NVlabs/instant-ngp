@@ -499,6 +499,7 @@ void Testbed::imgui() {
 			if (render_tex.dlss()) {
 				ImGui::SameLine();
 				ImGui::Text("(automatic quality setting: %s)", DlssQualityStrArray[(int)render_tex.dlss()->quality()]);
+				ImGui::SliderFloat("DLSS sharpening", &m_dlss_sharpening, 0.0f, 1.0f, "%.02f");
 			}
 
 			if (!m_single_view) {
@@ -2263,6 +2264,8 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 			m_image.prev_pos,
 			m_image.resolution
 		);
+
+		render_buffer.set_dlss_sharpening(m_dlss_sharpening);
 	}
 
 	m_prev_camera = camera_matrix0;

@@ -29,6 +29,7 @@ public:
 	virtual void run(
 		const Eigen::Vector2i& in_resolution,
 		bool is_hdr,
+		float sharpening,
 		const Eigen::Vector2f& jitter_offset,
 		bool shall_reset
 	) = 0;

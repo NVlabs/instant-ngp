@@ -681,7 +681,7 @@ DlssFeatureSpecs dlss_feature_specs(const Eigen::Vector2i& out_resolution, EDlss
 
 class DlssFeature {
 public:
-	DlssFeature(const DlssFeatureSpecs& specs, bool is_hdr) : m_specs{specs}, m_is_hdr{is_hdr} {
+	DlssFeature(const DlssFeatureSpecs& specs, bool is_hdr, bool sharpen) : m_specs{specs}, m_is_hdr{is_hdr}, m_sharpen{sharpen} {
 		// Initialize DLSS
 		unsigned int creation_node_mask = 1;
 		unsigned int visibility_node_mask = 1;
@@ -691,7 +691,7 @@ public:
 		dlss_create_feature_flags |= false ? NVSDK_NGX_DLSS_Feature_Flags_MVJittered : 0;
 		dlss_create_feature_flags |= is_hdr ? NVSDK_NGX_DLSS_Feature_Flags_IsHDR : 0;
 		dlss_create_feature_flags |= false ? NVSDK_NGX_DLSS_Feature_Flags_DepthInverted : 0;
-		dlss_create_feature_flags |= false ? NVSDK_NGX_DLSS_Feature_Flags_DoSharpening : 0;
+		dlss_create_feature_flags |= sharpen ? NVSDK_NGX_DLSS_Feature_Flags_DoSharpening : 0;
 		dlss_create_feature_flags |= false ? NVSDK_NGX_DLSS_Feature_Flags_AutoExposure : 0;
 
 		NVSDK_NGX_DLSS_Create_Params dlss_create_params;
@@ -713,8 +713,8 @@ public:
 		}
 	}
 
-	DlssFeature(const Eigen::Vector2i& out_resolution, bool is_hdr, EDlssQuality quality)
-	: DlssFeature{dlss_feature_specs(out_resolution, quality), is_hdr} {}
+	DlssFeature(const Eigen::Vector2i& out_resolution, bool is_hdr, bool sharpen, EDlssQuality quality)
+	: DlssFeature{dlss_feature_specs(out_resolution, quality), is_hdr, sharpen} {}
 
 	~DlssFeature() {
 		cudaDeviceSynchronize();
@@ -729,6 +729,7 @@ public:
 	void run(
 		const Vector2i& in_resolution,
 		const Vector2f& jitter_offset,
+		float sharpening,
 		bool shall_reset,
 		NVSDK_NGX_Resource_VK& frame,
 		NVSDK_NGX_Resource_VK& depth,
@@ -736,6 +737,10 @@ public:
 		NVSDK_NGX_Resource_VK& exposure,
 		NVSDK_NGX_Resource_VK& output
 	) {
+		if (!m_sharpen && sharpening != 0.0f) {
+			throw std::runtime_error{"May only specify non-zero sharpening, when DlssFeature has been created with sharpen option."};
+		}
+
 		vk_command_buffer_begin();
 
 		NVSDK_NGX_VK_DLSS_Eval_Params dlss_params;
@@ -748,7 +753,7 @@ public:
 		dlss_params.pInExposureTexture = &exposure;
 		dlss_params.InJitterOffsetX = jitter_offset.x();
 		dlss_params.InJitterOffsetY = jitter_offset.y();
-		dlss_params.Feature.InSharpness = 0.0f;
+		dlss_params.Feature.InSharpness = sharpening;
 		dlss_params.InReset = shall_reset;
 		dlss_params.InMVScaleX = 1.0f;
 		dlss_params.InMVScaleY = 1.0f;
@@ -761,6 +766,10 @@ public:
 
 	bool is_hdr() const {
 		return m_is_hdr;
+	}
+
+	bool sharpen() const {
+		return m_sharpen;
 	}
 
 	EDlssQuality quality() const {
@@ -779,6 +788,7 @@ private:
 	NVSDK_NGX_Handle* m_ngx_dlss = {};
 	DlssFeatureSpecs m_specs;
 	bool m_is_hdr;
+	bool m_sharpen;
 };
 
 class Dlss : public IDlss {
@@ -798,10 +808,12 @@ public:
 		for (int i = 0; i < (int)EDlssQuality::NumDlssQualitySettings; ++i) {
 			try {
 				auto specs = dlss_feature_specs(out_resolution, (EDlssQuality)i);
-				auto feature_hdr = std::make_shared<DlssFeature>(specs, true);
-				auto feature_ldr = std::make_shared<DlssFeature>(specs, false);
 
-				// Only emplase the specs if the feature can be created in practice!
+				// Only emplace the specs if the feature can be created in practice!
+				DlssFeature{specs, true, true};
+				DlssFeature{specs, true, false};
+				DlssFeature{specs, false, true};
+				DlssFeature{specs, false, false};
 				m_dlss_specs.emplace_back(specs);
 			} catch (...) {}
 		}
@@ -815,6 +827,7 @@ public:
 	void run(
 		const Vector2i& in_resolution,
 		bool is_hdr,
+		float sharpening,
 		const Vector2f& jitter_offset,
 		bool shall_reset
 	) override {
@@ -833,13 +846,15 @@ public:
 			throw std::runtime_error{"Dlss::run called with invalid input resolution."};
 		}
 
-		if (!m_dlss_feature || m_dlss_feature->is_hdr() != is_hdr || m_dlss_feature->quality() != quality) {
-			m_dlss_feature.reset(new DlssFeature{m_out_resolution, is_hdr, quality});
+		bool sharpen = sharpening != 0.0f;
+		if (!m_dlss_feature || m_dlss_feature->is_hdr() != is_hdr || m_dlss_feature->sharpen() != sharpen || m_dlss_feature->quality() != quality) {
+			m_dlss_feature.reset(new DlssFeature{m_out_resolution, is_hdr, sharpen, quality});
 		}
 
 		m_dlss_feature->run(
 			in_resolution,
 			jitter_offset,
+			sharpening,
 			shall_reset,
 			m_frame_buffer.ngx_resource(),
 			m_depth_buffer.ngx_resource(),

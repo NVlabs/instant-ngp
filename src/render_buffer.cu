@@ -583,6 +583,7 @@ void CudaRenderBuffer::tonemap(float exposure, const Array4f& background_color, 
 		m_dlss->run(
 			res,
 			output_color_space == EColorSpace::Linear, /* HDR mode */
+			m_dlss_sharpening,
 			Vector2f::Constant(0.5f) - ld_random_pixel_offset(sample_index), /* jitter offset in [-0.5, 0.5] */
 			sample_index == 0 /* reset history */
 		);
