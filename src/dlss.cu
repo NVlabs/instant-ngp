@@ -131,9 +131,10 @@ void vulkan_and_ngx_init() {
 	}
 
 	instance_extensions.emplace_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+	instance_extensions.emplace_back(VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME);
+	instance_extensions.emplace_back(VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME);
 	instance_extensions.emplace_back(VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME);
 	instance_extensions.emplace_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-	instance_extensions.emplace_back(VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME);
 
 	for (uint32_t i = 0; i < n_ngx_device_extensions; ++i) {
 		device_extensions.emplace_back(ngx_device_extensions[i]);
