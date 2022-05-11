@@ -325,12 +325,13 @@ target_compile_definitions(testbed PUBLIC ${NGP_DEFINITIONS} ${TCNN_DEFINITIONS}
 if (Vulkan_FOUND)
 	if (MSVC)
 		add_custom_command(TARGET testbed POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/dev/nvngx_dlss.dll" $<TARGET_FILE_DIR:testbed>
+			COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/rel/nvngx_dlss.dll" $<TARGET_FILE_DIR:testbed>
 			COMMAND_EXPAND_LISTS
 		)
 	else()
+		file(GLOB DLSS_SOS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64/rel/libnvidia-ngx-dlss.so.*")
 		add_custom_command(TARGET testbed POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64/dev/libnvidia-ngx-dlss.so.2.4.0" $<TARGET_FILE_DIR:testbed>
+			COMMAND ${CMAKE_COMMAND} -E copy ${DLSS_SOS} $<TARGET_FILE_DIR:testbed>
 			COMMAND_EXPAND_LISTS
 		)
 	endif()
