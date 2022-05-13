@@ -65,6 +65,7 @@ std::string ngx_error_string(NVSDK_NGX_Result result) {
 	} while(0)
 
 static VkInstance vk_instance = VK_NULL_HANDLE;
+static VkDebugUtilsMessengerEXT vk_debug_messenger = VK_NULL_HANDLE;
 static VkPhysicalDevice vk_physical_device = VK_NULL_HANDLE;
 static VkDevice vk_device = VK_NULL_HANDLE;
 static VkQueue vk_queue = VK_NULL_HANDLE;
@@ -85,6 +86,23 @@ uint32_t vk_find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags propert
 	}
 
 	throw std::runtime_error{"Failed to find suitable memory type."};
+}
+
+static VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
+	VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+	VkDebugUtilsMessageTypeFlagsEXT message_type,
+	const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+	void* user_data
+) {
+	if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+		tlog::error() << "Vulkan: " << callback_data->pMessage;
+	} else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+		tlog::warning() << "Vulkan: " << callback_data->pMessage;
+	} else {
+		tlog::info() << "Vulkan: " << callback_data->pMessage;
+	}
+
+	return VK_FALSE;
 }
 
 void vulkan_and_ngx_init() {
@@ -115,6 +133,32 @@ void vulkan_and_ngx_init() {
 	instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	instance_create_info.pApplicationInfo = &app_info;
 
+	uint32_t available_layer_count;
+	vkEnumerateInstanceLayerProperties(&available_layer_count, nullptr);
+
+	std::vector<VkLayerProperties> available_layers(available_layer_count);
+	vkEnumerateInstanceLayerProperties(&available_layer_count, available_layers.data());
+
+	std::vector<const char*> layers;
+	auto try_add_layer = [&](const char* layer) {
+		for (const auto& props : available_layers) {
+			if (strcmp(layer, props.layerName)) {
+				layers.emplace_back(layer);
+				return true;
+			}
+		}
+
+		return false;
+	};
+
+	bool validation_layer_enabled = try_add_layer("VK_LAYER_KHRONOS_validation");
+	if (!validation_layer_enabled) {
+		tlog::warning() << "Vulkan validation layer is not available. Vulkan errors will be difficult to diagnose.";
+	}
+
+	instance_create_info.enabledLayerCount = static_cast<uint32_t>(layers.size());
+	instance_create_info.ppEnabledLayerNames = layers.empty() ? nullptr : layers.data();
+
 	std::vector<const char*> instance_extensions;
 	std::vector<const char*> device_extensions;
 
@@ -130,11 +174,14 @@ void vulkan_and_ngx_init() {
 		instance_extensions.emplace_back(ngx_instance_extensions[i]);
 	}
 
-	instance_extensions.emplace_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
 	instance_extensions.emplace_back(VK_KHR_DEVICE_GROUP_CREATION_EXTENSION_NAME);
 	instance_extensions.emplace_back(VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME);
 	instance_extensions.emplace_back(VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME);
 	instance_extensions.emplace_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+
+	if (validation_layer_enabled) {
+		instance_extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+	}
 
 	for (uint32_t i = 0; i < n_ngx_device_extensions; ++i) {
 		device_extensions.emplace_back(ngx_device_extensions[i]);
@@ -151,13 +198,33 @@ void vulkan_and_ngx_init() {
 	instance_create_info.enabledExtensionCount = (uint32_t)instance_extensions.size();
 	instance_create_info.ppEnabledExtensionNames = instance_extensions.data();
 
-	const std::vector<const char*> validation_layers = {
-		"VK_LAYER_KHRONOS_validation"
-	};
-	instance_create_info.enabledLayerCount = static_cast<uint32_t>(validation_layers.size());
-	instance_create_info.ppEnabledLayerNames = validation_layers.data();
+	VkDebugUtilsMessengerCreateInfoEXT debug_messenger_create_info = {};
+	debug_messenger_create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+	debug_messenger_create_info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+	debug_messenger_create_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+	debug_messenger_create_info.pfnUserCallback = vk_debug_callback;
+	debug_messenger_create_info.pUserData = nullptr;
+
+	if (validation_layer_enabled) {
+		instance_create_info.pNext = &debug_messenger_create_info;
+	}
 
 	VK_CHECK_THROW(vkCreateInstance(&instance_create_info, nullptr, &vk_instance));
+
+	if (validation_layer_enabled) {
+		auto CreateDebugUtilsMessengerEXT = [](VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
+			auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+			if (func != nullptr) {
+				return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
+			} else {
+				return VK_ERROR_EXTENSION_NOT_PRESENT;
+			}
+		};
+
+		if (CreateDebugUtilsMessengerEXT(vk_instance, &debug_messenger_create_info, nullptr, &vk_debug_messenger) != VK_SUCCESS) {
+			tlog::warning() << "Vulkan: could not initialize debug messenger.";
+		}
+	}
 
 	// -------------------------------
 	// Vulkan Physical Device
@@ -268,8 +335,8 @@ void vulkan_and_ngx_init() {
 	device_create_info.pEnabledFeatures = &device_features;
 	device_create_info.enabledExtensionCount = (uint32_t)device_extensions.size();
 	device_create_info.ppEnabledExtensionNames = device_extensions.data();
-	device_create_info.enabledLayerCount = static_cast<uint32_t>(validation_layers.size());
-	device_create_info.ppEnabledLayerNames = validation_layers.data();
+	device_create_info.enabledLayerCount = static_cast<uint32_t>(layers.size());
+	device_create_info.ppEnabledLayerNames = layers.data();
 
 	VkPhysicalDeviceBufferDeviceAddressFeaturesEXT buffer_device_address_feature = {};
 	buffer_device_address_feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT;
@@ -942,6 +1009,17 @@ void vulkan_and_ngx_destroy() {
 
 	if (vk_device) {
 		vkDestroyDevice(vk_device, nullptr);
+	}
+
+	if (vk_debug_messenger) {
+		auto DestroyDebugUtilsMessengerEXT = [](VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {
+			auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+			if (func != nullptr) {
+				func(instance, debugMessenger, pAllocator);
+			}
+		};
+
+		DestroyDebugUtilsMessengerEXT(vk_instance, vk_debug_messenger, nullptr);
 	}
 
 	if (vk_instance) {
