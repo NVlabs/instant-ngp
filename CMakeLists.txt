@@ -111,7 +111,11 @@ if (NGP_BUILD_WITH_GUI)
 			include_directories("dependencies/dlss/include")
 			if (MSVC)
 				link_directories("${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/x86_64")
-				set(NGP_LIBRARIES ${NGP_LIBRARIES} nvsdk_ngx_d)
+				if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+					set(NGP_LIBRARIES ${NGP_LIBRARIES} nvsdk_ngx_d_dbg)
+				else()
+					set(NGP_LIBRARIES ${NGP_LIBRARIES} nvsdk_ngx_d)
+				endif()
 			else()
 				link_directories("${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64")
 				set(NGP_LIBRARIES ${NGP_LIBRARIES} nvsdk_ngx)
@@ -323,13 +327,19 @@ target_compile_definitions(testbed PUBLIC ${NGP_DEFINITIONS} ${TCNN_DEFINITIONS}
 
 # Copy DLSS shared libraries
 if (Vulkan_FOUND)
+	if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+		set(NGX_BUILD_DIR "dev")
+	else()
+		set(NGX_BUILD_DIR "rel")
+	endif()
+
 	if (MSVC)
 		add_custom_command(TARGET testbed POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/rel/nvngx_dlss.dll" $<TARGET_FILE_DIR:testbed>
+			COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/${NGX_BUILD_DIR}/nvngx_dlss.dll" $<TARGET_FILE_DIR:testbed>
 			COMMAND_EXPAND_LISTS
 		)
 	else()
-		file(GLOB DLSS_SOS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64/rel/libnvidia-ngx-dlss.so.*")
+		file(GLOB DLSS_SOS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64/${NGX_BUILD_DIR}/libnvidia-ngx-dlss.so.*")
 		add_custom_command(TARGET testbed POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E copy ${DLSS_SOS} $<TARGET_FILE_DIR:testbed>
 			COMMAND_EXPAND_LISTS
