@@ -51,7 +51,7 @@ See [nerf_loader.cu](src/nerf_loader.cu) for implementation details and addition
 
 ## Preparing new NeRF datasets
 
-Make sure that you have installed [COLMAP](https://colmap.github.io/) and that it is available in your PATH. If you are using a video file as input, also be sure to install [FFmpeg](https://www.ffmpeg.org/) and make sure that it is available in your PATH.
+Make sure that you have installed [COLMAP](https://colmap.github.io/) and that both its `bin` and `lib` folder are available in your PATH. If you are using a video file as input, also be sure to install [FFmpeg](https://www.ffmpeg.org/) and make sure that it is available in your PATH.
 To check that this is the case, from a terminal window, you should be able to run `colmap` and `ffmpeg -?` and see some help text from each.
 
 If you are training from a video file, run the [scripts/colmap2nerf.py](/scripts/colmap2nerf.py) script from the folder containing the video, with the following recommended parameters:
