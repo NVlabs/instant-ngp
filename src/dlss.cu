@@ -37,6 +37,9 @@ static_assert(false, "DLSS can only be compiled when both Vulkan and GUI support
 #include <nvsdk_ngx_helpers.h>
 #include <nvsdk_ngx_helpers_vk.h>
 
+#include <codecvt>
+#include <locale>
+
 using namespace Eigen;
 using namespace tcnn;
 namespace fs = filesystem;
@@ -53,7 +56,8 @@ NGP_NAMESPACE_BEGIN
 
 std::string ngx_error_string(NVSDK_NGX_Result result) {
 	std::wstring wstr = GetNGXResultAsString(result);
-	return std::string(std::begin(wstr), std::end(wstr));
+	std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> converter;
+	return converter.to_bytes(wstr);
 };
 
 /// Checks the result of a NVSDK_NGX_XXXXXX call and throws an error on failure
@@ -377,7 +381,8 @@ void vulkan_and_ngx_init() {
 	path = fs::path::getcwd().wstr();
 #else
 	std::string tmp = fs::path::getcwd().str();
-	path = std::wstring(tmp.begin(), tmp.end());
+	std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> converter;
+	path = converter.from_bytes(tmp);
 #endif
 
 	NGX_CHECK_THROW(NVSDK_NGX_VULKAN_Init_with_ProjectID("ea75345e-5a42-4037-a5c9-59bf94dee157", NVSDK_NGX_ENGINE_TYPE_CUSTOM, "1.0.0", path.c_str(), vk_instance, vk_physical_device, vk_device));
