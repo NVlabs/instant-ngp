@@ -22,6 +22,7 @@
 #include <filesystem/path.h>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
+
 #include <stb_image/stb_image_write.h>
 #include <stdarg.h>
 
@@ -53,7 +54,30 @@ Vector3i get_marching_cubes_res(uint32_t res_1d, const BoundingBox &aabb) {
 }
 
 #ifdef NGP_GUI
-static bool check_shader(GLuint handle, const char* desc, bool program) {
+
+void glCheckError(const char* file, unsigned int line) {
+  GLenum errorCode = glGetError();
+  while (errorCode != GL_NO_ERROR) {
+    std::string fileString(file);
+    std::string error = "unknown error";
+    // clang-format off
+    switch (errorCode) {
+      case GL_INVALID_ENUM:      error = "GL_INVALID_ENUM"; break;
+      case GL_INVALID_VALUE:     error = "GL_INVALID_VALUE"; break;
+      case GL_INVALID_OPERATION: error = "GL_INVALID_OPERATION"; break;
+      case GL_STACK_OVERFLOW:    error = "GL_STACK_OVERFLOW"; break;
+      case GL_STACK_UNDERFLOW:   error = "GL_STACK_UNDERFLOW"; break;
+      case GL_OUT_OF_MEMORY:     error = "GL_OUT_OF_MEMORY"; break;
+    }
+    // clang-format on
+
+    tlog::error() << "OpenglError : file=" << file << " line=" << line << " error:" << error;
+    errorCode = glGetError();
+  }
+}
+
+
+bool check_shader(GLuint handle, const char* desc, bool program) {
 	GLint status = 0, log_length = 0;
 	if (program) {
 		glGetProgramiv(handle, GL_LINK_STATUS, &status);
@@ -78,9 +102,9 @@ static bool check_shader(GLuint handle, const char* desc, bool program) {
 	return (GLboolean)status == GL_TRUE;
 }
 
-static GLuint compile_shader(bool pixel, const char* code) {
+GLuint compile_shader(bool pixel, const char* code) {
 	GLuint g_VertHandle = glCreateShader(pixel ? GL_FRAGMENT_SHADER : GL_VERTEX_SHADER );
-	const char* glsl_version = "#version 330";
+	const char* glsl_version = "#version 330\n";
 	const GLchar* strings[2] = { glsl_version, code};
 	glShaderSource(g_VertHandle, 2, strings, NULL);
 	glCompileShader(g_VertHandle);
@@ -105,6 +129,7 @@ void draw_mesh_gl(
 	if (verts.size() == 0 || indices.size() == 0 || mesh_render_mode == 0) {
 		return;
 	}
+
 	static GLuint vs = 0, ps = 0, program = 0, VAO = 0, VBO[3] = {}, els = 0, vbosize = 0, elssize = 0;
 	if (!VAO) {
 		glGenVertexArrays(1, &VAO);
@@ -169,6 +194,7 @@ void main()
 	p.xy *= vec2(2.0, -2.0) * f.xy / vec2(res.xy);
 	p.w = p.z;
 	p.z = p.z - 0.1;
+	p.xy += cen * p.w;
 	if (mode == 2) {
 		vtxcol = normalize(nor) * 0.5 + vec3(0.5); // visualize vertex normals
 	} else {
@@ -206,7 +232,7 @@ void main() {
 	glUseProgram(program);
 	glUniformMatrix4fv(glGetUniformLocation(program, "camera"), 1, GL_FALSE, (GLfloat*)&world2view);
 	glUniform2f(glGetUniformLocation(program, "f"), focal_length.x(), focal_length.y());
-	glUniform2f(glGetUniformLocation(program, "cen"), screen_center.x(), screen_center.y());
+	glUniform2f(glGetUniformLocation(program, "cen"), screen_center.x()*2.f-1.f, screen_center.y()*-2.f+1.f);
 	glUniform2i(glGetUniformLocation(program, "res"), resolution.x(), resolution.y());
 	glUniform1i(glGetUniformLocation(program, "mode"), mesh_render_mode);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, els);
