@@ -338,10 +338,14 @@ void vulkan_and_ngx_init() {
 	device_create_info.enabledLayerCount = static_cast<uint32_t>(layers.size());
 	device_create_info.ppEnabledLayerNames = layers.data();
 
+#ifdef VK_EXT_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME
 	VkPhysicalDeviceBufferDeviceAddressFeaturesEXT buffer_device_address_feature = {};
 	buffer_device_address_feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT;
 	buffer_device_address_feature.bufferDeviceAddress = VK_TRUE;
 	device_create_info.pNext = &buffer_device_address_feature;
+#else
+	throw std::runtime_error{"Buffer device address extension not available."};
+#endif
 
 	VK_CHECK_THROW(vkCreateDevice(vk_physical_device, &device_create_info, nullptr, &vk_device));
 
