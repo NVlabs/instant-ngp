@@ -43,7 +43,7 @@
 				"degree": 4
 			},
 			{
-				"otype": "SphericalHarmonics",
+				"otype": "Identity",
 				"n_bins": 4,
 				"degree": 4
 			}
@@ -102,3 +102,4 @@
 		}
 	}
 }
+
