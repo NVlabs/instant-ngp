@@ -93,41 +93,37 @@ if (NGP_BUILD_WITH_GUI)
 	##########
 	# Vulkan #
 	##########
-	if (CUDA_VERSION VERSION_GREATER_EQUAL 11.0)
-		find_package(Vulkan)
-		if (Vulkan_FOUND)
-			list(APPEND NGP_DEFINITIONS -DNGP_VULKAN -DGLFW_INCLUDE_VULKAN)
-			include_directories("${Vulkan_INCLUDE_DIRS}")
-			set(NGP_LIBRARIES ${NGP_LIBRARIES} ${Vulkan_LIBRARIES})
+	find_package(Vulkan)
+	if (Vulkan_FOUND)
+		list(APPEND NGP_DEFINITIONS -DNGP_VULKAN -DGLFW_INCLUDE_VULKAN)
+		include_directories("${Vulkan_INCLUDE_DIRS}")
+		set(NGP_LIBRARIES ${NGP_LIBRARIES} ${Vulkan_LIBRARIES})
 
-			set(GUI_SOURCES
-				${GUI_SOURCES}
-				src/dlss.cu
-			)
+		set(GUI_SOURCES
+			${GUI_SOURCES}
+			src/dlss.cu
+		)
 
-			#############################################
-			# DLSS (depends on vulkan, so appears here) #
-			#############################################
-			include_directories("dependencies/dlss/include")
-			if (MSVC)
-				link_directories("${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/x86_64")
-				if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-					set(NGP_LIBRARIES ${NGP_LIBRARIES} nvsdk_ngx_d_dbg)
-				else()
-					set(NGP_LIBRARIES ${NGP_LIBRARIES} nvsdk_ngx_d)
-				endif()
+		#############################################
+		# DLSS (depends on vulkan, so appears here) #
+		#############################################
+		include_directories("dependencies/dlss/include")
+		if (MSVC)
+			link_directories("${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/x86_64")
+			if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+				set(NGP_LIBRARIES ${NGP_LIBRARIES} nvsdk_ngx_d_dbg)
 			else()
-				link_directories("${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64")
-				set(NGP_LIBRARIES ${NGP_LIBRARIES} nvsdk_ngx)
+				set(NGP_LIBRARIES ${NGP_LIBRARIES} nvsdk_ngx_d)
 			endif()
 		else()
-			message(WARNING
-				"Vulkan was not found. Neural graphics primitives will still compile "
-				"and run correctly, but DLSS will not be supported."
-			)
+			link_directories("${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64")
+			set(NGP_LIBRARIES ${NGP_LIBRARIES} nvsdk_ngx)
 		endif()
 	else()
-		message(WARNING "CUDA version too old for DLSS support. Requires CUDA 11.X")
+		message(WARNING
+			"Vulkan was not found. Neural graphics primitives will still compile "
+			"and run correctly, but DLSS will not be supported."
+		)
 	endif()
 
 	########
