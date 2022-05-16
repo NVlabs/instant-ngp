@@ -105,7 +105,7 @@ Alternatively, download any NeRF-compatible scene (e.g. from the [NeRF authors' 
 Now you can run:
 
 ```sh
-instant-ngp$ ./build/testbed --scene data/nerf_synthetic/lego/transforms_train.json
+instant-ngp$ ./build/testbed --scene data/nerf/lego/transforms_train.json
 ```
 
 **[To prepare your own dataset for use with our NeRF implementation, click here.](docs/nerf_dataset_tips.md)**
