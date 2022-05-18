@@ -34,7 +34,7 @@ sudo apt-get install build-essential git python3-dev python3-pip libopenexr-dev 
 
 Alternatively, if you are using Arch or Arch derivatives, install the following packages
 ```sh
-sudo pacman -S base-devel cmake openexr libxi glfw openmp libxinerama livxcursor
+sudo pacman -S base-devel cmake openexr libxi glfw openmp libxinerama libxcursor
 ```
 
 We also recommend installing [CUDA](https://developer.nvidia.com/cuda-toolkit) and [OptiX](https://developer.nvidia.com/optix) in `/usr/local/` and adding the CUDA installation to your PATH.
