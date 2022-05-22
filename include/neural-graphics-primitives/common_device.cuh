@@ -555,7 +555,7 @@ inline __host__ __device__ Eigen::Array3f hsv_to_rgb(const Eigen::Array3f& hsv) 
 		return Eigen::Array3f::Constant(v);
 	}
 
-	h = std::fmodf(h, 1.0f) * 6.0f;
+	h = fmodf(h, 1.0f) * 6.0f;
 	int i = (int)h;
 	float f = h - (float)i;
 	float p = v * (1.0f - s);
