@@ -45,7 +45,7 @@ NGP_NAMESPACE_BEGIN
 
 inline constexpr __device__ float NERF_RENDERING_NEAR_DISTANCE() { return 0.05f; }
 inline constexpr __device__ uint32_t NERF_STEPS() { return 1024; } // finest number of steps per unit length
-inline constexpr __device__ uint32_t NERF_CASCADES() { return 5; }
+inline constexpr __device__ uint32_t NERF_CASCADES() { return 8; }
 
 inline constexpr __device__ float SQRT3() { return 1.73205080757f; }
 inline constexpr __device__ float STEPSIZE() { return (SQRT3() / NERF_STEPS()); } // for nerf raymarch
