@@ -99,7 +99,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
 	void* user_data
 ) {
 	if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-		tlog::error() << "Vulkan: " << callback_data->pMessage;
+		tlog::warning() << "Vulkan error: " << callback_data->pMessage;
 	} else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
 		tlog::warning() << "Vulkan: " << callback_data->pMessage;
 	} else {
