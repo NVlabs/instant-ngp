@@ -156,19 +156,16 @@ __global__ void volume_generate_training_data_kernel(uint32_t n_elements,
 	}
 }
 
-void Testbed::train_volume(size_t target_batch_size, size_t n_steps, cudaStream_t stream) {
+void Testbed::train_volume(size_t target_batch_size, bool get_loss_scalar, cudaStream_t stream) {
 	const uint32_t n_output_dims = 4;
 	const uint32_t n_input_dims = 3;
 
 	// Auxiliary matrices for training
 	const uint32_t batch_size = (uint32_t)target_batch_size;
-	const uint32_t n_batches = (uint32_t)n_steps;
-
-	const uint32_t GRAPH_SIZE = (uint32_t)std::min((size_t)16, n_steps);
 
 	// Permute all training records to de-correlate training data
 
-	const uint32_t n_elements = batch_size * n_batches;
+	const uint32_t n_elements = batch_size;
 	m_volume.training.positions.enlarge(n_elements);
 	m_volume.training.targets.enlarge(n_elements);
 
@@ -194,28 +191,16 @@ void Testbed::train_volume(size_t target_batch_size, size_t n_steps, cudaStream_
 		);
 	m_rng.advance(n_elements*256);
 
-	float total_loss = 0;
-	uint32_t n_loss_samples = 0;
+	GPUMatrix<float> training_batch_matrix((float*)(m_volume.training.positions.data()), n_input_dims, batch_size);
+	GPUMatrix<float> training_target_matrix((float*)(m_volume.training.targets.data()), n_output_dims, batch_size);
 
-	for (size_t i = 0; i < n_steps; i += GRAPH_SIZE) {
-		for (uint32_t j = 0; j < GRAPH_SIZE; ++j) {
-			uint32_t training_offset = (uint32_t)((i+j) % n_batches) * batch_size;
+	auto ctx = m_trainer->training_step(stream, training_batch_matrix, training_target_matrix);
 
-			GPUMatrix<float> training_batch_matrix((float*)(m_volume.training.positions.data()+training_offset), n_input_dims, batch_size);
-			GPUMatrix<float> training_target_matrix((float*)(m_volume.training.targets.data()+training_offset), n_output_dims, batch_size);
+	m_training_step++;
 
-			auto ctx = m_trainer->training_step(stream, training_batch_matrix, training_target_matrix);
-			if (j == (GRAPH_SIZE - 1)) {
-				total_loss += m_trainer->loss(stream, *ctx);
-				++n_loss_samples;
-			}
-
-			m_training_step++;
-		}
+	if (get_loss_scalar) {
+		m_loss_scalar.update(m_trainer->loss(stream, *ctx));
 	}
-
-	m_loss_scalar = total_loss / (float)n_loss_samples;
-	update_loss_graph();
 }
 
 __global__ void init_rays_volume(
@@ -227,6 +212,7 @@ __global__ void init_rays_volume(
 	Vector2f focal_length,
 	Matrix<float, 3, 4> camera_matrix,
 	Vector2f screen_center,
+	Vector3f parallax_shift,
 	bool snap_to_pixel_centers,
 	BoundingBox aabb,
 	float plane_z,
@@ -253,7 +239,7 @@ __global__ void init_rays_volume(
 	if (plane_z < 0) {
 		dof = 0.0;
 	}
-	Ray ray = pixel_to_ray(sample_index, {x, y}, resolution, focal_length, camera_matrix, screen_center, snap_to_pixel_centers, plane_z, dof);
+	Ray ray = pixel_to_ray(sample_index, {x, y}, resolution, focal_length, camera_matrix, screen_center, parallax_shift, snap_to_pixel_centers, plane_z, dof);
 	ray.d = ray.d.normalized();
 	auto box_intersection = aabb.ray_intersect(ray.o, ray.d);
 	float t = max(box_intersection.x(), 0.0f);
@@ -434,6 +420,7 @@ void Testbed::render_volume(CudaRenderBuffer& render_buffer,
 		focal_length,
 		camera_matrix,
 		screen_center,
+		get_scaled_parallax_shift(),
 		m_snap_to_pixel_centers,
 		m_render_aabb,
 		plane_z,

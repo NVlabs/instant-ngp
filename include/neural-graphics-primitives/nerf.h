@@ -75,28 +75,30 @@ struct NerfDirection {
 
 struct NerfCoordinate {
 	NGP_HOST_DEVICE NerfCoordinate(const Eigen::Vector3f& pos, const Eigen::Vector3f& dir, float dt) : pos{pos, dt}, dt{dt}, dir{dir, dt} {}
-	NGP_HOST_DEVICE void set_with_optional_light_dir(const Eigen::Vector3f& pos, const Eigen::Vector3f& dir, float dt, const Eigen::Vector3f& light_dir, uint32_t stride_in_bytes) {
+	NGP_HOST_DEVICE void set_with_optional_extra_dims(const Eigen::Vector3f& pos, const Eigen::Vector3f& dir, float dt, const float* extra_dims, uint32_t stride_in_bytes) {
 		this->dt = dt;
 		this->pos = NerfPosition(pos, dt);
 		this->dir = NerfDirection(dir, dt);
-		if (stride_in_bytes >= sizeof(Eigen::Vector3f) + sizeof(NerfCoordinate)) {
-			*(Eigen::Vector3f*)(this+1) = light_dir;
-		}
+		copy_extra_dims(extra_dims, stride_in_bytes);
 	}
-	NGP_HOST_DEVICE void copy_with_optional_light_dir(const NerfCoordinate& inp, uint32_t stride_in_bytes) {
+	inline NGP_HOST_DEVICE const float* get_extra_dims() const { return (const float*)(this + 1); }
+	inline NGP_HOST_DEVICE float* get_extra_dims() { return (float*)(this + 1); }
+
+	NGP_HOST_DEVICE void copy(const NerfCoordinate& inp, uint32_t stride_in_bytes) {
 		*this = inp;
-		if (stride_in_bytes >= sizeof(Eigen::Vector3f) + sizeof(NerfCoordinate)) {
-			*(Eigen::Vector3f*)(this+1) = *(Eigen::Vector3f*)(&inp+1);
+		copy_extra_dims(inp.get_extra_dims(), stride_in_bytes);
+	}
+	NGP_HOST_DEVICE inline void copy_extra_dims(const float *extra_dims, uint32_t stride_in_bytes) {
+		if (stride_in_bytes >= sizeof(NerfCoordinate)) {
+			float* dst = get_extra_dims();
+			const uint32_t n_extra = (stride_in_bytes - sizeof(NerfCoordinate)) / sizeof(float);
+			for (uint32_t i = 0; i < n_extra; ++i) dst[i] = extra_dims[i];
 		}
 	}
 
 	NerfPosition pos;
 	float dt;
 	NerfDirection dir;
-};
-
-struct NerfCoordinateWithLightDir : NerfCoordinate {
-	Eigen::Vector3f light_dir;
 };
 
 NGP_NAMESPACE_END
