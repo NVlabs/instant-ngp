@@ -20,6 +20,8 @@ if (NOT NGP_DEPLOY)
 endif()
 
 option(NGP_BUILD_WITH_GUI "Build with GUI support (requires GLFW and GLEW)?" ON)
+option(NGP_BUILD_WITH_VULKAN "Build with Vulkan to enable DLSS support?" ON)
+option(NGP_BUILD_WITH_OPTIX "Build with OptiX to enable hardware ray tracing?" ON)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
@@ -94,7 +96,8 @@ if (NGP_BUILD_WITH_GUI)
 	# Vulkan #
 	##########
 	find_package(Vulkan)
-	if (Vulkan_FOUND)
+	if (Vulkan_FOUND AND NGP_BUILD_WITH_VULKAN)
+		set(NGP_VULKAN ON)
 		list(APPEND NGP_DEFINITIONS -DNGP_VULKAN -DGLFW_INCLUDE_VULKAN)
 		include_directories("${Vulkan_INCLUDE_DIRS}")
 		set(NGP_LIBRARIES ${NGP_LIBRARIES} ${Vulkan_LIBRARIES})
@@ -120,10 +123,13 @@ if (NGP_BUILD_WITH_GUI)
 			set(NGP_LIBRARIES ${NGP_LIBRARIES} nvsdk_ngx)
 		endif()
 	else()
-		message(WARNING
-			"Vulkan was not found. Neural graphics primitives will still compile "
-			"and run correctly, but DLSS will not be supported."
-		)
+		set(NGP_VULKAN OFF)
+		if (NGP_BUILD_WITH_VULKAN)
+			message(WARNING
+				"Vulkan was not found. Neural graphics primitives will still compile "
+				"and run correctly, but DLSS will not be supported."
+			)
+		endif()
 	endif()
 
 	########
@@ -208,15 +214,19 @@ endif()
 find_package(OptiX)
 # set OptiX_INSTALL_DIR via your environment if it's not found automatically
 
-if (OptiX_FOUND OR OptiX_INCLUDE)
+if ((OptiX_FOUND OR OptiX_INCLUDE) AND NGP_BUILD_WITH_OPTIX)
+	set(NGP_OPTIX ON)
 	include_directories("${OptiX_INCLUDE}")
 	list(APPEND NGP_DEFINITIONS -DNGP_OPTIX)
 else()
-	message(WARNING
-		"OptiX was not found. Neural graphics primitives will still compile "
-		"and run correctly. However, SDF training in 'raystab' and 'pathescape' "
-		"modes will be significantly slower."
-	)
+	set(NGP_OPTIX OFF)
+	if (NGP_BUILD_WITH_OPTIX)
+		message(WARNING
+			"OptiX was not found. Neural graphics primitives will still compile "
+			"and run correctly. However, SDF training in 'raystab' and 'pathescape' "
+			"modes will be significantly slower."
+		)
+	endif()
 endif()
 
 ##########
@@ -267,7 +277,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR})
 
 get_filename_component(CUDA_COMPILER_BIN "${CMAKE_CUDA_COMPILER}" DIRECTORY)
 
-if (OptiX_FOUND OR OptiX_INCLUDE)
+if (NGP_OPTIX)
 	add_library(optix_program OBJECT
 		src/optix/pathescape.cu
 		src/optix/raystab.cu
@@ -322,7 +332,7 @@ target_compile_options(testbed PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:${CUDA_NVCC_FL
 target_compile_definitions(testbed PUBLIC ${NGP_DEFINITIONS} ${TCNN_DEFINITIONS})
 
 # Copy DLSS shared libraries
-if (Vulkan_FOUND)
+if (NGP_VULKAN)
 	if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 		set(NGX_BUILD_DIR "dev")
 	else()
