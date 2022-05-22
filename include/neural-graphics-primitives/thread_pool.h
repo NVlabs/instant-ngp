@@ -37,7 +37,7 @@ public:
     ThreadPool(size_t maxNumThreads, bool force = false);
     virtual ~ThreadPool();
 
-    template<class F>
+    template <class F>
     auto enqueueTask(F&& f, bool highPriority = false) -> std::future<std::result_of_t <F()>> {
         using return_type = std::result_of_t<F()>;
 

@@ -27,6 +27,7 @@ NGP_NAMESPACE_BEGIN
 
 using precision_t = tcnn::network_precision_t;
 
+
 inline __host__ __device__ float srgb_to_linear(float srgb) {
 	if (srgb <= 0.04045f) {
 		return srgb / 12.92f;
@@ -227,17 +228,18 @@ inline __host__ __device__ Eigen::Matrix<float, 3, 4> get_xform_given_rolling_sh
 	return training_xform.start + (training_xform.end - training_xform.start) * pixel_t;
 }
 
-inline __host__ __device__ Eigen::Vector3f f_theta_undistortion(const Eigen::Vector2f &uv, const Eigen::Vector2f &screen_center, const CameraDistortion& camera_distortion, const Eigen::Vector3f& error_direction) {
-	// we take f_theta intrinsics to be: resx, resy, r0, r1, r2, r3; we rescale to whatever res the intrinsics specify.
-	float xpix = (uv.x() - screen_center.x()) * camera_distortion.params[5];
-	float ypix = (uv.y() - screen_center.y()) * camera_distortion.params[6];
+inline __host__ __device__ Eigen::Vector3f f_theta_undistortion(const Eigen::Vector2f& uv, const float* params, const Eigen::Vector3f& error_direction) {
+	// we take f_theta intrinsics to be: r0, r1, r2, r3, resx, resy; we rescale to whatever res the intrinsics specify.
+	float xpix = uv.x() * params[5];
+	float ypix = uv.y() * params[6];
 	float norm = sqrtf(xpix*xpix + ypix*ypix);
-	float alpha = camera_distortion.params[0] + norm * (camera_distortion.params[1] + norm * (camera_distortion.params[2] + norm * (camera_distortion.params[3] + norm * camera_distortion.params[4])));
+	float alpha = params[0] + norm * (params[1] + norm * (params[2] + norm * (params[3] + norm * params[4])));
 	float sin_alpha, cos_alpha;
 	sincosf(alpha, &sin_alpha, &cos_alpha);
-	if (cos_alpha <= std::numeric_limits<float>::min() || norm == 0.f)
+	if (cos_alpha <= std::numeric_limits<float>::min() || norm == 0.f) {
 		return error_direction;
-	sin_alpha *= 1.f/norm;
+	}
+	sin_alpha *= 1.f / norm;
 	return { sin_alpha * xpix, sin_alpha * ypix, cos_alpha };
 }
 
@@ -248,6 +250,7 @@ inline __host__ __device__ Ray pixel_to_ray(
 	const Eigen::Vector2f& focal_length,
 	const Eigen::Matrix<float, 3, 4>& camera_matrix,
 	const Eigen::Vector2f& screen_center,
+	const Eigen::Vector3f& parallax_shift,
 	bool snap_to_pixel_centers = false,
 	float focus_z = 1.0f,
 	float dof = 0.0f,
@@ -260,7 +263,7 @@ inline __host__ __device__ Ray pixel_to_ray(
 
 	Eigen::Vector3f dir;
 	if (camera_distortion.mode == ECameraDistortionMode::FTheta) {
-		dir = f_theta_undistortion(uv, screen_center, camera_distortion, {1000.f, 0.f, 0.f});
+		dir = f_theta_undistortion(uv - screen_center, camera_distortion.params, {1000.f, 0.f, 0.f});
 		if (dir.x() == 1000.f) {
 			return {{1000.f, 0.f, 0.f}, {0.f, 0.f, 1.f}}; // return a point outside the aabb so the pixel is not rendered
 		}
@@ -278,9 +281,11 @@ inline __host__ __device__ Ray pixel_to_ray(
 		dir.head<2>() += read_image<2>(distortion_data, distortion_resolution, uv);
 	}
 
+	Eigen::Vector3f head_pos = {parallax_shift.x(), parallax_shift.y(), 0.f};
+	dir -= head_pos / parallax_shift.z(); // we could use focus_z here in the denominator. for now, we pack m_scale in here.
 	dir = camera_matrix.block<3, 3>(0, 0) * dir;
 
-	Eigen::Vector3f origin = camera_matrix.col(3);
+	Eigen::Vector3f origin = camera_matrix.block<3, 3>(0, 0) * head_pos + camera_matrix.col(3);
 	if (dof == 0.0f) {
 		return {origin, dir};
 	}
@@ -299,14 +304,17 @@ inline __host__ __device__ Eigen::Vector2f pos_to_pixel(
 	const Eigen::Vector2f& focal_length,
 	const Eigen::Matrix<float, 3, 4>& camera_matrix,
 	const Eigen::Vector2f& screen_center,
+	const Eigen::Vector3f& parallax_shift,
 	const CameraDistortion& camera_distortion = {}
 ) {
 	// Express ray in terms of camera frame
-	Eigen::Vector3f origin = camera_matrix.col(3);
+	Eigen::Vector3f head_pos = {parallax_shift.x(), parallax_shift.y(), 0.f};
+	Eigen::Vector3f origin = camera_matrix.block<3, 3>(0, 0) * head_pos + camera_matrix.col(3);
 
 	Eigen::Vector3f dir = pos - origin;
 	dir = camera_matrix.block<3, 3>(0, 0).inverse() * dir;
 	dir /= dir.z();
+	dir += head_pos / parallax_shift.z();
 
 	if (camera_distortion.mode == ECameraDistortionMode::Iterative) {
 		float du, dv;
@@ -331,11 +339,11 @@ inline __host__ __device__ Eigen::Vector2f motion_vector_3d(
 	const Eigen::Matrix<float, 3, 4>& camera,
 	const Eigen::Matrix<float, 3, 4>& prev_camera,
 	const Eigen::Vector2f& screen_center,
+	const Eigen::Vector3f& parallax_shift,
 	const bool snap_to_pixel_centers,
 	const float depth,
 	const CameraDistortion& camera_distortion = {}
 ) {
-	// Get 3D pos of the given pixel in the current camera frame
 	Ray ray = pixel_to_ray(
 		sample_index,
 		pixel,
@@ -343,6 +351,7 @@ inline __host__ __device__ Eigen::Vector2f motion_vector_3d(
 		focal_length,
 		camera,
 		screen_center,
+		parallax_shift,
 		snap_to_pixel_centers,
 		1.0f,
 		0.0f,
@@ -357,6 +366,7 @@ inline __host__ __device__ Eigen::Vector2f motion_vector_3d(
 		focal_length,
 		prev_camera,
 		screen_center,
+		parallax_shift,
 		camera_distortion
 	);
 
@@ -416,7 +426,6 @@ inline __host__ __device__ Eigen::Vector2f motion_vector_2d(
 	const Eigen::Vector2f& prev_image_pos,
 	const bool snap_to_pixel_centers
 ) {
-	// Get 3D pos of the given pixel in the current camera frame
 	Eigen::Vector2f uv = pixel_to_image_uv(
 		sample_index,
 		pixel,
@@ -508,6 +517,7 @@ inline __host__ __device__ Eigen::Vector3f faceforward(const Eigen::Vector3f& n,
 	return n * copysignf(1.0f, i.dot(nref));
 }
 
+
 template <typename T>
 __global__ void from_rgba32(const uint64_t num_pixels, const uint8_t* __restrict__ pixels, T* __restrict__ out, bool white_2_transparent = false, bool black_2_transparent = false, uint32_t mask_color = 0) {
 	const uint64_t i = threadIdx.x + blockIdx.x * blockDim.x;
@@ -536,6 +546,34 @@ __global__ void from_rgba32(const uint64_t num_pixels, const uint8_t* __restrict
 	}
 
 	*((tcnn::vector_t<T, 4>*)&out[i*4]) = rgba_out;
+}
+
+// Foley & van Dam p593 / http://en.wikipedia.org/wiki/HSL_and_HSV
+inline __host__ __device__ Eigen::Array3f hsv_to_rgb(const Eigen::Array3f& hsv) {
+	float h = hsv.x(), s = hsv.y(), v = hsv.z();
+	if (s == 0.0f) {
+		return Eigen::Array3f::Constant(v);
+	}
+
+	h = std::fmodf(h, 1.0f) * 6.0f;
+	int i = (int)h;
+	float f = h - (float)i;
+	float p = v * (1.0f - s);
+	float q = v * (1.0f - s * f);
+	float t = v * (1.0f - s * (1.0f - f));
+
+	switch (i) {
+		case 0: return {v, t, p};
+		case 1: return {q, v, p};
+		case 2: return {p, v, t};
+		case 3: return {p, q, v};
+		case 4: return {t, p, v};
+		case 5: default: return {v, p, q};
+	}
+}
+
+inline __host__ __device__ Eigen::Array3f to_rgb(const Eigen::Vector2f& dir) {
+	return hsv_to_rgb({atan2f(dir.y(), dir.x()) / (2.0f * PI()) + 0.5f, 1.0f, dir.norm()});
 }
 
 Eigen::Matrix<float, 3, 4> log_space_lerp(const Eigen::Matrix<float, 3, 4>& begin, const Eigen::Matrix<float, 3, 4>& end, float t);

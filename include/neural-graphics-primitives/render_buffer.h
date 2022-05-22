@@ -214,6 +214,7 @@ public:
 		int fov_axis,
 		float zoom,
 		const Eigen::Vector2f& screen_center,
+		bool alpha_is_depth,
 		cudaStream_t stream
 	);
 

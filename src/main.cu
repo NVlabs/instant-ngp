@@ -24,7 +24,7 @@ using namespace args;
 using namespace ngp;
 using namespace std;
 using namespace tcnn;
-namespace fs = filesystem;
+namespace fs = ::filesystem;
 
 int main(int argc, char** argv) {
 	ArgumentParser parser{
@@ -228,7 +228,7 @@ int main(int argc, char** argv) {
 		// Render/training loop
 		while (testbed.frame()) {
 			if (!gui) {
-				tlog::info() << "iteration=" << testbed.m_training_step << " loss=" << testbed.m_loss_scalar;
+				tlog::info() << "iteration=" << testbed.m_training_step << " loss=" << testbed.m_loss_scalar.val();
 			}
 		}
 	} catch (const exception& e) {

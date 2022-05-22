@@ -21,7 +21,7 @@ NGP_NAMESPACE_BEGIN
 template <typename T>
 class AdamOptimizer {
 public:
-	AdamOptimizer(float learning_rate, float epsilon = 1e-08f, float beta1 = 0.9f, float beta2 = 0.99f) {
+	AdamOptimizer(float learning_rate, const T& zero = T::Zero(), float epsilon = 1e-08f, float beta1 = 0.9f, float beta2 = 0.99f) : m_state(zero) {
 		m_hparams = { learning_rate, epsilon, beta1, beta2 };
 	}
 
@@ -41,7 +41,7 @@ public:
 		float actual_learning_rate = m_hparams.learning_rate * std::sqrt(1 - std::pow(m_hparams.beta2, (float)m_state.iter)) / (1 - std::pow(m_hparams.beta1, (float)m_state.iter));
 		m_state.first_moment = m_hparams.beta1 * m_state.first_moment + (1 - m_hparams.beta1) * gradient;
 		m_state.second_moment = m_hparams.beta2 * m_state.second_moment + (1 - m_hparams.beta2) * gradient.cwiseProduct(gradient);
-		m_state.variable -= actual_learning_rate * m_state.first_moment.cwiseQuotient(m_state.second_moment.cwiseSqrt() + T::Constant(m_hparams.epsilon));
+		m_state.variable -= actual_learning_rate * m_state.first_moment.cwiseQuotient(m_state.second_moment.cwiseSqrt() + T::Constant(m_state.variable.size(), m_hparams.epsilon));
 	}
 
 	uint32_t step() const {
@@ -60,16 +60,26 @@ public:
 		return m_state.variable;
 	}
 
-	void reset_state() {
-		m_state = {};
+	void reset_state(const T& zero = T::Zero()) {
+		m_state = State(zero);
 	}
 
 private:
 	struct State {
-		uint32_t iter = 0;
-		T first_moment = T::Zero();
-		T second_moment = T::Zero();
-		T variable = T::Zero();
+		State() = default;
+		State(const State&) = default;
+
+		State(const T& zero) {
+			iter = 0;
+			first_moment = zero;
+			second_moment = zero;
+			variable = zero;
+		}
+
+		uint32_t iter;
+		T first_moment;
+		T second_moment;
+		T variable;
 	} m_state;
 
 	struct Hyperparameters {

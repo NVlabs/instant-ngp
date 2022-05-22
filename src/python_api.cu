@@ -43,7 +43,8 @@ using namespace pybind11::literals; // to bring in the `_a` literal
 
 NGP_NAMESPACE_BEGIN
 
-void Testbed::Nerf::Training::set_image(int frame_idx, pybind11::array_t<float> img) {
+
+void Testbed::Nerf::Training::set_image(int frame_idx, pybind11::array_t<float> img, pybind11::array_t<float> depth_img, float depth_scale) {
 	if (frame_idx < 0 || frame_idx >= dataset.n_images) {
 		throw std::runtime_error{"Invalid frame index"};
 	}
@@ -58,15 +59,9 @@ void Testbed::Nerf::Training::set_image(int frame_idx, pybind11::array_t<float> 
 		throw std::runtime_error{"image should be (H,W,C) where C=4"};
 	}
 
-	if (img_buf.shape[1] != dataset.image_resolution.x()) {
-		throw std::runtime_error{"image has wrong width"};
-	}
+	py::buffer_info depth_buf = depth_img.request();
 
-	if (img_buf.shape[0] != dataset.image_resolution.y()) {
-		throw std::runtime_error{"image has wrong height"};
-	}
-
-	dataset.set_training_image(frame_idx, (const float*)img_buf.ptr);
+	dataset.set_training_image(frame_idx, {img_buf.shape[1], img_buf.shape[0]}, (const void*)img_buf.ptr, (const float*)depth_buf.ptr, depth_scale, false, EImageDataType::Float, EDepthDataType::Float);
 }
 
 void Testbed::override_sdf_training_data(py::array_t<float> points, py::array_t<float> distances) {
@@ -236,8 +231,6 @@ PYBIND11_MODULE(pyngp, m) {
 		.value("Normals", ERenderMode::Normals)
 		.value("Positions", ERenderMode::Positions)
 		.value("Depth", ERenderMode::Depth)
-		.value("Distance", ERenderMode::Distance)
-		.value("Stepsize", ERenderMode::Stepsize)
 		.value("Distortion", ERenderMode::Distortion)
 		.value("Cost", ERenderMode::Cost)
 		.value("Slice", ERenderMode::Slice)
@@ -261,6 +254,12 @@ PYBIND11_MODULE(pyngp, m) {
 		.value("SmoothL1", ELossType::Huber)
 		.value("LogL1", ELossType::LogL1)
 		.value("RelativeL2", ELossType::RelativeL2)
+		.export_values();
+
+	py::enum_<ESDFGroundTruthMode>(m, "SDFGroundTruthMode")
+		.value("RaytracedMesh", ESDFGroundTruthMode::RaytracedMesh)
+		.value("SpheretracedMesh", ESDFGroundTruthMode::SpheretracedMesh)
+		.value("SDFBricks", ESDFGroundTruthMode::SDFBricks)
 		.export_values();
 
 	py::enum_<ENerfActivation>(m, "NerfActivation")
@@ -320,7 +319,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def(py::init<ETestbedMode>())
 		.def(py::init<ETestbedMode, const std::string&, const std::string&>())
 		.def(py::init<ETestbedMode, const std::string&, const json&>())
-		.def("create_empty_nerf_dataset", &Testbed::create_empty_nerf_dataset, "Allocate memory for a nerf dataset with a given size", py::arg("n_images"), py::arg("image_resolution"), py::arg("aabb_scale")=1, py::arg("is_hdr")=false)
+		.def("create_empty_nerf_dataset", &Testbed::create_empty_nerf_dataset, "Allocate memory for a nerf dataset with a given size", py::arg("n_images"), py::arg("aabb_scale")=1, py::arg("is_hdr")=false)
 		.def("load_training_data", &Testbed::load_training_data, py::call_guard<py::gil_scoped_release>(), "Load training data from a given path.")
 		.def("clear_training_data", &Testbed::clear_training_data, "Clears training data to free up GPU memory.")
 		// General control
@@ -439,7 +438,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("max_level_rand_training", &Testbed::m_max_level_rand_training)
 		.def_readwrite("visualized_dimension", &Testbed::m_visualized_dimension)
 		.def_readwrite("visualized_layer", &Testbed::m_visualized_layer)
-		.def_readonly("loss", &Testbed::m_loss_scalar)
+		.def_property_readonly("loss", [](py::object& obj) { return obj.cast<Testbed&>().m_loss_scalar.val(); })
 		.def_readonly("training_step", &Testbed::m_training_step)
 		.def_readonly("nerf", &Testbed::m_nerf)
 		.def_readonly("sdf", &Testbed::m_sdf)
@@ -448,6 +447,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("display_gui", &Testbed::m_imgui_enabled)
 		.def_readwrite("visualize_unit_cube", &Testbed::m_visualize_unit_cube)
 		.def_readwrite("snap_to_pixel_centers", &Testbed::m_snap_to_pixel_centers)
+		.def_readwrite("parallax_shift", &Testbed::m_parallax_shift)
 		.def_readwrite("color_space", &Testbed::m_color_space)
 		.def_readwrite("tonemap_curve", &Testbed::m_tonemap_curve)
 		;
@@ -504,12 +504,12 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readonly("up", &NerfDataset::up)
 		.def_readonly("offset", &NerfDataset::offset)
 		.def_readonly("n_images", &NerfDataset::n_images)
-		.def_readonly("image_resolution", &NerfDataset::image_resolution)
 		.def_readonly("envmap_resolution", &NerfDataset::envmap_resolution)
 		.def_readonly("scale", &NerfDataset::scale)
 		.def_readonly("aabb_scale", &NerfDataset::aabb_scale)
 		.def_readonly("from_mitsuba", &NerfDataset::from_mitsuba)
 		.def_readonly("is_hdr", &NerfDataset::is_hdr)
+		.def_readonly("alpha_is_depth", &NerfDataset::alpha_is_depth)
 		;
 
 	py::class_<Testbed::Nerf::Training>(nerf, "Training")
@@ -519,6 +519,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("loss_type", &Testbed::Nerf::Training::loss_type)
 		.def_readwrite("snap_to_pixel_centers", &Testbed::Nerf::Training::snap_to_pixel_centers)
 		.def_readwrite("optimize_extrinsics", &Testbed::Nerf::Training::optimize_extrinsics)
+		.def_readwrite("optimize_extra_dims", &Testbed::Nerf::Training::optimize_extra_dims)
 		.def_readwrite("optimize_exposure", &Testbed::Nerf::Training::optimize_exposure)
 		.def_readwrite("optimize_distortion", &Testbed::Nerf::Training::optimize_distortion)
 		.def_readwrite("optimize_focal_length", &Testbed::Nerf::Training::optimize_focal_length)
@@ -528,12 +529,12 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("include_sharpness_in_error", &Testbed::Nerf::Training::include_sharpness_in_error)
 		.def_readonly("transforms", &Testbed::Nerf::Training::transforms)
 		//.def_readonly("focal_lengths", &Testbed::Nerf::Training::focal_lengths) // use training.dataset.metadata instead
-		.def_readonly("image_resolution", &Testbed::Nerf::Training::image_resolution)
 		.def_readwrite("near_distance", &Testbed::Nerf::Training::near_distance)
 		.def_readwrite("density_grid_decay", &Testbed::Nerf::Training::density_grid_decay)
 		.def_readwrite("extrinsic_l2_reg", &Testbed::Nerf::Training::extrinsic_l2_reg)
 		.def_readwrite("intrinsic_l2_reg", &Testbed::Nerf::Training::intrinsic_l2_reg)
 		.def_readwrite("exposure_l2_reg", &Testbed::Nerf::Training::exposure_l2_reg)
+		.def_readwrite("depth_supervision_lambda", &Testbed::Nerf::Training::depth_supervision_lambda)
 		.def_readonly("dataset", &Testbed::Nerf::Training::dataset)
 		.def("set_camera_intrinsics", &Testbed::Nerf::Training::set_camera_intrinsics,
 			py::arg("frame_idx"),
@@ -552,6 +553,8 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("set_image", &Testbed::Nerf::Training::set_image,
 			py::arg("frame_idx"),
 			py::arg("img"),
+			py::arg("depth_img"),
+			py::arg("depth_scale")=1.0f,
 			"set one of the training images. must be a floating point numpy array of (H,W,C) with 4 channels; linear color space; W and H must match image size of the rest of the dataset"
 		)
 		;
@@ -568,7 +571,9 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("zero_offset", &Testbed::Sdf::zero_offset)
 		.def_readwrite("distance_scale", &Testbed::Sdf::distance_scale)
 		.def_readwrite("calculate_iou_online", &Testbed::Sdf::calculate_iou_online)
-		.def_readwrite("groundtruth_spheremarch", &Testbed::Sdf::groundtruth_spheremarch)
+		.def_readwrite("groundtruth_mode", &Testbed::Sdf::groundtruth_mode)
+		.def_readwrite("brick_level", &Testbed::Sdf::brick_level)
+		.def_readonly("brick_res", &Testbed::Sdf::brick_res)
 		.def_readwrite("brdf", &Testbed::Sdf::brdf)
 		;
 

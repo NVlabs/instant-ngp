@@ -24,42 +24,83 @@
 
 NGP_NAMESPACE_BEGIN
 
+// how much to scale the scene by vs the original nerf dataset; we want to fit the thing in the unit cube
+static constexpr float NERF_SCALE = 0.33f;
+
 struct TrainingImageMetadata {
 	// Camera intrinsics and additional data associated with a NeRF training image
+	// the memory to back the pixels and rays is held by GPUMemory objects in the NerfDataset and copied here.
+	const __half* pixels = nullptr;
+	const Ray* rays = nullptr;
+
 	CameraDistortion camera_distortion = {};
+	Eigen::Vector2i resolution = Eigen::Vector2i::Zero();
 	Eigen::Vector2f principal_point = Eigen::Vector2f::Constant(0.5f);
 	Eigen::Vector2f focal_length = Eigen::Vector2f::Constant(1000.f);
 	Eigen::Vector4f rolling_shutter = Eigen::Vector4f::Zero();
-
-	// TODO: replace this with more generic float[] of task-specific metadata.
-	Eigen::Vector3f light_dir = Eigen::Vector3f::Constant(0.f);
+	Eigen::Vector3f light_dir = Eigen::Vector3f::Constant(0.f); // TODO: replace this with more generic float[] of task-specific metadata.
 };
 
+enum class EImageDataType {
+	None,
+	Byte,
+	Half,
+	Float,
+};
+
+enum class EDepthDataType {
+	UShort,
+	Float,
+};
+
+inline size_t image_type_size(EImageDataType type) {
+	switch (type) {
+		case EImageDataType::None: return 0;
+		case EImageDataType::Byte: return 1;
+		case EImageDataType::Half: return 2;
+		case EImageDataType::Float: return 4;
+		default: return 0;
+	}
+}
+
+inline size_t depth_type_size(EDepthDataType type) {
+	switch (type) {
+		case EDepthDataType::UShort: return 2;
+		case EDepthDataType::Float: return 4;
+		default: return 0;
+	}
+}
+
 struct NerfDataset {
+	std::vector<tcnn::GPUMemory<Ray>> raymemory;
+	std::vector<tcnn::GPUMemory<__half>> pixelmemory;
 	std::vector<TrainingImageMetadata> metadata;
 	std::vector<TrainingXForm> xforms;
-	tcnn::GPUMemory<__half> images_data;
 	tcnn::GPUMemory<float> sharpness_data;
 	Eigen::Vector2i sharpness_resolution = {0, 0};
 	tcnn::GPUMemory<float> envmap_data;
-	tcnn::GPUMemory<Ray> rays_data;
 
 	BoundingBox render_aabb = {};
 	Eigen::Vector3f up = {0.0f, 1.0f, 0.0f};
 	Eigen::Vector3f offset = {0.0f, 0.0f, 0.0f};
 	size_t n_images = 0;
-	Eigen::Vector2i image_resolution = {0, 0};
 	Eigen::Vector2i envmap_resolution = {0, 0};
 	float scale = 1.0f;
 	int aabb_scale = 1;
 	bool from_mitsuba = false;
 	bool is_hdr = false;
 	bool wants_importance_sampling = true;
+	bool has_rays = false;
+	bool alpha_is_depth= false;
 
-	// TODO: replace this with more generic `uint32_t n_extra_metadata_dims;`
+	uint32_t n_extra_learnable_dims = 0;
 	bool has_light_dirs = false;
 
-	void set_training_image(int frame_idx, const float *pixels);
+	uint32_t n_extra_dims() const {
+		return (has_light_dirs ? 3u : 0u) + n_extra_learnable_dims;
+	}
+
+	void set_training_image(int frame_idx, const Eigen::Vector2i& image_resolution, const void* pixels, const void* depth_pixels, float depth_scale, bool image_data_on_gpu, EImageDataType image_type, EDepthDataType depth_type, float sharpen_amount = 0.f, bool white_transparent = false, bool black_transparent = false, uint32_t mask_color = 0, const Ray *rays = nullptr);
 
 	Eigen::Vector3f nerf_direction_to_ngp(const Eigen::Vector3f& nerf_dir) {
 		Eigen::Vector3f result = nerf_dir;
@@ -127,6 +168,6 @@ struct NerfDataset {
 };
 
 NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float sharpen_amount = 0.f);
-NerfDataset create_empty_nerf_dataset(size_t n_images, Eigen::Vector2i image_resolution, int aabb_scale = 1, bool is_hdr = false);
+NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale = 1, bool is_hdr = false);
 
 NGP_NAMESPACE_END

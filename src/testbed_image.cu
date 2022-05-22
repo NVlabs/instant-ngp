@@ -217,19 +217,16 @@ __global__ void eval_image_kernel_and_snap(uint32_t n_elements, const T* __restr
 	}
 }
 
-void Testbed::train_image(size_t target_batch_size, size_t n_steps, cudaStream_t stream) {
+void Testbed::train_image(size_t target_batch_size, bool get_loss_scalar, cudaStream_t stream) {
 	const uint32_t n_output_dims = 3;
 	const uint32_t n_input_dims = 2;
 
 	// Auxiliary matrices for training
 	const uint32_t batch_size = (uint32_t)target_batch_size;
-	const uint32_t n_batches = (uint32_t)n_steps;
-
-	const uint32_t GRAPH_SIZE = (uint32_t)std::min((size_t)16, n_steps);
 
 	// Permute all training records to de-correlate training data
 
-	const uint32_t n_elements = batch_size * n_batches;
+	const uint32_t n_elements = batch_size;
 	m_image.training.positions.enlarge(n_elements);
 	m_image.training.targets.enlarge(n_elements);
 
@@ -273,29 +270,15 @@ void Testbed::train_image(size_t target_batch_size, size_t n_steps, cudaStream_t
 		);
 	}
 
+	GPUMatrix<float> training_batch_matrix((float*)(m_image.training.positions.data()), n_input_dims, batch_size);
+	GPUMatrix<float> training_target_matrix((float*)(m_image.training.targets.data()), n_output_dims, batch_size);
 
-	float total_loss = 0;
-	uint32_t n_loss_samples = 0;
+	auto ctx = m_trainer->training_step(stream, training_batch_matrix, training_target_matrix);
+	m_training_step++;
 
-	for (size_t i = 0; i < n_steps; i += GRAPH_SIZE) {
-		for (uint32_t j = 0; j < GRAPH_SIZE; ++j) {
-			uint32_t training_offset = (uint32_t)((i+j) % n_batches) * batch_size;
-
-			GPUMatrix<float> training_batch_matrix((float*)(m_image.training.positions.data()+training_offset), n_input_dims, batch_size);
-			GPUMatrix<float> training_target_matrix((float*)(m_image.training.targets.data()+training_offset), n_output_dims, batch_size);
-
-			auto ctx = m_trainer->training_step(stream, training_batch_matrix, training_target_matrix);
-			if (j == (GRAPH_SIZE - 1)) {
-				total_loss += m_trainer->loss(stream, *ctx);
-				++n_loss_samples;
-			}
-
-			m_training_step++;
-		}
+	if (get_loss_scalar) {
+		m_loss_scalar.update(m_trainer->loss(stream, *ctx));
 	}
-
-	m_loss_scalar = total_loss / (float)n_loss_samples;
-	update_loss_graph();
 }
 
 void Testbed::render_image(CudaRenderBuffer& render_buffer, cudaStream_t stream) {

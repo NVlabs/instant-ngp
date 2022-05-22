@@ -342,7 +342,9 @@ __global__ void overlay_image_kernel(
 	EColorSpace color_space,
 	EColorSpace output_color_space,
 	int fov_axis,
-	float zoom, Eigen::Vector2f screen_center,
+	float zoom,
+	Eigen::Vector2f screen_center,
+	bool alpha_is_depth,
 	cudaSurfaceObject_t surface
 ) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
@@ -374,7 +376,11 @@ __global__ void overlay_image_kernel(
 	} else {
 		*(uint64_t*)&val[0] = ((uint64_t*)image)[srcidx];
 	}
+
 	Array4f color = {val[0], val[1], val[2], val[3]};
+	if (alpha_is_depth) {
+		color.w() = 1.0f;
+	}
 
 	// The background color is represented in SRGB, so convert
 	// to linear if that's not the space in which we're rendering.
@@ -604,6 +610,7 @@ void CudaRenderBuffer::overlay_image(
 	int fov_axis,
 	float zoom,
 	const Eigen::Vector2f& screen_center,
+	bool alpha_is_depth,
 	cudaStream_t stream
 ) {
 	auto res = out_resolution();
@@ -622,6 +629,7 @@ void CudaRenderBuffer::overlay_image(
 		fov_axis,
 		zoom,
 		screen_center,
+		alpha_is_depth,
 		surface()
 	);
 }
