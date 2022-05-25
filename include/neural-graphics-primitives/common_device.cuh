@@ -529,10 +529,10 @@ __global__ void from_rgba32(const uint64_t num_pixels, const uint8_t* __restrict
 	float alpha = rgba[3] * (1.0f/255.0f);
 	// NSVF dataset has 'white = transparent' madness
 	if (white_2_transparent && rgba[0]==255 && rgba[1]==255 && rgba[2]==255) {
-		alpha=0.f;
+		alpha = 0.f;
 	}
 	if (black_2_transparent && rgba[0]==0 && rgba[1]==0 && rgba[2]==0) {
-		alpha=0.f;
+		alpha = 0.f;
 	}
 
 	tcnn::vector_t<T, 4> rgba_out;
@@ -574,6 +574,104 @@ inline __host__ __device__ Eigen::Array3f hsv_to_rgb(const Eigen::Array3f& hsv) 
 
 inline __host__ __device__ Eigen::Array3f to_rgb(const Eigen::Vector2f& dir) {
 	return hsv_to_rgb({atan2f(dir.y(), dir.x()) / (2.0f * PI()) + 0.5f, 1.0f, dir.norm()});
+}
+
+enum class EImageDataType {
+	None,
+	Byte,
+	Half,
+	Float,
+};
+
+enum class EDepthDataType {
+	UShort,
+	Float,
+};
+
+inline NGP_HOST_DEVICE Eigen::Vector2i image_pos(const Eigen::Vector2f& pos, const Eigen::Vector2i& resolution) {
+	return pos.cwiseProduct(resolution.cast<float>()).cast<int>().cwiseMin(resolution - Eigen::Vector2i::Constant(1)).cwiseMax(0);
+}
+
+inline NGP_HOST_DEVICE uint64_t pixel_idx(const Eigen::Vector2i& pos, const Eigen::Vector2i& resolution, uint32_t img) {
+	return pos.x() + pos.y() * resolution.x() + img * (uint64_t)resolution.x() * resolution.y();
+}
+
+inline NGP_HOST_DEVICE uint64_t pixel_idx(const Eigen::Vector2f& xy, const Eigen::Vector2i& resolution, uint32_t img) {
+	return pixel_idx(image_pos(xy, resolution), resolution, img);
+}
+
+// inline NGP_HOST_DEVICE Array3f composit_and_lerp(Vector2f pos, const Vector2i& resolution, uint32_t img, const __half* training_images, const Array3f& background_color, const Array3f& exposure_scale = Array3f::Ones()) {
+// 	pos = (pos.cwiseProduct(resolution.cast<float>()) - Vector2f::Constant(0.5f)).cwiseMax(0.0f).cwiseMin(resolution.cast<float>() - Vector2f::Constant(1.0f + 1e-4f));
+
+// 	const Vector2i pos_int = pos.cast<int>();
+// 	const Vector2f weight = pos - pos_int.cast<float>();
+
+// 	const Vector2i idx = pos_int.cwiseMin(resolution - Vector2i::Constant(2)).cwiseMax(0);
+
+// 	auto read_val = [&](const Vector2i& p) {
+// 		__half val[4];
+// 		*(uint64_t*)&val[0] = ((uint64_t*)training_images)[pixel_idx(p, resolution, img)];
+// 		return Array3f{val[0], val[1], val[2]} * exposure_scale + background_color * (1.0f - (float)val[3]);
+// 	};
+
+// 	return (
+// 		(1 - weight.x()) * (1 - weight.y()) * read_val({idx.x(), idx.y()}) +
+// 		(weight.x()) * (1 - weight.y()) * read_val({idx.x()+1, idx.y()}) +
+// 		(1 - weight.x()) * (weight.y()) * read_val({idx.x(), idx.y()+1}) +
+// 		(weight.x()) * (weight.y()) * read_val({idx.x()+1, idx.y()+1})
+// 	);
+// }
+
+// inline NGP_HOST_DEVICE Array3f composit(Vector2f pos, const Vector2i& resolution, uint32_t img, const __half* training_images, const Array3f& background_color, const Array3f& exposure_scale = Array3f::Ones()) {
+// 	auto read_val = [&](const Vector2i& p) {
+// 		__half val[4];
+// 		*(uint64_t*)&val[0] = ((uint64_t*)training_images)[pixel_idx(p, resolution, img)];
+// 		return Array3f{val[0], val[1], val[2]} * exposure_scale + background_color * (1.0f - (float)val[3]);
+// 	};
+
+// 	return read_val(image_pos(pos, resolution));
+// }
+
+inline NGP_HOST_DEVICE Eigen::Array4f read_rgba(Eigen::Vector2i px, const Eigen::Vector2i& resolution, const void* pixels, EImageDataType image_data_type, uint32_t img = 0) {
+	switch (image_data_type) {
+		default:
+			// This should never happen. Bright red to indicate this.
+			return Eigen::Array4f{5.0f, 0.0f, 0.0f, 1.0f};
+		case EImageDataType::Byte: {
+			uint8_t val[4];
+			*(uint32_t*)&val[0] = ((uint32_t*)pixels)[pixel_idx(px, resolution, img)];
+			if (*(uint32_t*)&val[0] == 0x00FF00FF) {
+				return Eigen::Array4f::Constant(-1.0f);
+			}
+
+			float alpha = (float)val[3] * (1.0f/255.0f);
+			return Eigen::Array4f{
+				srgb_to_linear((float)val[0] * (1.0f/255.0f)) * alpha,
+				srgb_to_linear((float)val[1] * (1.0f/255.0f)) * alpha,
+				srgb_to_linear((float)val[2] * (1.0f/255.0f)) * alpha,
+				alpha,
+			};
+		}
+		case EImageDataType::Half: {
+			__half val[4];
+			*(uint64_t*)&val[0] = ((uint64_t*)pixels)[pixel_idx(px, resolution, img)];
+			return Eigen::Array4f{val[0], val[1], val[2], val[3]};
+		}
+		case EImageDataType::Float:
+			return ((Eigen::Array4f*)pixels)[pixel_idx(px, resolution, img)];
+	}
+}
+
+inline NGP_HOST_DEVICE Eigen::Array4f read_rgba(Eigen::Vector2f pos, const Eigen::Vector2i& resolution, const void* pixels, EImageDataType image_data_type, uint32_t img = 0) {
+	return read_rgba(image_pos(pos, resolution), resolution, pixels, image_data_type, img);
+}
+
+inline NGP_HOST_DEVICE float read_depth(Eigen::Vector2f pos, const Eigen::Vector2i& resolution, const float* depth, uint32_t img = 0) {
+	auto read_val = [&](const Eigen::Vector2i& p) {
+		return depth[pixel_idx(p, resolution, img)];
+	};
+
+	return read_val(image_pos(pos, resolution));
 }
 
 Eigen::Matrix<float, 3, 4> log_space_lerp(const Eigen::Matrix<float, 3, 4>& begin, const Eigen::Matrix<float, 3, 4>& end, float t);

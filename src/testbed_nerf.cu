@@ -1036,18 +1036,6 @@ inline __device__ uint32_t image_idx(uint32_t base_idx, uint32_t n_rays, uint32_
 	return (((base_idx + n_rays_total) * n_training_images) / n_rays) % n_training_images;
 }
 
-inline __device__ Vector2i image_pos(const Vector2f& pos, const Vector2i& resolution) {
-	return pos.cwiseProduct(resolution.cast<float>()).cast<int>().cwiseMin(resolution - Vector2i::Constant(1)).cwiseMax(0);
-}
-
-inline __device__ uint64_t pixel_idx(const Vector2i& pos, const Vector2i& resolution, uint32_t img) {
-	return pos.x() + pos.y() * resolution.x() + img * (uint64_t)resolution.x() * resolution.y();
-}
-
-inline __device__ uint64_t pixel_idx(const Vector2f& xy, const Vector2i& resolution, uint32_t img) {
-	return pixel_idx(image_pos(xy, resolution), resolution, img);
-}
-
 __global__ void generate_training_samples_nerf(
 	const uint32_t n_rays,
 	BoundingBox aabb,
@@ -1089,8 +1077,7 @@ __global__ void generate_training_samples_nerf(
 
 	// Negative values indicate masked-away regions
 	size_t pix_idx = pixel_idx(xy, resolution, 0);
-	const __half *pixel_data = metadata[img].pixels + pix_idx * 4;
-	if ((float)pixel_data[0] < 0.0f) {
+	if (read_rgba(xy, resolution, metadata[img].pixels, metadata[img].image_data_type).x() < 0.0f) {
 		return;
 	}
 
@@ -1241,48 +1228,6 @@ __device__ LossAndGradient loss_and_gradient(const Vector3f& target, const Vecto
 	}
 }
 
-inline __device__ Array3f composit_and_lerp(Vector2f pos, const Vector2i& resolution, uint32_t img, const __half* training_images, const Array3f& background_color, const Array3f& exposure_scale = Array3f::Ones()) {
-	pos = (pos.cwiseProduct(resolution.cast<float>()) - Vector2f::Constant(0.5f)).cwiseMax(0.0f).cwiseMin(resolution.cast<float>() - Vector2f::Constant(1.0f + 1e-4f));
-
-	const Vector2i pos_int = pos.cast<int>();
-	const Vector2f weight = pos - pos_int.cast<float>();
-
-	const Vector2i idx = pos_int.cwiseMin(resolution - Vector2i::Constant(2)).cwiseMax(0);
-
-	auto read_val = [&](const Vector2i& p) {
-		__half val[4];
-		*(uint64_t*)&val[0] = ((uint64_t*)training_images)[pixel_idx(p, resolution, img)];
-		return Array3f{val[0], val[1], val[2]} * exposure_scale + background_color * (1.0f - (float)val[3]);
-	};
-
-	return (
-		(1 - weight.x()) * (1 - weight.y()) * read_val({idx.x(), idx.y()}) +
-		(weight.x()) * (1 - weight.y()) * read_val({idx.x()+1, idx.y()}) +
-		(1 - weight.x()) * (weight.y()) * read_val({idx.x(), idx.y()+1}) +
-		(weight.x()) * (weight.y()) * read_val({idx.x()+1, idx.y()+1})
-	);
-}
-
-inline __device__ Array3f composit(Vector2f pos, const Vector2i& resolution, uint32_t img, const __half* training_images, const Array3f& background_color, const Array3f& exposure_scale = Array3f::Ones()) {
-	auto read_val = [&](const Vector2i& p) {
-		__half val[4];
-		*(uint64_t*)&val[0] = ((uint64_t*)training_images)[pixel_idx(p, resolution, img)];
-		return Array3f{val[0], val[1], val[2]} * exposure_scale + background_color * (1.0f - (float)val[3]);
-	};
-
-	return read_val(image_pos(pos, resolution));
-}
-
-inline __device__ Array4f read_rgba(Vector2f pos, const Vector2i& resolution, uint32_t img, const __half* training_images) {
-	auto read_val = [&](const Vector2i& p) {
-		__half val[4];
-		*(uint64_t*)&val[0] = ((uint64_t*)training_images)[pixel_idx(p, resolution, img)];
-		return Array4f{val[0], val[1], val[2], val[3]};
-	};
-
-	return read_val(image_pos(pos, resolution));
-}
-
 __global__ void compute_loss_kernel_train_nerf(
 	const uint32_t n_rays,
 	BoundingBox aabb,
@@ -1350,8 +1295,6 @@ __global__ void compute_loss_kernel_train_nerf(
 	Array3f rgb_ray = Array3f::Zero();
 	Vector3f hitpoint = Vector3f::Zero();
 
-	const bool supervise_with_depth_in_alpha = depth_supervision_lambda >= 0.f;
-
 	float depth_ray = 0.f;
 	uint32_t compacted_numsteps = 0;
 	Eigen::Vector3f ray_o = rays_in_unnormalized[i].o;
@@ -1364,7 +1307,7 @@ __global__ void compute_loss_kernel_train_nerf(
 		const Array3f rgb = network_to_rgb(local_network_output, rgb_activation);
 		const Vector3f pos = unwarp_position(coords_in.ptr->pos.p, aabb);
 		const float dt = unwarp_dt(coords_in.ptr->dt);
-		float cur_depth = supervise_with_depth_in_alpha ? (pos - ray_o).norm() : 0.f;
+		float cur_depth = (pos - ray_o).norm();
 		float density = network_to_density(float(local_network_output[3]), density_activation);
 
 
@@ -1410,13 +1353,7 @@ __global__ void compute_loss_kernel_train_nerf(
 	Array3f exposure_scale = (0.6931471805599453f * exposure[img]).exp();
 	// Array3f rgbtarget = composit_and_lerp(xy, resolution, img, training_images, background_color, exposure_scale);
 	// Array3f rgbtarget = composit(xy, resolution, img, training_images, background_color, exposure_scale);
-	Array4f texsamp = read_rgba(xy, resolution, 0, metadata[img].pixels);
-
-	float target_depth = 0.f;
-	if (supervise_with_depth_in_alpha) {
-		target_depth = texsamp.w() * rays_in_unnormalized[i].d.norm();
-		texsamp.w() = (target_depth < 0.f) ? 0.f : 1.f; // if target depth is *negative*, the pixel has been marked as 'background'
-	}
+	Array4f texsamp = read_rgba(xy, resolution, metadata[img].pixels, metadata[img].image_data_type);
 
 	Array3f rgbtarget;
 	if (train_in_linear_colors || color_space == EColorSpace::Linear) {
@@ -1460,12 +1397,8 @@ __global__ void compute_loss_kernel_train_nerf(
 	LossAndGradient lg = loss_and_gradient(rgbtarget, rgb_ray, loss_type);
 	lg.loss /= img_pdf * xy_pdf;
 
-	float depth_loss_gradient;
-	if (supervise_with_depth_in_alpha && target_depth > 0.f) {
-		depth_loss_gradient = (depth_ray - target_depth) * 2.f * depth_supervision_lambda;
-	} else {
-		depth_loss_gradient = 0.f;
-	}
+	float target_depth = rays_in_unnormalized[i].d.norm() * ((depth_supervision_lambda > 0.0f && metadata[img].depth) ? read_depth(xy, resolution, metadata[img].depth) : -1.0f);
+	float depth_loss_gradient = target_depth > 0.0f ? (depth_ray - target_depth) * 2.f * depth_supervision_lambda : 0.0f;
 
 	// Note: dividing the gradient by the PDF would cause unbiased loss estimates.
 	// Essentially: variance reduction, but otherwise the same optimization.
@@ -1550,7 +1483,7 @@ __global__ void compute_loss_kernel_train_nerf(
 
 		float density_derivative = network_to_density_derivative(float(local_network_output[3]), density_activation);
 		const float depth_suffix = depth_ray - depth_ray2;
-		const float depth_supervision = depth_loss_gradient * ((T * depth - depth_suffix));
+		const float depth_supervision = depth_loss_gradient * (T * depth - depth_suffix);
 
 		float dloss_by_dmlp = density_derivative * (
 			dt * (lg.gradient.matrix().dot((T * rgb - suffix).matrix()) + depth_supervision)
@@ -3213,7 +3146,7 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 		m_nerf.density_grid_mean.data(),
 		m_nerf.training.cam_exposure_gpu.data(),
 		m_nerf.training.optimize_exposure ? m_nerf.training.cam_exposure_gradient_gpu.data() : nullptr,
-		m_nerf.training.dataset.alpha_is_depth ? m_nerf.training.depth_supervision_lambda : -1.f,
+		m_nerf.training.depth_supervision_lambda,
 		m_nerf.training.near_distance
 	);
 

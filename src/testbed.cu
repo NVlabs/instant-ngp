@@ -470,10 +470,7 @@ void Testbed::imgui() {
 			ImGui::Combo("RGB activation", (int*)&m_nerf.rgb_activation, NerfActivationStr);
 			ImGui::Combo("Density activation", (int*)&m_nerf.density_activation, NerfActivationStr);
 			ImGui::SliderFloat("Cone angle", &m_nerf.cone_angle_constant, 0.0f, 1.0f/128.0f);
-
-			if (m_nerf.training.dataset.alpha_is_depth) {
-				ImGui::SliderFloat("Depth supervision strength", &m_nerf.training.depth_supervision_lambda, 0.f, 1.f);
-			}
+			ImGui::SliderFloat("Depth supervision strength", &m_nerf.training.depth_supervision_lambda, 0.f, 1.f);
 
 
 			// Importance sampling options, but still related to training
@@ -2050,8 +2047,10 @@ void Testbed::reset_network() {
 		uint32_t alignment = network_config.contains("otype") && (equals_case_insensitive(network_config["otype"], "FullyFusedMLP") || equals_case_insensitive(network_config["otype"], "MegakernelMLP")) ? 16u : 8u;
 
 		if (encoding_config.contains("otype") && equals_case_insensitive(encoding_config["otype"], "Takikawa")) {
-			if (m_sdf.octree_depth_target == 0)
+			if (m_sdf.octree_depth_target == 0) {
 				m_sdf.octree_depth_target = encoding_config["n_levels"];
+			}
+
 			if (!m_sdf.triangle_octree || m_sdf.triangle_octree->depth() != m_sdf.octree_depth_target) {
 				m_sdf.triangle_octree.reset(new TriangleOctree{});
 				m_sdf.triangle_octree->build(*m_sdf.triangle_bvh, m_sdf.triangles_cpu, m_sdf.octree_depth_target);
@@ -2485,11 +2484,11 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 				m_background_color,
 				to_srgb ? EColorSpace::SRGB : EColorSpace::Linear,
 				metadata.pixels,
+				metadata.image_data_type,
 				metadata.resolution,
 				m_fov_axis,
 				m_zoom,
 				Vector2f::Constant(0.5f),
-				m_nerf.training.dataset.alpha_is_depth,
 				m_inference_stream
 			);
 		}

@@ -30,7 +30,10 @@ static constexpr float NERF_SCALE = 0.33f;
 struct TrainingImageMetadata {
 	// Camera intrinsics and additional data associated with a NeRF training image
 	// the memory to back the pixels and rays is held by GPUMemory objects in the NerfDataset and copied here.
-	const __half* pixels = nullptr;
+	const void* pixels = nullptr;
+	EImageDataType image_data_type = EImageDataType::Half;
+
+	const float* depth = nullptr;
 	const Ray* rays = nullptr;
 
 	CameraDistortion camera_distortion = {};
@@ -39,18 +42,6 @@ struct TrainingImageMetadata {
 	Eigen::Vector2f focal_length = Eigen::Vector2f::Constant(1000.f);
 	Eigen::Vector4f rolling_shutter = Eigen::Vector4f::Zero();
 	Eigen::Vector3f light_dir = Eigen::Vector3f::Constant(0.f); // TODO: replace this with more generic float[] of task-specific metadata.
-};
-
-enum class EImageDataType {
-	None,
-	Byte,
-	Half,
-	Float,
-};
-
-enum class EDepthDataType {
-	UShort,
-	Float,
 };
 
 inline size_t image_type_size(EImageDataType type) {
@@ -73,7 +64,9 @@ inline size_t depth_type_size(EDepthDataType type) {
 
 struct NerfDataset {
 	std::vector<tcnn::GPUMemory<Ray>> raymemory;
-	std::vector<tcnn::GPUMemory<__half>> pixelmemory;
+	std::vector<tcnn::GPUMemory<uint8_t>> pixelmemory;
+	std::vector<tcnn::GPUMemory<float>> depthmemory;
+
 	std::vector<TrainingImageMetadata> metadata;
 	std::vector<TrainingXForm> xforms;
 	tcnn::GPUMemory<float> sharpness_data;
@@ -91,7 +84,6 @@ struct NerfDataset {
 	bool is_hdr = false;
 	bool wants_importance_sampling = true;
 	bool has_rays = false;
-	bool alpha_is_depth= false;
 
 	uint32_t n_extra_learnable_dims = 0;
 	bool has_light_dirs = false;

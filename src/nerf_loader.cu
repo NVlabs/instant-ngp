@@ -56,6 +56,30 @@ namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
+__global__ void convert_rgba32(const uint64_t num_pixels, const uint8_t* __restrict__ pixels, uint8_t* __restrict__ out, bool white_2_transparent = false, bool black_2_transparent = false, uint32_t mask_color = 0) {
+	const uint64_t i = threadIdx.x + blockIdx.x * blockDim.x;
+	if (i >= num_pixels) return;
+
+	uint8_t rgba[4];
+	*((uint32_t*)&rgba[0]) = *((uint32_t*)&pixels[i*4]);
+
+	// NSVF dataset has 'white = transparent' madness
+	if (white_2_transparent && rgba[0] == 255 && rgba[1] == 255 && rgba[2] == 255) {
+		rgba[3] = 0;
+	}
+
+	if (black_2_transparent && rgba[0] == 0 && rgba[1] == 0 && rgba[2] == 0) {
+		rgba[3] = 0;
+	}
+
+	if (mask_color != 0 && mask_color == *((uint32_t*)&rgba[0])) {
+		// turn the mask into hot pink
+		rgba[0] = 0xFF; rgba[1] = 0x00; rgba[2] = 0xFF; rgba[3] = 0x00;
+	}
+
+	*((uint32_t*)&out[i*4]) = *((uint32_t*)&rgba[0]);
+}
+
 __global__ void from_fullp(const uint64_t num_elements, const float* __restrict__ pixels, __half* __restrict__ out) {
 	const uint64_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= num_elements) return;
@@ -64,59 +88,51 @@ __global__ void from_fullp(const uint64_t num_elements, const float* __restrict_
 }
 
 template <typename T>
-__global__ void copy_depth(const uint64_t num_elements, __half* __restrict__ pixels, const T* __restrict__ depth_pixels, float depth_scale) {
+__global__ void copy_depth(const uint64_t num_elements, float* __restrict__ depth_dst, const T* __restrict__ depth_pixels, float depth_scale) {
 	const uint64_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= num_elements) return;
-	pixels += i*4;
 
-	// there are 4 types of pixel: masked, background, those with depth supervision, and those without
-	if ((float)pixels[3] <= 1.f / 255.f) {
-		// if the training pixel was alpha 0, then we can mark the pixel as 'background' by setting the w negative.
-		// if x is also negative (already), then it will be masked anyway
-		pixels[3] = (__half)-1.0f;
-	}
-	else {
-		if (depth_pixels == nullptr || depth_scale <= 0.f) {
-			pixels[3] = 0.f; // no depth data for this entire image. zero it out
-		} else {
-			pixels[3] = (__half)(depth_pixels[i] * depth_scale);
-		}
+	if (depth_pixels == nullptr || depth_scale <= 0.f) {
+		depth_dst[i] = 0.f; // no depth data for this entire image. zero it out
+	} else {
+		depth_dst[i] = depth_pixels[i] * depth_scale;
 	}
 }
 
-__global__ void sharpen(const uint64_t num_pixels, const uint32_t w, const __half* __restrict__ pix,__half* __restrict__ destpix, float center_w, float inv_totalw) {
+template <typename T>
+__global__ void sharpen(const uint64_t num_pixels, const uint32_t w, const T* __restrict__ pix, T* __restrict__ destpix, float center_w, float inv_totalw) {
 	const uint64_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= num_pixels) return;
-	float rgba[4]={
-		__half2float(pix[i*4+0])*center_w,
-		__half2float(pix[i*4+1])*center_w,
-		__half2float(pix[i*4+2])*center_w,
-		__half2float(pix[i*4+3])*center_w};
+
+	float rgba[4] = {
+		(float)pix[i*4+0]*center_w,
+		(float)pix[i*4+1]*center_w,
+		(float)pix[i*4+2]*center_w,
+		(float)pix[i*4+3]*center_w
+	};
 
 	int64_t i2=i-1; if (i2<0) i2=0; i2*=4;
-	for (int j=0;j<4;++j) rgba[j]-=__half2float(pix[i2++]);
+	for (int j=0;j<4;++j) rgba[j]-=(float)pix[i2++];
 	i2=i-w; if (i2<0) i2=0; i2*=4;
-	for (int j=0;j<4;++j) rgba[j]-=__half2float(pix[i2++]);
+	for (int j=0;j<4;++j) rgba[j]-=(float)pix[i2++];
 	i2=i+1; if (i2>=num_pixels) i2-=num_pixels; i2*=4;
-	for (int j=0;j<4;++j) rgba[j]-=__half2float(pix[i2++]);
+	for (int j=0;j<4;++j) rgba[j]-=(float)pix[i2++];
 	i2=i+w; if (i2>=num_pixels) i2-=num_pixels; i2*=4;
-	for (int j=0;j<4;++j) rgba[j]-=__half2float(pix[i2++]);
-	for (int j=0;j<4;++j) destpix[i*4+j]=(__half)max(0.f,rgba[j] * inv_totalw);
+	for (int j=0;j<4;++j) rgba[j]-=(float)pix[i2++];
+	for (int j=0;j<4;++j) destpix[i*4+j]=(T)max(0.f, rgba[j] * inv_totalw);
 }
 
-__device__ inline float luma(__half c[4]) {
-	return float(c[0]) * 0.2126f + float(c[1]) * 0.7152f + float(c[2]) * 0.0722f;
+__device__ inline float luma(const Array4f& c) {
+	return c[0] * 0.2126f + c[1] * 0.7152f + c[2] * 0.0722f;
 }
 
-__global__ void compute_sharpness(Eigen::Vector2i sharpness_resolution, Eigen::Vector2i image_resolution, uint32_t n_images, const __half* __restrict__ images_data, float* __restrict__ sharpness_data) {
+__global__ void compute_sharpness(Eigen::Vector2i sharpness_resolution, Eigen::Vector2i image_resolution, uint32_t n_images, const void* __restrict__ images_data, EImageDataType image_data_type, float* __restrict__ sharpness_data) {
 	const uint32_t x = threadIdx.x + blockIdx.x * blockDim.x;
 	const uint32_t y = threadIdx.y + blockIdx.y * blockDim.y;
 	const uint32_t i = threadIdx.z + blockIdx.z * blockDim.z;
 	if (x >= sharpness_resolution.x() || y >= sharpness_resolution.y() || i>=n_images) return;
 	const size_t sharp_size = sharpness_resolution.x() * sharpness_resolution.y();
-	const size_t img_size = image_resolution.x() * image_resolution.y() * 4;
 	sharpness_data += sharp_size * i + x + y * sharpness_resolution.x();
-	images_data += img_size * i;
 
 	// overlap patches a bit
 	int x_border = 0; // (image_resolution.x()/sharpness_resolution.x())/4;
@@ -131,19 +147,18 @@ __global__ void compute_sharpness(Eigen::Vector2i sharpness_resolution, Eigen::V
 	float tot_lap=0.f,tot_lap2=0.f,tot_lum=0.f;
 	float scal=1.f/((x2-x1)*(y2-y1));
 	for (int yy=y1;yy<y2;++yy) {
-		uint32_t idx = x1+yy*image_resolution.x();
-		for (int xx=x1;xx<x2;++xx, ++idx) {
-			__half n[4],e[4],s[4],w[4],c[4];
-			*(uint64_t*)&c[0] = ((const uint64_t*)images_data)[idx];
-			*(uint64_t*)&n[0] = ((const uint64_t*)images_data)[idx-image_resolution.x()];
-			*(uint64_t*)&e[0] = ((const uint64_t*)images_data)[idx-1];
-			*(uint64_t*)&s[0] = ((const uint64_t*)images_data)[idx+image_resolution.x()];
-			*(uint64_t*)&w[0] = ((const uint64_t*)images_data)[idx+1];
-			float lum=luma(c);
-			float lap=lum*4.f - luma(n) - luma(e) - luma(s) - luma(w);
-			tot_lap+=lap;
-			tot_lap2+=lap*lap;
-			tot_lum+=lum;
+		for (int xx=x1; xx<x2; ++xx) {
+			Array4f n, e, s, w, c;
+			c = read_rgba(Vector2i{xx, yy}, image_resolution, images_data, image_data_type, i);
+			n = read_rgba(Vector2i{xx, yy-1}, image_resolution, images_data, image_data_type, i);
+			w = read_rgba(Vector2i{xx-1, yy}, image_resolution, images_data, image_data_type, i);
+			s = read_rgba(Vector2i{xx, yy+1}, image_resolution, images_data, image_data_type, i);
+			e = read_rgba(Vector2i{xx+1, yy}, image_resolution, images_data, image_data_type, i);
+			float lum = luma(c);
+			float lap = lum * 4.f - luma(n) - luma(e) - luma(s) - luma(w);
+			tot_lap += lap;
+			tot_lap2 += lap*lap;
+			tot_lum += lum;
 		}
 	}
 	tot_lap*=scal;
@@ -165,6 +180,7 @@ NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale, bool is_h
 	result.xforms.resize(n_images);
 	result.metadata.resize(n_images);
 	result.pixelmemory.resize(n_images);
+	result.depthmemory.resize(n_images);
 	result.raymemory.resize(n_images);
 	result.scale = NERF_SCALE;
 	result.offset = {0.5f, 0.5f, 0.5f};
@@ -275,6 +291,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 	result.xforms.resize(result.n_images);
 	result.metadata.resize(result.n_images);
 	result.pixelmemory.resize(result.n_images);
+	result.depthmemory.resize(result.n_images);
 	result.raymemory.resize(result.n_images);
 
 	result.scale = NERF_SCALE;
@@ -706,7 +723,7 @@ void NerfDataset::set_training_image(int frame_idx, const Eigen::Vector2i& image
 	// copy to gpu if we need to do a conversion
 	GPUMemory<uint8_t> images_data_gpu_tmp;
 	GPUMemory<uint8_t> depth_tmp;
-	if (!image_data_on_gpu && image_type != EImageDataType::Half) {
+	if (!image_data_on_gpu && image_type == EImageDataType::Byte) {
 		images_data_gpu_tmp.resize(img_size * image_type_stride);
 		images_data_gpu_tmp.copy_from_host((uint8_t*)pixels);
 		pixels = images_data_gpu_tmp.data();
@@ -721,41 +738,58 @@ void NerfDataset::set_training_image(int frame_idx, const Eigen::Vector2i& image
 	}
 
 	// copy or convert the pixels
-	pixelmemory[frame_idx].resize(img_size);
-	__half *dst = pixelmemory[frame_idx].data();
+	pixelmemory[frame_idx].resize(img_size * image_type_size(image_type));
+	void* dst = pixelmemory[frame_idx].data();
 
 	switch (image_type) {
 		default: throw std::runtime_error{"unknown image type in set_training_image"};
-		case EImageDataType::Byte: linear_kernel(from_rgba32<__half>, 0, nullptr, n_pixels, (uint8_t*)pixels, dst, white_transparent, black_transparent, mask_color); break;
-		case EImageDataType::Half: CUDA_CHECK_THROW(cudaMemcpy(dst, pixels, img_size * image_type_size(image_type), image_data_on_gpu ? cudaMemcpyDeviceToDevice : cudaMemcpyHostToDevice)); break;
-		case EImageDataType::Float: linear_kernel(from_fullp, 0, nullptr, img_size, (float*)pixels, dst); break;
+		case EImageDataType::Byte: linear_kernel(convert_rgba32, 0, nullptr, n_pixels, (uint8_t*)pixels, (uint8_t*)dst, white_transparent, black_transparent, mask_color); break;
+		case EImageDataType::Half: // fallthrough is intended
+		case EImageDataType::Float: CUDA_CHECK_THROW(cudaMemcpy(dst, pixels, img_size * image_type_size(image_type), image_data_on_gpu ? cudaMemcpyDeviceToDevice : cudaMemcpyHostToDevice)); break;
 	}
 
 	// copy over depths if provided
-	if (alpha_is_depth || depth_scale >= 0.f) {
+	if (depth_scale >= 0.f) {
+		depthmemory[frame_idx].resize(img_size);
+		float* depth_dst = depthmemory[frame_idx].data();
+
 		if (depth_pixels && !image_data_on_gpu) {
 			depth_tmp.resize(n_pixels * depth_type_size(depth_type));
 			depth_tmp.copy_from_host((uint8_t*)depth_pixels);
 			depth_pixels = depth_tmp.data();
 		}
+
 		switch (depth_type) {
 			default: throw std::runtime_error{"unknown depth type in set_training_image"};
-			case EDepthDataType::UShort: linear_kernel(copy_depth<uint16_t>, 0, nullptr, n_pixels, dst, (const uint16_t*)depth_pixels, depth_scale); break;
-			case EDepthDataType::Float: linear_kernel(copy_depth<float>, 0, nullptr, n_pixels, dst, (const float*)depth_pixels, depth_scale); break;
+			case EDepthDataType::UShort: linear_kernel(copy_depth<uint16_t>, 0, nullptr, n_pixels, depth_dst, (const uint16_t*)depth_pixels, depth_scale); break;
+			case EDepthDataType::Float: linear_kernel(copy_depth<float>, 0, nullptr, n_pixels, depth_dst, (const float*)depth_pixels, depth_scale); break;
 		}
-		alpha_is_depth = true;
+	} else {
+		depthmemory[frame_idx].free_memory();
 	}
 
 	// apply requested sharpening
 	if (sharpen_amount > 0.f) {
-		tcnn::GPUMemory<__half> images_data_2;
-		images_data_2.resize(img_size);
+		if (image_type == EImageDataType::Byte) {
+			tcnn::GPUMemory<uint8_t> images_data_half(img_size * sizeof(__half));
+			linear_kernel(from_rgba32<__half>, 0, nullptr, n_pixels, (uint8_t*)pixels, (__half*)images_data_half.data(), white_transparent, black_transparent, mask_color);
+			pixelmemory[frame_idx] = std::move(images_data_half);
+			dst = pixelmemory[frame_idx].data();
+			image_type = EImageDataType::Half;
+		}
+
+		assert(image_type == EImageDataType::Half || image_type == EImageDataType::Float);
+
+		tcnn::GPUMemory<uint8_t> images_data_sharpened(img_size * image_type_size(image_type));
+
 		float center_w = 4.f + 1.f / sharpen_amount; // center_w ranges from 5 (strong sharpening) to infinite (no sharpening)
-		linear_kernel(sharpen, 0, nullptr, n_pixels, image_resolution.x(),
-			dst, images_data_2.data(), center_w, 1.f / (center_w - 4.f)
-		);
-		pixelmemory[frame_idx].free_memory();
-		pixelmemory[frame_idx] = std::move(images_data_2);
+		if (image_type == EImageDataType::Half) {
+			linear_kernel(sharpen<__half>, 0, nullptr, n_pixels, image_resolution.x(), (__half*)dst, (__half*)images_data_sharpened.data(), center_w, 1.f / (center_w - 4.f));
+		} else {
+			linear_kernel(sharpen<float>, 0, nullptr, n_pixels, image_resolution.x(), (float*)dst, (float*)images_data_sharpened.data(), center_w, 1.f / (center_w - 4.f));
+		}
+
+		pixelmemory[frame_idx] = std::move(images_data_sharpened);
 		dst = pixelmemory[frame_idx].data();
 	}
 
@@ -764,20 +798,20 @@ void NerfDataset::set_training_image(int frame_idx, const Eigen::Vector2i& image
 		const dim3 threads = { 16, 8, 1 };
 		const dim3 blocks = { div_round_up((uint32_t)sharpness_resolution.x(), threads.x), div_round_up((uint32_t)sharpness_resolution.y(), threads.y), 1 };
 		sharpness_data.enlarge(sharpness_resolution.x() * sharpness_resolution.y());
-		compute_sharpness<<<blocks, threads, 0, nullptr>>>(sharpness_resolution, image_resolution, 1, dst, sharpness_data.data() + sharpness_resolution.x() * sharpness_resolution.y() * (size_t)frame_idx);
+		compute_sharpness<<<blocks, threads, 0, nullptr>>>(sharpness_resolution, image_resolution, 1, dst, image_type, sharpness_data.data() + sharpness_resolution.x() * sharpness_resolution.y() * (size_t)frame_idx);
 	}
 
 	metadata[frame_idx].pixels = pixelmemory[frame_idx].data();
+	metadata[frame_idx].depth = depthmemory[frame_idx].data();
 	metadata[frame_idx].resolution = image_resolution;
+	metadata[frame_idx].image_data_type = image_type;
 	if (rays) {
 		raymemory[frame_idx].resize(n_pixels);
-		Ray* rays_dst = raymemory[frame_idx].data();
-		CUDA_CHECK_THROW(cudaMemcpy(rays_dst, rays, n_pixels * sizeof(Ray), cudaMemcpyHostToDevice));
-		metadata[frame_idx].rays = rays_dst;
+		CUDA_CHECK_THROW(cudaMemcpy(raymemory[frame_idx].data(), rays, n_pixels * sizeof(Ray), cudaMemcpyHostToDevice));
 	} else {
 		raymemory[frame_idx].free_memory();
-		metadata[frame_idx].rays = nullptr;
 	}
+	metadata[frame_idx].rays = raymemory[frame_idx].data();
 }
 
 

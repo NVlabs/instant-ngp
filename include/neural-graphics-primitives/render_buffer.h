@@ -209,12 +209,12 @@ public:
 		const Eigen::Array3f& exposure,
 		const Eigen::Array4f& background_color,
 		EColorSpace output_color_space,
-		const __half* __restrict__ image,
+		const void* __restrict__ image,
+		EImageDataType image_data_type,
 		const Eigen::Vector2i& resolution,
 		int fov_axis,
 		float zoom,
 		const Eigen::Vector2f& screen_center,
-		bool alpha_is_depth,
 		cudaStream_t stream
 	);
 
