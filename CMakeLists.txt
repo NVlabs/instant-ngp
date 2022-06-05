@@ -20,7 +20,11 @@ if (NOT NGP_DEPLOY)
 endif()
 
 option(NGP_BUILD_WITH_GUI "Build with GUI support (requires GLFW and GLEW)?" ON)
-option(NGP_BUILD_WITH_VULKAN "Build with Vulkan to enable DLSS support?" ON)
+
+################
+# Not using Vulkan, I currrently have no idea how to copy the dlss for NerfSLAM with CMake using custom_command like below. This will always cause -lnvsdk_ngx not found.
+################
+option(NGP_BUILD_WITH_VULKAN "Build with Vulkan to enable DLSS support?" OFF)
 option(NGP_BUILD_WITH_OPTIX "Build with OptiX to enable hardware ray tracing?" ON)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -67,6 +71,8 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_EXTENSIONS OFF)
 set(CUDA_LINK_LIBRARIES_KEYWORD PUBLIC)
 
+get_directory_property(NGP_HAS_PARENT PARENT_DIRECTORY)
+
 if (MSVC)
 	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-bigobj")
 else()
@@ -88,18 +94,26 @@ list(APPEND CUDA_NVCC_FLAGS "--expt-relaxed-constexpr")
 set(TCNN_BUILD_BENCHMARK OFF)
 set(TCNN_BUILD_EXAMPLES OFF)
 add_subdirectory(dependencies/tiny-cuda-nn)
-include_directories("dependencies/tiny-cuda-nn/include")
-include_directories("dependencies/tiny-cuda-nn/dependencies")
+# include_directories("dependencies/tiny-cuda-nn/include")
+# include_directories("dependencies/tiny-cuda-nn/dependencies")
+
+list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/tiny-cuda-nn/include")
+list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/tiny-cuda-nn/dependencies")
 
 if (NGP_BUILD_WITH_GUI)
 	##########
 	# Vulkan #
 	##########
 	find_package(Vulkan)
-	if (Vulkan_FOUND AND NGP_BUILD_WITH_VULKAN)
+
+	# if (Vulkan_FOUND AND NGP_BUILD_WITH_VULKAN)
+	if (false)
+		message(FATAL_ERROR " Debug ! should not come here")
 		set(NGP_VULKAN ON)
 		list(APPEND NGP_DEFINITIONS -DNGP_VULKAN -DGLFW_INCLUDE_VULKAN)
-		include_directories("${Vulkan_INCLUDE_DIRS}")
+		# include_directories("${Vulkan_INCLUDE_DIRS}")
+		list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/${Vulkan_INCLUDE_DIRS}")
+
 		set(NGP_LIBRARIES ${NGP_LIBRARIES} ${Vulkan_LIBRARIES})
 
 		set(GUI_SOURCES
@@ -110,16 +124,25 @@ if (NGP_BUILD_WITH_GUI)
 		#############################################
 		# DLSS (depends on vulkan, so appears here) #
 		#############################################
-		include_directories("dependencies/dlss/include")
+		# include_directories("dependencies/dlss/include")
+		list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/include")
+
 		if (MSVC)
 			link_directories("${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/x86_64")
+
 			if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+				#find_library(nvsdk_ngx_d_dbg "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/x86_64")
+
 				set(NGP_LIBRARIES ${NGP_LIBRARIES} nvsdk_ngx_d_dbg)
 			else()
+				#find_library(nvsdk_ngx_d "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/x86_64")
+
 				set(NGP_LIBRARIES ${NGP_LIBRARIES} nvsdk_ngx_d)
 			endif()
 		else()
 			link_directories("${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64")
+			
+			# find_library(nvsdk_ngx "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64")
 			set(NGP_LIBRARIES ${NGP_LIBRARIES} nvsdk_ngx)
 		endif()
 	else()
@@ -155,20 +178,29 @@ if (NGP_BUILD_WITH_GUI)
 		BUILD_SHARED_LIBS USE_MSVC_RUNTIME_LIBRARY_DLL
 	)
 
-	include_directories("dependencies/glfw/include")
-	include_directories("dependencies/imgui")
+	# include_directories("dependencies/glfw/include")
+	# include_directories("dependencies/imgui")
+
+	list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/glfw/include")
+	list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/imgui")
+
+
 
 	#############
 	# GL3W/GLEW #
 	#############
 	if (MSVC)
-		include_directories("dependencies/gl3w")
+		# include_directories("dependencies/gl3w")
+		list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/gl3w")
+
 		link_directories("dependencies")
 		set(GUI_SOURCES ${GUI_SOURCES} "dependencies/gl3w/GL/gl3w.c")
 		set(NGP_LIBRARIES ${NGP_LIBRARIES} opengl32 $<TARGET_OBJECTS:glfw_objects>)
 	else()
 		find_package(GLEW REQUIRED)
-		include_directories(${GLEW_INCLUDE_DIRS})
+		# include_directories(${GLEW_INCLUDE_DIRS})
+		list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/${GLEW_INCLUDE_DIRS}")
+
 		set(NGP_LIBRARIES ${NGP_LIBRARIES} GL ${GLEW_LIBRARIES} $<TARGET_OBJECTS:glfw_objects>)
 	endif()
 
@@ -186,18 +218,24 @@ if (NGP_BUILD_WITH_GUI)
 	list(APPEND NGP_DEFINITIONS -DNGP_GUI)
 endif(NGP_BUILD_WITH_GUI)
 
-include_directories("dependencies")
+# include_directories("dependencies")
+list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/dependencies")
+
 
 #########
 # Eigen #
 #########
-include_directories("dependencies/eigen")
-include_directories("dependencies/filesystem")
+# include_directories("dependencies/eigen")
+# include_directories("dependencies/filesystem")
+list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/eigen")
+list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/filesystem")
+
 
 ###########
 # nanovdb #
 ###########
-include_directories("dependencies/nanovdb")
+# include_directories("dependencies/nanovdb")
+list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/nanovdb")
 
 ##########
 # OpenMP #
@@ -216,7 +254,10 @@ find_package(OptiX)
 
 if ((OptiX_FOUND OR OptiX_INCLUDE) AND NGP_BUILD_WITH_OPTIX)
 	set(NGP_OPTIX ON)
-	include_directories("${OptiX_INCLUDE}")
+	# include_directories("${OptiX_INCLUDE}")
+	list(APPEND IncludeList "${OptiX_INCLUDE}")
+
+
 	list(APPEND NGP_DEFINITIONS -DNGP_OPTIX)
 else()
 	set(NGP_OPTIX OFF)
@@ -240,7 +281,14 @@ endif()
 ##############
 # tinylogger #
 ##############
-include_directories("dependencies/tinylogger")
+# include_directories("dependencies/tinylogger")
+list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/tinylogger")
+
+message(STATUS "CMAKE_CURRENT_SOURCE_DIR " ${CMAKE_CURRENT_SOURCE_DIR})
+message(STATUS "CMAKE_SOURCE_DIR " ${CMAKE_SOURCE_DIR})
+message(STATUS "CMAKE_CURRENT_BINARY_DIR " ${CMAKE_CURRENT_BINARY_DIR})
+message(STATUS "PROJECT_SOURCE_DIR "${PROJECT_SOURCE_DIR})
+
 
 
 ###############################################################################
@@ -249,7 +297,9 @@ include_directories("dependencies/tinylogger")
 
 list(APPEND NGP_DEFINITIONS -DNGP_VERSION="${NGP_VERSION}")
 
-include_directories("include")
+# include_directories("include")
+list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/include")
+list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 set(SOURCES
 	${GUI_SOURCES}
@@ -291,8 +341,17 @@ if (NGP_OPTIX)
 
 	# OptiX programs will be compiled as PTX and packaged
 	# as headers to be included from the binary dir.
-	include_directories("${CMAKE_CURRENT_BINARY_DIR}")
+	# include_directories("${CMAKE_CURRENT_BINARY_DIR}")
+
+	list(APPEND IncludeList "${CMAKE_CURRENT_BINARY_DIR}")
 	set(OPTIX_PTX_HEADER ${CMAKE_CURRENT_BINARY_DIR}/optix_ptx.h)
+
+	target_include_directories(optix_program
+	    PUBLIC 
+	    ${CMAKE_CURRENT_SOURCE_DIR}/src
+	    ${IncludeList}
+	)
+
 
 	find_program(bin_to_c NAMES bin2c PATHS ${CUDA_COMPILER_BIN})
 	if (NOT bin_to_c)
@@ -318,7 +377,23 @@ if (NGP_OPTIX)
 	list(APPEND SOURCES ${OPTIX_PTX_HEADER})
 endif()
 
+message(STATUS "NGP Targeting GPU architectures: ${CMAKE_CUDA_ARCHITECTURES}")
+
+# This is very important -> Passed from tiny-cuda-nn
+# Without this will cause stange assert failed in tiny-cuda-nn/common.h
+# static_assert(__CUDA_ARCH__ >= MIN_GPU_ARCH * 10, "MIN_GPU_ARCH=" STR(TCNN_MIN_GPU_ARCH) "0 must bound __CUDA_ARCH__=" STR(__CUDA_ARCH__) " from below, but doesn't.");
+
+if (NGP_HAS_PARENT)
+	set(CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES} PARENT_SCOPE)
+endif()
+
 add_library(ngp STATIC ${SOURCES})
+
+target_include_directories(ngp
+    PUBLIC 
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${IncludeList}
+)
 
 set_target_properties(ngp PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
 set_target_properties(ngp PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
@@ -330,6 +405,7 @@ add_executable(testbed src/main.cu)
 target_link_libraries(testbed PUBLIC ngp)
 target_compile_options(testbed PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:${CUDA_NVCC_FLAGS}>)
 target_compile_definitions(testbed PUBLIC ${NGP_DEFINITIONS} ${TCNN_DEFINITIONS})
+
 
 # Copy DLSS shared libraries
 if (NGP_VULKAN)

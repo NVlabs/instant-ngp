@@ -850,6 +850,7 @@ public:
 		Eigen::Vector2i resolution;
 	} m_distortion;
 	std::shared_ptr<NerfNetwork<precision_t>> m_nerf_network;
+
 };
 
 NGP_NAMESPACE_END
