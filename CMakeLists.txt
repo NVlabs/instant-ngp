@@ -24,7 +24,7 @@ option(NGP_BUILD_WITH_GUI "Build with GUI support (requires GLFW and GLEW)?" ON)
 ################
 # Not using Vulkan, I currrently have no idea how to copy the dlss for NerfSLAM with CMake using custom_command like below. This will always cause -lnvsdk_ngx not found.
 ################
-option(NGP_BUILD_WITH_VULKAN "Build with Vulkan to enable DLSS support?" OFF)
+option(NGP_BUILD_WITH_VULKAN "Build with Vulkan to enable DLSS support?" ON)
 option(NGP_BUILD_WITH_OPTIX "Build with OptiX to enable hardware ray tracing?" ON)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -34,6 +34,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 ###############################################################################
 
 # Set a default configuration if none was specified
+message(STATUS "NGP CMAKE_BUILD_TYPE " ${CMAKE_BUILD_TYPE})
 if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 	message(STATUS "No release type specified. Setting to 'Release'.")
 	set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
@@ -112,7 +113,7 @@ if (NGP_BUILD_WITH_GUI)
 		set(NGP_VULKAN ON)
 		list(APPEND NGP_DEFINITIONS -DNGP_VULKAN -DGLFW_INCLUDE_VULKAN)
 		# include_directories("${Vulkan_INCLUDE_DIRS}")
-		list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/${Vulkan_INCLUDE_DIRS}")
+		list(APPEND IncludeList "${Vulkan_INCLUDE_DIRS}")
 
 		set(NGP_LIBRARIES ${NGP_LIBRARIES} ${Vulkan_LIBRARIES})
 
@@ -199,7 +200,7 @@ if (NGP_BUILD_WITH_GUI)
 	else()
 		find_package(GLEW REQUIRED)
 		# include_directories(${GLEW_INCLUDE_DIRS})
-		list(APPEND IncludeList "${CMAKE_CURRENT_SOURCE_DIR}/${GLEW_INCLUDE_DIRS}")
+		list(APPEND IncludeList "${GLEW_INCLUDE_DIRS}")
 
 		set(NGP_LIBRARIES ${NGP_LIBRARIES} GL ${GLEW_LIBRARIES} $<TARGET_OBJECTS:glfw_objects>)
 	endif()
@@ -385,6 +386,10 @@ message(STATUS "NGP Targeting GPU architectures: ${CMAKE_CUDA_ARCHITECTURES}")
 
 if (NGP_HAS_PARENT)
 	set(CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES} PARENT_SCOPE)
+endif()
+
+if (NGP_HAS_PARENT)
+	set(NGP_LIBRARIES ${NGP_LIBRARIES} PARENT_SCOPE)
 endif()
 
 add_library(ngp STATIC ${SOURCES})

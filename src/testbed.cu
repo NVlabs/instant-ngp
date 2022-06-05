@@ -1247,9 +1247,12 @@ void Testbed::mouse_drag(const Vector2f& rel, int button) {
 
 bool Testbed::begin_frame_and_handle_user_input() {
 	if (glfwWindowShouldClose(m_glfw_window) || ImGui::IsKeyDown(GLFW_KEY_ESCAPE) || ImGui::IsKeyDown(GLFW_KEY_Q)) {
+		
 		destroy_window();
 		return false;
 	}
+
+
 
 	{
 		auto now = std::chrono::steady_clock::now();
@@ -1260,7 +1263,6 @@ bool Testbed::begin_frame_and_handle_user_input() {
 
 	glfwPollEvents();
 	glfwGetFramebufferSize(m_glfw_window, &m_window_res.x(), &m_window_res.y());
-
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
@@ -1571,6 +1573,7 @@ void Testbed::init_window(int resw, int resh, bool hidden) {
 		throw std::runtime_error{"GLFW window could not be created."};
 	}
 	glfwMakeContextCurrent(m_glfw_window);
+	
 #ifdef _WIN32
 	if (gl3wInit()) {
 		throw std::runtime_error{"GL3W could not be initialized."};
