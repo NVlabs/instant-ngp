@@ -62,6 +62,19 @@ inline size_t depth_type_size(EDepthDataType type) {
 	}
 }
 
+struct LoadedImageInfo {
+	Eigen::Vector2i res = Eigen::Vector2i::Zero();
+	bool image_data_on_gpu = false;
+	EImageDataType image_type = EImageDataType::None;
+	bool white_transparent = false;
+	bool black_transparent = false;
+	uint32_t mask_color = 0;
+	void *pixels = nullptr;
+	uint16_t *depth_pixels = nullptr;
+	Ray *rays = nullptr;
+	float depth_scale = -1.f;
+};
+
 struct NerfDataset {
 	std::vector<tcnn::GPUMemory<Ray>> raymemory;
 	std::vector<tcnn::GPUMemory<uint8_t>> pixelmemory;
@@ -72,6 +85,7 @@ struct NerfDataset {
 	tcnn::GPUMemory<float> sharpness_data;
 	Eigen::Vector2i sharpness_resolution = {0, 0};
 	tcnn::GPUMemory<float> envmap_data;
+	LoadedImageInfo info = {};
 
 	BoundingBox render_aabb = {};
 	Eigen::Vector3f up = {0.0f, 1.0f, 0.0f};
@@ -88,10 +102,23 @@ struct NerfDataset {
 	uint32_t n_extra_learnable_dims = 0;
 	bool has_light_dirs = false;
 
+	struct SlamInfo{
+		// Things to store for manually add images
+		bool fix_premult = false;
+		bool enable_ray_loading = true;
+		bool enable_depth_loading = true;
+		float sharpen_amount;
+		CameraDistortion camera_distortion = {};
+		Eigen::Vector2f principal_point = Eigen::Vector2f::Constant(0.5f);
+		Eigen::Vector4f rolling_shutter = Eigen::Vector4f::Zero();
+		uint32_t max_training_keyframes;
+	} slam;
+
 	uint32_t n_extra_dims() const {
 		return (has_light_dirs ? 3u : 0u) + n_extra_learnable_dims;
 	}
 
+	NerfDataset add_training_image(nlohmann::json frame, uint8_t *img, uint16_t *depth, uint8_t *alpha, uint8_t *mask);
 	void set_training_image(int frame_idx, const Eigen::Vector2i& image_resolution, const void* pixels, const void* depth_pixels, float depth_scale, bool image_data_on_gpu, EImageDataType image_type, EDepthDataType depth_type, float sharpen_amount = 0.f, bool white_transparent = false, bool black_transparent = false, uint32_t mask_color = 0, const Ray *rays = nullptr);
 
 	Eigen::Vector3f nerf_direction_to_ngp(const Eigen::Vector3f& nerf_dir) {
@@ -157,8 +184,11 @@ struct NerfDataset {
 		ray.d[1] = ray.d[2];
 		ray.d[2] = tmp;
 	}
+
+	
 };
 
+NerfDataset load_nerfslam(const std::vector<filesystem::path>& jsonpaths, float sharpen_amount = 0.f);
 NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float sharpen_amount = 0.f);
 NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale = 1, bool is_hdr = false);
 

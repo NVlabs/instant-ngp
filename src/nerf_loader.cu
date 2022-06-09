@@ -713,6 +713,422 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 	return result;
 }
 
+NerfDataset load_nerfslam(const std::vector<filesystem::path>& jsonpaths, float sharpen_amount) {
+	if (jsonpaths.empty()) {
+		throw std::runtime_error{"Cannot load NeRF data from an empty set of paths."};
+	}
+
+	tlog::info() << "Loading NeRF dataset from";
+
+	NerfDataset result{};
+
+	std::ifstream f{jsonpaths.front().str()};
+	nlohmann::json transforms = nlohmann::json::parse(f, nullptr, true, true);
+
+	ThreadPool pool;
+
+	if (transforms["camera"].is_array()) {
+		throw std::runtime_error{"hdf5 is no longer supported. please use the hdf52nerf.py conversion script"};
+	}
+
+	// nerf original format
+	std::vector<nlohmann::json> jsons;
+	std::transform(
+		jsonpaths.begin(), jsonpaths.end(),
+		std::back_inserter(jsons), [](const auto& path) {
+			return nlohmann::json::parse(std::ifstream{path.str()}, nullptr, true, true);
+		}
+	);
+
+	result.scale = NERF_SCALE;
+	result.offset = {0.5f, 0.5f, 0.5f};
+
+	result.from_mitsuba = false;
+	result.slam.fix_premult = false;
+	result.slam.enable_ray_loading = true;
+	result.slam.enable_depth_loading = true;
+	result.slam.sharpen_amount = sharpen_amount;
+
+	BoundingBox cam_aabb;
+	for (size_t i = 0; i < jsons.size(); ++i) {
+		auto& json = jsons[i];
+
+		fs::path basepath = jsonpaths[i].parent_path();
+		std::string jp = jsonpaths[i].str();
+		auto lastdot=jp.find_last_of('.'); if (lastdot==std::string::npos) lastdot=jp.length();
+		auto lastunderscore=jp.find_last_of('_'); if (lastunderscore==std::string::npos) lastunderscore=lastdot; else lastunderscore++;
+		std::string part_after_underscore(jp.begin()+lastunderscore,jp.begin()+lastdot);
+
+		if (json.contains("enable_ray_loading")) {
+			result.slam.enable_ray_loading = bool(json["enable_ray_loading"]);
+			tlog::info() << "enable_ray_loading=" << result.slam.enable_ray_loading;
+		}
+		if (json.contains("enable_depth_loading")) {
+			result.slam.enable_depth_loading = bool(json["enable_depth_loading"]);
+			tlog::info() << "enable_depth_loading is " << result.slam.enable_depth_loading;
+		}
+
+		if (json.contains("normal_mts_args")) {
+			result.from_mitsuba = true;
+		}
+
+		if (json.contains("fix_premult")) {
+			result.slam.fix_premult = (bool)json["fix_premult"];
+		}
+
+		if (result.from_mitsuba) {
+			result.scale = 0.66f;
+			result.offset = {0.25f * result.scale, 0.25f * result.scale, 0.25f * result.scale};
+		}
+
+		if (json.contains("render_aabb")) {
+			result.render_aabb.min={float(json["render_aabb"][0][0]),float(json["render_aabb"][0][1]),float(json["render_aabb"][0][2])};
+			result.render_aabb.max={float(json["render_aabb"][1][0]),float(json["render_aabb"][1][1]),float(json["render_aabb"][1][2])};
+		}
+
+		if (json.contains("sharpen")) {
+			result.slam.sharpen_amount = json["sharpen"];
+		}
+
+		if (json.contains("white_transparent")) {
+			result.info.white_transparent = bool(json["white_transparent"]);
+		}
+
+		if (json.contains("black_transparent")) {
+			result.info.black_transparent = bool(json["black_transparent"]);
+		}
+
+		if (json.contains("scale")) {
+			result.scale = json["scale"];
+		}
+
+		if (json.contains("importance_sampling")) {
+			result.wants_importance_sampling = json["importance_sampling"];
+		}
+
+		if (json.contains("n_extra_learnable_dims")) {
+			result.n_extra_learnable_dims = json["n_extra_learnable_dims"];
+		}
+
+		// CameraDistortion camera_distortion = {};
+		// Vector2f principal_point = Vector2f::Constant(0.5f);
+		// Vector4f rolling_shutter = Vector4f::Zero();
+
+		if (json.contains("integer_depth_scale")) {
+			result.info.depth_scale = json["integer_depth_scale"];
+		}
+
+		// Camera distortion
+		{
+			if (json.contains("k1")) {
+				result.slam.camera_distortion.params[0] = json["k1"];
+				if (result.slam.camera_distortion.params[0] != 0.f) {
+					result.slam.camera_distortion.mode = ECameraDistortionMode::Iterative;
+				}
+			}
+
+			if (json.contains("k2")) {
+				result.slam.camera_distortion.params[1] = json["k2"];
+				if (result.slam.camera_distortion.params[1] != 0.f) {
+					result.slam.camera_distortion.mode = ECameraDistortionMode::Iterative;
+				}
+			}
+
+			if (json.contains("p1")) {
+				result.slam.camera_distortion.params[2] = json["p1"];
+				if (result.slam.camera_distortion.params[2] != 0.f) {
+					result.slam.camera_distortion.mode = ECameraDistortionMode::Iterative;
+				}
+			}
+
+			if (json.contains("p2")) {
+				result.slam.camera_distortion.params[3] = json["p2"];
+				if (result.slam.camera_distortion.params[3] != 0.f) {
+					result.slam.camera_distortion.mode = ECameraDistortionMode::Iterative;
+				}
+			}
+
+			if (json.contains("cx")) {
+				result.slam.principal_point.x() = (float)json["cx"] / (float)json["w"];
+			}
+
+			if (json.contains("cy")) {
+				result.slam.principal_point.y() = (float)json["cy"] / (float)json["h"];
+			}
+
+			if (json.contains("rolling_shutter")) {
+				// the rolling shutter is a float3 of [A,B,C] where the time
+				// for each pixel is t= A + B * u + C * v
+				// where u and v are the pixel coordinates (0-1),
+				// and the resulting t is used to interpolate between the start
+				// and end transforms for each training xform
+				float motionblur_amount = 0.f;
+				if (json["rolling_shutter"].size() >= 4) {
+					motionblur_amount = float(json["rolling_shutter"][3]);
+				}
+
+				result.slam.rolling_shutter = {float(json["rolling_shutter"][0]), float(json["rolling_shutter"][1]), float(json["rolling_shutter"][2]), motionblur_amount};
+			}
+
+			if (json.contains("ftheta_p0")) {
+				result.slam.camera_distortion.params[0] = json["ftheta_p0"];
+				result.slam.camera_distortion.params[1] = json["ftheta_p1"];
+				result.slam.camera_distortion.params[2] = json["ftheta_p2"];
+				result.slam.camera_distortion.params[3] = json["ftheta_p3"];
+				result.slam.camera_distortion.params[4] = json["ftheta_p4"];
+				result.slam.camera_distortion.params[5] = json["w"];
+				result.slam.camera_distortion.params[6] = json["h"];
+				result.slam.camera_distortion.mode = ECameraDistortionMode::FTheta;
+			}
+		}
+
+		if (json.contains("aabb_scale")) {
+			result.aabb_scale = json["aabb_scale"];
+		}
+
+		if (json.contains("offset")) {
+			result.offset =
+				json["offset"].is_array() ?
+				Vector3f{float(json["offset"][0]), float(json["offset"][1]), float(json["offset"][2])} :
+				Vector3f{float(json["offset"]), float(json["offset"]), float(json["offset"])};
+		}
+
+		if (json.contains("aabb")) {
+			// map the given aabb of the form [[minx,miny,minz],[maxx,maxy,maxz]] via an isotropic scale and translate to fit in the (0,0,0)-(1,1,1) cube, with the given center at 0.5,0.5,0.5
+			const auto& aabb=json["aabb"];
+			float length = std::max(0.000001f,std::max(std::max(std::abs(float(aabb[1][0])-float(aabb[0][0])),std::abs(float(aabb[1][1])-float(aabb[0][1]))),std::abs(float(aabb[1][2])-float(aabb[0][2]))));
+			result.scale = 1.f/length;
+			result.offset = { ((float(aabb[1][0])+float(aabb[0][0]))*0.5f)*-result.scale + 0.5f , ((float(aabb[1][1])+float(aabb[0][1]))*0.5f)*-result.scale + 0.5f,((float(aabb[1][2])+float(aabb[0][2]))*0.5f)*-result.scale + 0.5f};
+		}
+
+		if (json.contains("up")) {
+			// axes are permuted as for the xforms below
+			result.up[0] = float(json["up"][1]);
+			result.up[1] = float(json["up"][2]);
+			result.up[2] = float(json["up"][0]);
+		}
+
+		if (json.contains("envmap") && result.envmap_resolution.isZero()) {
+			std::string json_provided_path = json["envmap"];
+			fs::path envmap_path = basepath / json_provided_path;
+			if (!envmap_path.exists()) {
+				throw std::runtime_error{std::string{"Environment map path "} + envmap_path.str() + " does not exist."};
+			}
+
+			if (equals_case_insensitive(envmap_path.extension(), "exr")) {
+				result.envmap_data = load_exr(envmap_path.str(), result.envmap_resolution.x(), result.envmap_resolution.y());
+				result.is_hdr = true;
+			} else {
+				result.envmap_data = load_stbi(envmap_path.str(), result.envmap_resolution.x(), result.envmap_resolution.y());
+			}
+		}
+
+		if (json.contains("max_training_keyframes")) {
+			result.slam.max_training_keyframes = int(json["max_training_keyframes"]);
+		}
+		else{
+			result.slam.max_training_keyframes =  result.aabb_scale * 256;
+		}
+	}
+
+	tlog::warning() << "  Preallocate " << result.slam.max_training_keyframes << " images for keyframes in SLAM mode";
+	result.xforms.resize(result.slam.max_training_keyframes);
+	result.metadata.resize(result.slam.max_training_keyframes);
+	result.pixelmemory.resize(result.slam.max_training_keyframes);
+	result.depthmemory.resize(result.slam.max_training_keyframes);
+	result.raymemory.resize(result.slam.max_training_keyframes);
+
+
+	tlog::success() << "Loaded nerf slam completed"   ;
+	tlog::info() << "  cam_aabb=" << cam_aabb;
+
+	if (result.has_rays) {
+		tlog::success() << "Loaded per-pixel rays.";
+	}
+
+	result.sharpness_resolution = { 128, 72 };
+	result.sharpness_data.enlarge( result.sharpness_resolution.x() * result.sharpness_resolution.y() *  result.n_images );
+
+	return result;
+}
+
+NerfDataset NerfDataset::add_training_image(nlohmann::json frame, uint8_t *img, uint16_t *depth, uint8_t *alpha, uint8_t *mask) {
+
+	std::cout << "add_training_image [1]" << std::endl;
+	if (!frame.contains("h") || !frame.contains("w") ) {
+		throw std::runtime_error{"No height or width information provided"};
+	}
+
+	if (!frame.contains("transform_matrix")) {
+		throw std::runtime_error{"No transform_matrix provided, should be the prior in SLAM"};
+	}
+
+	// if(this->n_images == 0){
+	// 	this->xforms.resize(100);
+	// 	this->metadata.resize(100);
+	// 	this->pixelmemory.resize(100);
+	// 	this->depthmemory.resize(100);
+	// 	this->raymemory.resize(100);
+	// }
+
+
+	// debug fix only one image
+	// this->n_images = 1;
+	// // this->n_images += 1;
+	// // assert(this->xforms.size() <= this->n_images);
+	// this->xforms.resize(this->n_images);
+	// this->metadata.resize(this->n_images);
+	// this->pixelmemory.resize(this->n_images);
+	// this->depthmemory.resize(this->n_images);
+	// this->raymemory.resize(this->n_images);
+
+	this->xforms.resize(this->slam.max_training_keyframes);
+	this->metadata.resize(this->slam.max_training_keyframes);
+	this->pixelmemory.resize(this->slam.max_training_keyframes);
+	this->depthmemory.resize(this->slam.max_training_keyframes);
+	this->raymemory.resize(this->slam.max_training_keyframes);
+
+	if (this->n_images >= this->slam.max_training_keyframes) {
+		tlog::warning() << this->n_images << "(Number of keyframes) > " << this->slam.max_training_keyframes
+		<< "(slam_max_keyframes). Only the latest " << this->slam.max_training_keyframes << " will be used in training" ;
+	}
+
+	size_t i_img = this->n_images % this->slam.max_training_keyframes;
+	this->n_images += 1;
+
+	LoadedImageInfo dst;
+	dst = info; // copy defaults
+
+	uint32_t height = frame["h"];
+	uint32_t width  = frame["w"];
+
+	// dst.res.x() = width;
+	// dst.res.y() = height;
+	int comp;
+
+	std::string path = "/home/marvin/Github/NerfSlam/rgbd_dataset_freiburg3_long_office_household/rgb/1341848024.358743.png";
+	img = stbi_load(path.c_str(), &dst.res.x(), &dst.res.y(), &comp, 4);
+
+	if (img == nullptr) {
+		throw std::runtime_error{"No img provided"};
+	}
+
+	
+	std::cout << "add_training_image [2]" << std::endl;
+	if (frame.contains("is_hdr")) {
+		// dst.pixels = load_exr_to_gpu(&dst.res.x(), &dst.res.y(), path.str().c_str(), fix_premult);
+		// Find a way to load exr from memory
+		throw std::runtime_error{"Slam mode not support hdr yet."};
+		dst.image_type = EImageDataType::Half;
+		dst.image_data_on_gpu = true;
+		this->is_hdr = true;
+	} else {
+		dst.image_data_on_gpu = false;
+		if (alpha) {
+			for (int i=0;i<dst.res.prod();++i) {
+				img[i*4+3] = uint8_t(255.0f*srgb_to_linear(alpha[i*4]*(1.f/255.f))); // copy red channel of alpha to alpha.png to our alpha channel
+			}
+		}
+
+		if (mask) {
+			dst.mask_color = 0x00FF00FF; // HOT PINK
+			for (int i = 0; i < dst.res.prod(); ++i) {
+				if (mask[i*4] != 0) {
+					*(uint32_t*)&img[i*4] = dst.mask_color;
+				}
+			}
+		}
+
+		dst.pixels = img;
+		dst.image_type = EImageDataType::Byte;
+	}
+
+	if (!dst.pixels) {
+		throw std::runtime_error{ "No pixels " };
+	}
+
+	if (this->slam.enable_depth_loading && info.depth_scale > 0.f && depth) {
+		// int wa=0,ha=0;
+		dst.depth_pixels = depth; //stbi_load_16_from_memory(depth, height*width, &wa, &ha, &comp, 1);
+		if (!dst.depth_pixels) {
+			throw std::runtime_error{"Could not load depth image"};
+		}
+		// if (wa != dst.res.x() || ha != dst.res.y()) {
+		// 	throw std::runtime_error{std::string{"Depth image has wrong resolution"}};
+		// }
+	}
+
+	nlohmann::json& jsonmatrix_start = frame.contains("transform_matrix_start") ? frame["transform_matrix_start"] : frame["transform_matrix"];
+	nlohmann::json& jsonmatrix_end =   frame.contains("transform_matrix_end") ? frame["transform_matrix_end"] : jsonmatrix_start;
+
+	if (frame.contains("driver_parameters")) {
+		Eigen::Vector3f light_dir(
+			frame["driver_parameters"].value("LightX", 0.f),
+			frame["driver_parameters"].value("LightY", 0.f),
+			frame["driver_parameters"].value("LightZ", 0.f)
+		);
+		this->metadata[i_img].light_dir = this->nerf_direction_to_ngp(light_dir.normalized());
+		this->has_light_dirs = true;
+		this->n_extra_learnable_dims = 0;
+	}
+
+	// frame can have different fov ?
+	auto read_focal_length = [&](int resolution, const std::string& axis) {
+		if (frame.contains(axis + "_fov")) {
+			return fov_to_focal_length(resolution, (float)frame[axis + "_fov"]);
+		} else if (frame.contains("fl_"s + axis)) {
+			return (float)frame["fl_"s + axis];
+		} else if (frame.contains("camera_angle_"s + axis)) {
+			return fov_to_focal_length(resolution, (float)frame["camera_angle_"s + axis] * 180 / PI());
+		} else {
+			return 0.0f;
+		}
+	};
+
+	// x_fov is in degrees, camera_angle_x in radians. Yes, it's silly.
+	float x_fl = read_focal_length(dst.res.x(), "x");
+	float y_fl = read_focal_length(dst.res.y(), "y");
+
+	if (x_fl != 0) {
+		this->metadata[i_img].focal_length = Vector2f::Constant(x_fl);
+		if (y_fl != 0) {
+			this->metadata[i_img].focal_length.y() = y_fl;
+		}
+	} else if (y_fl != 0) {
+		this->metadata[i_img].focal_length = Vector2f::Constant(y_fl);
+	} else {
+		throw std::runtime_error{"Couldn't read fov."};
+	}
+
+	for (int m = 0; m < 3; ++m) {
+		for (int n = 0; n < 4; ++n) {
+			this->xforms[i_img].start(m, n) = float(jsonmatrix_start[m][n]);
+			this->xforms[i_img].end(m, n) = float(jsonmatrix_end[m][n]);
+		}
+	}
+
+	this->metadata[i_img].rolling_shutter = slam.rolling_shutter;
+	this->metadata[i_img].principal_point = slam.principal_point;
+	this->metadata[i_img].camera_distortion = slam.camera_distortion;
+
+	this->xforms[i_img].start = this->nerf_matrix_to_ngp(this->xforms[i_img].start);
+	this->xforms[i_img].end = this->nerf_matrix_to_ngp(this->xforms[i_img].end);
+
+	this->set_training_image(i_img, dst.res, dst.pixels, dst.depth_pixels, dst.depth_scale * this->scale, dst.image_data_on_gpu, dst.image_type, EDepthDataType::UShort, slam.sharpen_amount, dst.white_transparent, dst.black_transparent, dst.mask_color, dst.rays);
+
+	if (dst.image_data_on_gpu) {
+		CUDA_CHECK_THROW(cudaFree(dst.pixels));
+	} else {
+		free(dst.pixels);
+	}
+	free(dst.rays);
+	free(dst.depth_pixels);
+
+	CUDA_CHECK_THROW(cudaDeviceSynchronize());
+
+	return *this;
+}
+
 void NerfDataset::set_training_image(int frame_idx, const Eigen::Vector2i& image_resolution, const void* pixels, const void* depth_pixels, float depth_scale, bool image_data_on_gpu, EImageDataType image_type, EDepthDataType depth_type, float sharpen_amount, bool white_transparent, bool black_transparent, uint32_t mask_color, const Ray *rays) {
 	if (frame_idx < 0 || frame_idx >= n_images) {
 		throw std::runtime_error{"NerfDataset::set_training_image: invalid frame index"};

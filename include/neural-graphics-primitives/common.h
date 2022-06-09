@@ -148,6 +148,7 @@ enum class ETestbedMode : int {
 	Sdf,
 	Image,
 	Volume,
+	NerfSlam,
 };
 
 enum class ESDFGroundTruthMode : int {

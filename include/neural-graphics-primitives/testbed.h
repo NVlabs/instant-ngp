@@ -289,6 +289,8 @@ public:
 	static ELossType string_to_loss_type(const std::string& str);
 	void reset_network();
 	void create_empty_nerf_dataset(size_t n_images, int aabb_scale = 1, bool is_hdr = false);
+	// void update_training_info_from_dataset();
+	void load_nerfslam();
 	void load_nerf();
 	void load_mesh();
 	void set_exposure(float exposure) { m_exposure = exposure; }
@@ -354,6 +356,7 @@ public:
 
 	double calculate_iou(uint32_t n_samples=128*1024*1024, float scale_existing_results_factor=0.0, bool blocking=true, bool force_use_octree = true);
 	void draw_visualizations(ImDrawList* list, const Eigen::Matrix<float, 3, 4>& camera_matrix);
+	void add_training_image(nlohmann::json frame, uint8_t *img, uint16_t *depth=nullptr, uint8_t *alpha=nullptr, uint8_t *mask=nullptr);
 	void train_and_render(bool skip_rendering);
 	filesystem::path training_data_path() const;
 	void init_window(int resw, int resh, bool hidden = false);
@@ -633,6 +636,7 @@ public:
 
 		float m_glow_y_cutoff = 0.f;
 		int m_glow_mode = 0;
+
 	} m_nerf;
 
 	struct Sdf {

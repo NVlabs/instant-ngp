@@ -1328,8 +1328,13 @@ __global__ void compute_loss_kernel_train_nerf(
 	uint32_t ray_idx = ray_indices_in[i];
 	rng.advance(ray_idx * N_MAX_RANDOM_SAMPLES_PER_RAY());
 
+
 	float img_pdf = 1.0f;
 	uint32_t img = image_idx(ray_idx, n_rays, n_rays_total, n_training_images, cdf_img, &img_pdf);
+
+	if (i == 0)
+		printf("[compute_loss_kernel_train_nerf tid:%d] n_training_images: %d img: %d\n", i, n_training_images, img);
+
 	Eigen::Vector2i resolution = metadata[img].resolution;
 
 	float xy_pdf = 1.0f;
@@ -1543,6 +1548,7 @@ __global__ void compute_loss_kernel_train_nerf(
 
 		deposit_envmap_gradient(dL_denvmap, envmap_gradient, envmap_resolution, dir);
 	}
+
 }
 
 
@@ -2427,6 +2433,9 @@ void Testbed::Nerf::Training::update_metadata(int first, int last) {
 	if (n <= 0) {
 		return;
 	}
+
+	std::cout << "[update_metadata] metadata_gpu.size(): " << metadata_gpu.size() << " dataset.metadata.size(): " << dataset.metadata.size() << std::endl;
+
 	metadata_gpu.enlarge(last);
 	CUDA_CHECK_THROW(cudaMemcpy(metadata_gpu.data() + first, dataset.metadata.data() + first, n * sizeof(TrainingImageMetadata), cudaMemcpyHostToDevice));
 }
@@ -2474,6 +2483,94 @@ void Testbed::create_empty_nerf_dataset(size_t n_images, int aabb_scale, bool is
 	load_nerf();
 	m_nerf.training.n_images_for_training = 0;
 	m_training_data_available = true;
+}
+
+void Testbed::load_nerfslam() {
+	CUDA_CHECK_THROW(cudaDeviceSynchronize());
+	if (!m_data_path.empty()) {
+		std::vector<fs::path> json_paths;
+		if (m_data_path.is_directory()) {
+			for (const auto& path : fs::directory{m_data_path}) {
+				if (path.is_file() && equals_case_insensitive(path.extension(), "json")) {
+					json_paths.emplace_back(path);
+				}
+			}
+		} else if (equals_case_insensitive(m_data_path.extension(), "msgpack")) {
+			load_snapshot(m_data_path.str());
+			set_train(false);
+			return;
+		} else if (equals_case_insensitive(m_data_path.extension(), "json")) {
+			json_paths.emplace_back(m_data_path);
+		} else {
+			throw std::runtime_error{"NeRF data path must either be a json file or a directory containing json files."};
+		}
+
+		m_nerf.training.dataset = ngp::load_nerfslam(json_paths, m_nerf.sharpen);
+	}
+
+	m_nerf.rgb_activation = m_nerf.training.dataset.is_hdr ? ENerfActivation::Exponential : ENerfActivation::Logistic;
+
+	m_nerf.training.n_images_for_training = (int)m_nerf.training.dataset.n_images;
+
+	m_nerf.training.cam_pos_gradient.resize(m_nerf.training.dataset.slam.max_training_keyframes, Vector3f::Zero());
+	m_nerf.training.cam_pos_gradient_gpu.resize_and_copy_from_host(m_nerf.training.cam_pos_gradient);
+
+	m_nerf.training.cam_exposure.resize(m_nerf.training.dataset.slam.max_training_keyframes, AdamOptimizer<Array3f>(1e-3f));
+	m_nerf.training.cam_pos_offset.resize(m_nerf.training.dataset.slam.max_training_keyframes, AdamOptimizer<Vector3f>(1e-4f));
+	m_nerf.training.cam_rot_offset.resize(m_nerf.training.dataset.slam.max_training_keyframes, RotationAdamOptimizer(1e-4f));
+	m_nerf.training.cam_focal_length_offset = AdamOptimizer<Vector2f>(1e-5f);
+
+	m_nerf.training.cam_rot_gradient.resize(m_nerf.training.dataset.slam.max_training_keyframes, Vector3f::Zero());
+	m_nerf.training.cam_rot_gradient_gpu.resize_and_copy_from_host(m_nerf.training.cam_rot_gradient);
+
+	m_nerf.training.cam_exposure_gradient.resize(m_nerf.training.dataset.slam.max_training_keyframes, Array3f::Zero());
+	m_nerf.training.cam_exposure_gpu.resize_and_copy_from_host(m_nerf.training.cam_exposure_gradient);
+	m_nerf.training.cam_exposure_gradient_gpu.resize_and_copy_from_host(m_nerf.training.cam_exposure_gradient);
+
+	m_nerf.training.cam_focal_length_gradient = Vector2f::Zero();
+	m_nerf.training.cam_focal_length_gradient_gpu.resize_and_copy_from_host(&m_nerf.training.cam_focal_length_gradient, 1);
+
+	m_nerf.training.reset_extra_dims(m_rng);
+
+	if (m_nerf.training.dataset.has_rays) {
+		m_nerf.training.near_distance = 0.0f;
+		// m_nerf.training.optimize_exposure = true;
+	}
+
+	m_nerf.render_distortion = m_nerf.training.dataset.slam.camera_distortion;
+	m_screen_center = Eigen::Vector2f::Constant(1.f) - m_nerf.training.dataset.slam.principal_point;
+
+	if (!is_pot(m_nerf.training.dataset.aabb_scale)) {
+		throw std::runtime_error{std::string{"NeRF dataset's `aabb_scale` must be a power of two, but is "} + std::to_string(m_nerf.training.dataset.aabb_scale)};
+	}
+
+	int max_aabb_scale = 1 << (NERF_CASCADES()-1);
+	if (m_nerf.training.dataset.aabb_scale > max_aabb_scale) {
+		throw std::runtime_error{
+			std::string{"NeRF dataset must have `aabb_scale <= "} + std::to_string(max_aabb_scale) +
+			"`, but is " + std::to_string(m_nerf.training.dataset.aabb_scale) +
+			". You can increase this limit by factors of 2 by incrementing `NERF_CASCADES()` and re-compiling."
+		};
+	}
+
+	m_aabb = BoundingBox{Vector3f::Constant(0.5f), Vector3f::Constant(0.5f)};
+	m_aabb.inflate(0.5f * std::min(1 << (NERF_CASCADES()-1), m_nerf.training.dataset.aabb_scale));
+	m_raw_aabb = m_aabb;
+	m_render_aabb = m_aabb;
+	if (!m_nerf.training.dataset.render_aabb.is_empty()) {
+		m_render_aabb = m_nerf.training.dataset.render_aabb.intersection(m_aabb);
+	}
+
+	m_nerf.max_cascade = 0;
+	while ((1 << m_nerf.max_cascade) < m_nerf.training.dataset.aabb_scale) {
+		++m_nerf.max_cascade;
+	}
+
+	// Perform fixed-size stepping in unit-cube scenes (like original NeRF) and exponential
+	// stepping in larger scenes.
+	m_nerf.cone_angle_constant = m_nerf.training.dataset.aabb_scale <= 1 ? 0.0f : (1.0f / 256.0f);
+
+	m_up_dir = m_nerf.training.dataset.up;
 }
 
 void Testbed::load_nerf() {
@@ -2586,6 +2683,7 @@ void Testbed::load_nerf() {
 	m_nerf.cone_angle_constant = m_nerf.training.dataset.aabb_scale <= 1 ? 0.0f : (1.0f / 256.0f);
 
 	m_up_dir = m_nerf.training.dataset.up;
+
 }
 
 void Testbed::update_density_grid_nerf(float decay, uint32_t n_uniform_density_grid_samples, uint32_t n_nonuniform_density_grid_samples, cudaStream_t stream) {
@@ -2611,7 +2709,8 @@ void Testbed::update_density_grid_nerf(float decay, uint32_t n_uniform_density_g
 	network_precision_t* mlp_out = std::get<3>(scratch);
 
 	if (m_training_step == 0 || m_nerf.training.n_images_for_training != m_nerf.training.n_images_for_training_prev) {
-		m_nerf.training.n_images_for_training_prev = m_nerf.training.n_images_for_training;
+		// Move this line to the last line of train in testbed.cu
+		// m_nerf.training.n_images_for_training_prev = m_nerf.training.n_images_for_training;
 		if (m_training_step == 0) {
 			m_nerf.density_grid_ema_step = 0;
 		}
@@ -2760,13 +2859,18 @@ void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaS
 		CUDA_CHECK_THROW(cudaMemsetAsync(m_nerf.training.extra_dims_gradient_gpu.data(), 0, m_nerf.training.extra_dims_gradient_gpu.get_bytes(), stream));
 	}
 
-	if (m_nerf.training.n_steps_since_error_map_update == 0 && !m_nerf.training.dataset.metadata.empty()) {
+	// m_nerf.training.error_map.data need to resize when m_nerf.training.dataset.n_image changes
+	// Add "m_nerf.training.n_images_for_training != m_nerf.training.n_images_for_training_prev" condition
+	// The m_nerf.training.n_images_for_training_prev will be updated in train_nerf_step
+	if (m_nerf.training.n_steps_since_error_map_update == 0 || m_nerf.training.n_images_for_training != m_nerf.training.n_images_for_training_prev && !m_nerf.training.dataset.metadata.empty()) {
 		uint32_t n_samples_per_image = (m_nerf.training.n_steps_between_error_map_updates * m_nerf.training.counters_rgb.rays_per_batch) / m_nerf.training.dataset.n_images;
 		Eigen::Vector2i res = m_nerf.training.dataset.metadata[0].resolution;
 		m_nerf.training.error_map.resolution = Vector2i::Constant((int)(std::sqrt(std::sqrt((float)n_samples_per_image)) * 3.5f)).cwiseMin(res);
 		m_nerf.training.error_map.data.resize(m_nerf.training.error_map.resolution.prod() * m_nerf.training.dataset.n_images);
 		CUDA_CHECK_THROW(cudaMemsetAsync(m_nerf.training.error_map.data.data(), 0, m_nerf.training.error_map.data.get_bytes(), stream));
 	}
+	std::cout << "m_nerf.training.n_images_for_training: " << m_nerf.training.n_images_for_training << std::endl;
+	std::cout << "m_nerf.training.n_images_for_training_prev: " << m_nerf.training.n_images_for_training_prev << std::endl;
 
 	float* envmap_gradient = m_nerf.training.train_envmap ? m_envmap.envmap->gradients() : nullptr;
 	if (envmap_gradient) {
@@ -2847,6 +2951,7 @@ void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaS
 			m_nerf.training.error_map.pmf_img_cpu[i] = (1.0f - MIN_PMF) * m_nerf.training.error_map.pmf_img_cpu[i] * norm + MIN_PMF / (float)m_nerf.training.dataset.n_images;
 			cdf_img_cpu[i] = (1.0f - MIN_PMF) * cdf_img_cpu[i] * norm + MIN_PMF * (float)(i+1) / (float)m_nerf.training.dataset.n_images;
 		}
+
 		m_nerf.training.error_map.cdf_img.copy_from_host(cdf_img_cpu);
 
 		// Reset counters and decrease update rate.
@@ -3169,6 +3274,23 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 		auto ctx = m_network->forward(stream, compacted_coords_matrix, &compacted_rgbsigma_matrix, false, prepare_input_gradients);
 		m_network->backward(stream, *ctx, compacted_coords_matrix, compacted_rgbsigma_matrix, gradient_matrix, prepare_input_gradients ? &coords_gradient_matrix : nullptr, false, EGradientMode::Overwrite);
 	}
+
+	// my debug
+
+	std::vector<uint32_t> counter_cpu(1);
+	std::vector<uint32_t> compacted_counter_cpu(1);
+	printf("numsteps_counter.size(): %d numsteps_counter_compacted.size():%d \n",
+		m_nerf.training.counters_rgb.numsteps_counter.size(),
+		m_nerf.training.counters_rgb.numsteps_counter_compacted.size()
+	);
+
+	// m_nerf.training.counters_rgb.numsteps_counter.copy_to_host(counter_cpu);
+	// m_nerf.training.counters_rgb.numsteps_counter_compacted.copy_to_host(compacted_counter_cpu);
+
+ 	// printf("max_samples:%d target_batch_size:%d n_rays_per_batch:%d \n", max_samples, target_batch_size, n_rays_per_batch);
+ 	// printf("counter[0]:%d, compacted_counter[0]:%d \n", counter_cpu[0], compacted_counter_cpu[0]);
+
+    // end
 
 	if (train_extra_dims) {
 		// Compute extra-dim gradients
