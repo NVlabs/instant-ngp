@@ -1002,12 +1002,13 @@ NerfDataset NerfDataset::add_training_image(nlohmann::json frame, uint8_t *img, 
 	uint32_t height = frame["h"];
 	uint32_t width  = frame["w"];
 
-	// dst.res.x() = width;
-	// dst.res.y() = height;
-	int comp;
-
-	std::string path = "/home/marvin/Github/NerfSlam/rgbd_dataset_freiburg3_long_office_household/rgb/1341848024.358743.png";
-	img = stbi_load(path.c_str(), &dst.res.x(), &dst.res.y(), &comp, 4);
+	dst.res.x() = width;
+	dst.res.y() = height;
+	
+	// debug use disk image
+	// int comp;
+	// std::string path = "/home/marvin/Github/NerfSlam/rgbd_dataset_freiburg3_long_office_household/rgb/1341848024.358743.png";
+	// img = stbi_load(path.c_str(), &dst.res.x(), &dst.res.y(), &comp, 4);
 
 	if (img == nullptr) {
 		throw std::runtime_error{"No img provided"};
@@ -1114,7 +1115,11 @@ NerfDataset NerfDataset::add_training_image(nlohmann::json frame, uint8_t *img, 
 	this->xforms[i_img].start = this->nerf_matrix_to_ngp(this->xforms[i_img].start);
 	this->xforms[i_img].end = this->nerf_matrix_to_ngp(this->xforms[i_img].end);
 
+	std::cout << "add_training_image [3]" << std::endl;
+
 	this->set_training_image(i_img, dst.res, dst.pixels, dst.depth_pixels, dst.depth_scale * this->scale, dst.image_data_on_gpu, dst.image_type, EDepthDataType::UShort, slam.sharpen_amount, dst.white_transparent, dst.black_transparent, dst.mask_color, dst.rays);
+
+	std::cout << "add_training_image [4]" << std::endl;
 
 	if (dst.image_data_on_gpu) {
 		CUDA_CHECK_THROW(cudaFree(dst.pixels));
@@ -1125,6 +1130,8 @@ NerfDataset NerfDataset::add_training_image(nlohmann::json frame, uint8_t *img, 
 	free(dst.depth_pixels);
 
 	CUDA_CHECK_THROW(cudaDeviceSynchronize());
+
+	std::cout << "add_training_image [5]" << std::endl;
 
 	return *this;
 }
