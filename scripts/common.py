@@ -267,9 +267,4 @@ def compute_error(metric, img, ref, metric_map_filename=None):
 	if len(metric_map.shape) == 3:
 		metric_map = np.mean(metric_map, axis=2)
 	mean = np.mean(metric_map)
-	if metric_map_filename:
-		if not metric_map_filename.suffix.lower() == ".exr":
-			index_map = np.clip(255.0 * np.squeeze(metric_map), 0, 255)
-			metric_map = flip.utils.CHWtoHWC(flip.utils.index2color(index_map, flip.utils.get_magma_map()))
-		exr.write(data=metric_map, filename=str(metric_map_filename))
 	return mean
