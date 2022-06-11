@@ -261,7 +261,7 @@ def compute_error_img(metric, img, ref):
 
 	raise ValueError(f"Unknown metric: {metric}.")
 
-def compute_error(metric, img, ref, metric_map_filename=None):
+def compute_error(metric, img, ref):
 	metric_map = compute_error_img(metric, img, ref)
 	metric_map[np.logical_not(np.isfinite(metric_map))] = 0
 	if len(metric_map.shape) == 3:
