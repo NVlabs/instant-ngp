@@ -47,9 +47,16 @@ public:
 	virtual EDlssQuality quality() const = 0;
 };
 
+#ifdef NGP_VULKAN
 std::shared_ptr<IDlss> dlss_init(const Eigen::Vector2i& out_resolution);
 
 void vulkan_and_ngx_init();
+size_t dlss_allocated_bytes();
 void vulkan_and_ngx_destroy();
+#else
+inline size_t dlss_allocated_bytes() {
+	return 0;
+}
+#endif
 
 NGP_NAMESPACE_END

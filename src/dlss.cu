@@ -46,6 +46,8 @@ namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
+extern std::atomic<size_t> g_total_n_bytes_allocated;
+
 /// Checks the result of a vkXXXXXX call and throws an error on failure
 #define VK_CHECK_THROW(x)                                                       \
 	do {                                                                        \
@@ -416,6 +418,16 @@ void vulkan_and_ngx_init() {
 	tlog::success() << "Initialized Vulkan and NGX on device #" << device_id << ": " << physical_device_properties.deviceName;
 }
 
+size_t dlss_allocated_bytes() {
+	unsigned long long allocated_bytes = 0;
+	if (!ngx_parameters) {
+		return 0;
+	}
+
+	NGX_CHECK_THROW(NGX_DLSS_GET_STATS(ngx_parameters, &allocated_bytes));
+	return allocated_bytes;
+}
+
 void vk_command_buffer_begin() {
 	VkCommandBufferBeginInfo begin_info = {};
 	begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -636,9 +648,14 @@ public:
 		resource_desc.res.array.array = first_level_array;
 
 		CUDA_CHECK_THROW(cudaCreateSurfaceObject(&m_cuda_surface_object, &resource_desc));
+
+		m_n_bytes = mem_requirements.size;
+		g_total_n_bytes_allocated += m_n_bytes;
 	}
 
 	virtual ~VulkanTexture() {
+		g_total_n_bytes_allocated -= m_n_bytes;
+
 		if (m_cuda_data) {
 			cudaFree(m_cuda_data);
 		}
@@ -691,6 +708,8 @@ public:
 private:
 	Vector2i m_size;
 	uint32_t m_n_channels;
+
+	size_t m_n_bytes = 0;
 
 	VkImage m_vk_image = {};
 	VkImageView m_vk_image_view = {};
@@ -1006,18 +1025,22 @@ std::shared_ptr<IDlss> dlss_init(const Eigen::Vector2i& out_resolution) {
 void vulkan_and_ngx_destroy() {
 	if (ngx_parameters) {
 		NVSDK_NGX_VULKAN_DestroyParameters(ngx_parameters);
+		ngx_parameters = nullptr;
 	}
 
 	if (ngx_initialized) {
 		NVSDK_NGX_VULKAN_Shutdown();
+		ngx_initialized = false;
 	}
 
 	if (vk_command_pool) {
 		vkDestroyCommandPool(vk_device, vk_command_pool, nullptr);
+		vk_command_pool = VK_NULL_HANDLE;
 	}
 
 	if (vk_device) {
 		vkDestroyDevice(vk_device, nullptr);
+		vk_device = VK_NULL_HANDLE;
 	}
 
 	if (vk_debug_messenger) {
@@ -1029,10 +1052,12 @@ void vulkan_and_ngx_destroy() {
 		};
 
 		DestroyDebugUtilsMessengerEXT(vk_instance, vk_debug_messenger, nullptr);
+		vk_debug_messenger = VK_NULL_HANDLE;
 	}
 
 	if (vk_instance) {
 		vkDestroyInstance(vk_instance, nullptr);
+		vk_instance = VK_NULL_HANDLE;
 	}
 }
 

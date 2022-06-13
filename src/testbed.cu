@@ -56,9 +56,12 @@
 
 #endif
 
-
+// Windows.h is evil
 #undef min
 #undef max
+#undef near
+#undef far
+
 
 using namespace Eigen;
 using namespace std::literals::chrono_literals;
@@ -387,7 +390,7 @@ void Testbed::imgui() {
 
 	ImGui::Begin("instant-ngp v" NGP_VERSION);
 
-	size_t n_bytes = tcnn::total_n_bytes_allocated() + g_total_n_bytes_allocated;
+	size_t n_bytes = tcnn::total_n_bytes_allocated() + g_total_n_bytes_allocated + dlss_allocated_bytes();
 	ImGui::Text("Frame: %.2f ms (%.1f FPS); Mem: %s", m_frame_ms.ema_val(), 1000.0f / m_frame_ms.ema_val(), bytes_to_string(n_bytes).c_str());
 	bool accum_reset = false;
 
