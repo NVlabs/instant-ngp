@@ -426,7 +426,12 @@ size_t dlss_allocated_bytes() {
 		return 0;
 	}
 
-	NGX_CHECK_THROW(NGX_DLSS_GET_STATS(ngx_parameters, &allocated_bytes));
+	try {
+		NGX_CHECK_THROW(NGX_DLSS_GET_STATS(ngx_parameters, &allocated_bytes));
+	} catch (...) {
+		return 0;
+	}
+
 	return allocated_bytes;
 }
 
