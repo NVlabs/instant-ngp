@@ -9,7 +9,7 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 import argparse
-import os
+import os, sys
 import commentjson as json
 
 import numpy as np
@@ -54,14 +54,14 @@ def parse_args():
 	parser.add_argument("--n_steps", type=int, default=-1, help="Number of steps to train for before quitting.")
 
 	parser.add_argument("--sharpen", default=0, help="Set amount of sharpening applied to NeRF training images.")
-
+	parser.add_argument("--crop", default="", help="Set render abb min max i.e. 0,0,0,1,1,1")
 	args = parser.parse_args()
 	return args
 
 
 if __name__ == "__main__":
 	args = parse_args()
-
+	print("  RUNNING ")
 	if args.mode == "":
 		if args.scene in scenes_sdf:
 			args.mode = "sdf"
@@ -99,10 +99,12 @@ if __name__ == "__main__":
 	if not os.path.isabs(network):
 		network = os.path.join(configs_dir, network)
 
-
 	testbed = ngp.Testbed(mode)
 	testbed.nerf.sharpen = float(args.sharpen)
-
+	if args.crop:
+		bb = args.crop.split(",")
+		testbed.render_aabb.min = [float(bb[0]), float(bb[1]), float(bb[2])]
+		testbed.render_aabb.max = [float(bb[3]), float(bb[4]), float(bb[5])]
 	if args.mode == "sdf":
 		testbed.tonemap_curve = ngp.TonemapCurve.ACES
 
@@ -166,7 +168,7 @@ if __name__ == "__main__":
 	n_steps = args.n_steps
 	if n_steps < 0:
 		n_steps = 100000
-
+	print(args)
 	if n_steps > 0:
 		with tqdm(desc="Training", total=n_steps, unit="step") as t:
 			while testbed.frame():
@@ -178,7 +180,6 @@ if __name__ == "__main__":
 						testbed.shall_train = False
 					else:
 						break
-
 				# Update progress bar
 				if testbed.training_step < old_training_step or old_training_step == 0:
 					old_training_step = 0
@@ -187,7 +188,9 @@ if __name__ == "__main__":
 				t.update(testbed.training_step - old_training_step)
 				t.set_postfix(loss=testbed.loss)
 				old_training_step = testbed.training_step
-
+				print("__testbed.training_step:")
+				print(testbed.training_step)
+	sys.exit()
 	if args.save_snapshot:
 		print("Saving snapshot ", args.save_snapshot)
 		testbed.save_snapshot(args.save_snapshot, False)
