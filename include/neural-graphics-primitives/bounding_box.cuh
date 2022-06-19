@@ -29,8 +29,14 @@ NGP_HOST_DEVICE inline void project(Eigen::Vector3f points[N_POINTS], const Eige
 	NGP_PRAGMA_UNROLL
 	for (uint32_t i = 0; i < N_POINTS; ++i) {
 		float val = axis.dot(points[i]);
-		if (val < min) min = val;
-		if (val > max) max = val;
+
+		if (val < min) {
+			min = val;
+		}
+
+		if (val > max) {
+			max = val;
+		}
 	}
 }
 
@@ -39,14 +45,12 @@ struct BoundingBox {
 
 	NGP_HOST_DEVICE BoundingBox(const Eigen::Vector3f& a, const Eigen::Vector3f& b) : min{a}, max{b} {}
 
-	// From triangle
 	NGP_HOST_DEVICE explicit BoundingBox(const Triangle& tri) {
 		min = max = tri.a;
 		enlarge(tri.b);
 		enlarge(tri.c);
 	}
 
-	// From iterators
 	BoundingBox(std::vector<Triangle>::iterator begin, std::vector<Triangle>::iterator end) {
 		min = max = begin->a;
 		for (auto it = begin; it != end; ++it) {
@@ -98,10 +102,6 @@ struct BoundingBox {
 		return !intersection(other).is_empty();
 	}
 
-	// NGP_HOST_DEVICE bool intersects(const Triangle& triangle) const {
-	// 	return !intersection(BoundingBox{triangle}).is_empty();
-	// }
-
 	// Based on the separating axis theorem
 	// (https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/code/tribox_tam.pdf)
 	// Code adapted from a C# implementation at stack overflow
@@ -123,8 +123,9 @@ struct BoundingBox {
 
 		for (int i = 0; i < 3; i++) {
 			project<3>(triangle_verts, box_normals[i], triangle_min, triangle_max);
-			if (triangle_max < min[i] || triangle_min > max[i])
+			if (triangle_max < min[i] || triangle_min > max[i]) {
 				return false; // No intersection possible.
+			}
 		}
 
 		Eigen::Vector3f verts[8];
@@ -163,35 +164,47 @@ struct BoundingBox {
 		float tmin = (min.x() - pos.x()) / dir.x();
 		float tmax = (max.x() - pos.x()) / dir.x();
 
-		if (tmin > tmax) tcnn::host_device_swap(tmin, tmax);
+		if (tmin > tmax) {
+			tcnn::host_device_swap(tmin, tmax);
+		}
 
 		float tymin = (min.y() - pos.y()) / dir.y();
 		float tymax = (max.y() - pos.y()) / dir.y();
 
-		if (tymin > tymax) tcnn::host_device_swap(tymin, tymax);
+		if (tymin > tymax) {
+			tcnn::host_device_swap(tymin, tymax);
+		}
 
-		if ((tmin > tymax) || (tymin > tmax))
-			return { 100000.0f, 100000.0f };
+		if (tmin > tymax || tymin > tmax) {
+			return { std::numeric_limits<float>::max(), std::numeric_limits<float>::max() };
+		}
 
-		if (tymin > tmin)
+		if (tymin > tmin) {
 			tmin = tymin;
+		}
 
-		if (tymax < tmax)
+		if (tymax < tmax) {
 			tmax = tymax;
+		}
 
 		float tzmin = (min.z() - pos.z()) / dir.z();
 		float tzmax = (max.z() - pos.z()) / dir.z();
 
-		if (tzmin > tzmax) tcnn::host_device_swap(tzmin, tzmax);
+		if (tzmin > tzmax) {
+			tcnn::host_device_swap(tzmin, tzmax);
+		}
 
-		if ((tmin > tzmax) || (tzmin > tmax))
-			return { 100000.0f, 100000.0f };
+		if (tmin > tzmax || tzmin > tmax) {
+			return { std::numeric_limits<float>::max(), std::numeric_limits<float>::max() };
+		}
 
-		if (tzmin > tmin)
+		if (tzmin > tmin) {
 			tmin = tzmin;
+		}
 
-		if (tzmax < tmax)
+		if (tzmax < tmax) {
 			tmax = tzmax;
+		}
 
 		return { tmin, tmax };
 	}

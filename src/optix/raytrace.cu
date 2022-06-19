@@ -20,7 +20,6 @@
 
 using namespace Eigen;
 
-
 NGP_NAMESPACE_BEGIN
 
 extern "C" {

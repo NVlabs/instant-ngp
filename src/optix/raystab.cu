@@ -23,7 +23,6 @@
 using namespace Eigen;
 using namespace tcnn;
 
-
 NGP_NAMESPACE_BEGIN
 
 extern "C" {

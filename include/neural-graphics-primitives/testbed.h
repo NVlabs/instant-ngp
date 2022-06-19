@@ -14,7 +14,6 @@
 
 #pragma once
 
-
 #include <neural-graphics-primitives/adam_optimizer.h>
 #include <neural-graphics-primitives/camera_path.h>
 #include <neural-graphics-primitives/common.h>
@@ -23,6 +22,7 @@
 #include <neural-graphics-primitives/nerf_loader.h>
 #include <neural-graphics-primitives/render_buffer.h>
 #include <neural-graphics-primitives/sdf.h>
+#include <neural-graphics-primitives/shared_queue.h>
 #include <neural-graphics-primitives/trainable_buffer.cuh>
 
 #include <tiny-cuda-nn/cuda_graph.h>
@@ -37,6 +37,7 @@
 #include <pybind11/numpy.h>
 #endif
 
+#include <thread>
 
 struct GLFWwindow;
 
@@ -75,24 +76,40 @@ public:
 	public:
 		SphereTracer() : m_hit_counter(1), m_alive_counter(1) {}
 
-		void init_rays_from_camera(uint32_t spp,
+		void init_rays_from_camera(
+			uint32_t spp,
 			const Eigen::Vector2i& resolution,
 			const Eigen::Vector2f& focal_length,
 			const Eigen::Matrix<float, 3, 4>& camera_matrix,
 			const Eigen::Vector2f& screen_center,
+			const Eigen::Vector3f& parallax_shift,
 			bool snap_to_pixel_centers,
 			const BoundingBox& aabb,
 			float floor_y,
 			float plane_z,
 			float dof,
-			const precision_t* envmap_data,
+			const float* envmap_data,
 			const Eigen::Vector2i& envmap_resolution,
 			Eigen::Array4f* frame_buffer,
-			const TriangleOctree* octree, cudaStream_t stream);
+			float* depth_buffer,
+			const TriangleOctree* octree,
+			uint32_t n_octree_levels,
+			cudaStream_t stream
+		);
 
 		void init_rays_from_data(uint32_t n_elements, const RaysSdfSoa& data, cudaStream_t stream);
 		uint32_t trace_bvh(TriangleBvh* bvh, const Triangle* triangles, cudaStream_t stream);
-		uint32_t trace(const distance_fun_t& distance_function, float zero_offset, float distance_scale, const BoundingBox& aabb, const float floor_y, const TriangleOctree* octree, cudaStream_t stream);
+		uint32_t trace(
+			const distance_fun_t& distance_function,
+			float zero_offset,
+			float distance_scale,
+			float maximum_distance,
+			const BoundingBox& aabb,
+			const float floor_y,
+			const TriangleOctree* octree,
+			uint32_t n_octree_levels,
+			cudaStream_t stream
+		);
 		void enlarge(size_t n_elements);
 		RaysSdfSoa& rays_hit() { return m_rays_hit; }
 		RaysSdfSoa& rays_init() { return m_rays[0];	}
@@ -105,7 +122,7 @@ public:
 		tcnn::GPUMemory<uint32_t> m_hit_counter;
 		tcnn::GPUMemory<uint32_t> m_alive_counter;
 		uint32_t m_n_rays_initialized = 0;
-		float m_shadow_sharpness = 8.0f;
+		float m_shadow_sharpness = 2048.f;
 		bool m_trace_shadow_rays = false;
 	};
 
@@ -113,23 +130,28 @@ public:
 	public:
 		NerfTracer() : m_hit_counter(1), m_alive_counter(1) {}
 
-		void init_rays_from_camera(uint32_t spp,
+		void init_rays_from_camera(
+			uint32_t spp,
 			uint32_t padded_output_width,
+			uint32_t n_extra_dims,
 			const Eigen::Vector2i& resolution,
 			const Eigen::Vector2f& focal_length,
 			const Eigen::Matrix<float, 3, 4>& camera_matrix0,
 			const Eigen::Matrix<float, 3, 4>& camera_matrix1,
+			const Eigen::Vector4f& rolling_shutter,
 			Eigen::Vector2f screen_center,
+			Eigen::Vector3f parallax_shift,
 			bool snap_to_pixel_centers,
 			const BoundingBox& render_aabb,
 			float plane_z,
 			float dof,
 			const CameraDistortion& camera_distortion,
-			const precision_t* envmap_data,
+			const float* envmap_data,
 			const Eigen::Vector2i& envmap_resolution,
 			const float* distortion_data,
 			const Eigen::Vector2i& distortion_resolution,
 			Eigen::Array4f* frame_buffer,
+			float* depth_buffer,
 			uint8_t *grid,
 			int show_accel,
 			float cone_angle_constant,
@@ -142,7 +164,7 @@ public:
 			const BoundingBox& render_aabb,
 			const BoundingBox& train_aabb,
 			const uint32_t n_training_images,
-			const Eigen::Matrix<float, 3, 4>* training_xforms,
+			const TrainingXForm* training_xforms,
 			const Eigen::Vector2f& focal_length,
 			float cone_angle_constant,
 			const uint8_t* grid,
@@ -154,23 +176,31 @@ public:
 			ENerfActivation rgb_activation,
 			ENerfActivation density_activation,
 			int show_accel,
-			float min_alpha,
+			float min_transmittance,
+			float glow_y_cutoff,
+			int glow_mode,
+			const float* extra_dims_gpu,
 			cudaStream_t stream
 		);
 
-		void enlarge(size_t n_elements, uint32_t padded_output_width);
+		void enlarge(size_t n_elements, uint32_t padded_output_width, uint32_t n_extra_dims, cudaStream_t stream);
 		RaysNerfSoa& rays_hit() { return m_rays_hit; }
 		RaysNerfSoa& rays_init() { return m_rays[0]; }
 		uint32_t n_rays_initialized() const { return m_n_rays_initialized; }
 
+		void clear() {
+			m_scratch_alloc = {};
+		}
+
 	private:
 		RaysNerfSoa m_rays[2];
 		RaysNerfSoa m_rays_hit;
-		tcnn::GPUMemory<precision_t> m_network_output;
-		tcnn::GPUMemory<NerfCoordinate> m_network_input;
+		precision_t* m_network_output;
+		float* m_network_input;
 		tcnn::GPUMemory<uint32_t> m_hit_counter;
 		tcnn::GPUMemory<uint32_t> m_alive_counter;
 		uint32_t m_n_rays_initialized = 0;
+		tcnn::GPUMemoryArena::Allocation m_scratch_alloc;
 	};
 
 	class FiniteDifferenceNormalsApproximator {
@@ -210,14 +240,27 @@ public:
 
 	static constexpr float LOSS_SCALE = 128.f;
 
+	struct NetworkDims {
+		uint32_t n_input;
+		uint32_t n_output;
+		uint32_t n_pos;
+	};
+
+	NetworkDims network_dims_volume() const;
+	NetworkDims network_dims_sdf() const;
+	NetworkDims network_dims_image() const;
+	NetworkDims network_dims_nerf() const;
+
+	NetworkDims network_dims() const;
+
 	void render_volume(CudaRenderBuffer& render_buffer,
 		const Eigen::Vector2f& focal_length,
 		const Eigen::Matrix<float, 3, 4>& camera_matrix,
 		const Eigen::Vector2f& screen_center,
 		cudaStream_t stream
 	);
-	void train_volume(size_t target_batch_size, size_t n_steps, cudaStream_t stream);
-	void training_prep_volume(uint32_t batch_size, uint32_t n_training_steps, cudaStream_t stream) {}
+	void train_volume(size_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
+	void training_prep_volume(uint32_t batch_size, cudaStream_t stream) {}
 	void load_volume();
 
 	void render_sdf(
@@ -230,18 +273,22 @@ public:
 		const Eigen::Vector2f& screen_center,
 		cudaStream_t stream
 	);
-	void render_nerf(CudaRenderBuffer& render_buffer, const Eigen::Vector2i& max_res, const Eigen::Vector2f& focal_length, const Eigen::Matrix<float, 3, 4>& camera_matrix0, const Eigen::Matrix<float, 3, 4>& camera_matrix1, const Eigen::Vector2f& screen_center, cudaStream_t stream);
+	const float* get_inference_extra_dims(cudaStream_t stream) const;
+	void render_nerf(CudaRenderBuffer& render_buffer, const Eigen::Vector2i& max_res, const Eigen::Vector2f& focal_length, const Eigen::Matrix<float, 3, 4>& camera_matrix0, const Eigen::Matrix<float, 3, 4>& camera_matrix1, const Eigen::Vector4f& rolling_shutter, const Eigen::Vector2f& screen_center, cudaStream_t stream);
 	void render_image(CudaRenderBuffer& render_buffer, cudaStream_t stream);
-	void render_frame(const Eigen::Matrix<float, 3, 4>& camera_matrix0, const Eigen::Matrix<float, 3, 4>& camera_matrix1, CudaRenderBuffer& render_buffer, bool to_srgb = true) ;
-	void visualize_nerf_cameras(const Eigen::Matrix<float, 4, 4>& world2proj);
+	void render_frame(const Eigen::Matrix<float, 3, 4>& camera_matrix0, const Eigen::Matrix<float, 3, 4>& camera_matrix1, const Eigen::Vector4f& nerf_rolling_shutter, CudaRenderBuffer& render_buffer, bool to_srgb = true) ;
+	void visualize_nerf_cameras(ImDrawList* list, const Eigen::Matrix<float, 4, 4>& world2proj);
 	nlohmann::json load_network_config(const filesystem::path& network_config_path);
 	void reload_network_from_file(const std::string& network_config_path);
 	void reload_network_from_json(const nlohmann::json& json, const std::string& config_base_path=""); // config_base_path is needed so that if the passed in json uses the 'parent' feature, we know where to look... be sure to use a filename, or if a directory, end with a trailing slash
-	void reset_accumulation();
+	void reset_accumulation(bool due_to_camera_movement = false, bool immediate_redraw = true);
+	void redraw_next_frame() {
+		m_render_skip_due_to_lack_of_camera_movement_counter = 0;
+	}
+	bool reprojection_available() { return m_dlss; }
 	static ELossType string_to_loss_type(const std::string& str);
 	void reset_network();
-	void update_nerf_focal_lengths();
-	void update_nerf_transforms();
+	void create_empty_nerf_dataset(size_t n_images, int aabb_scale = 1, bool is_hdr = false);
 	void load_nerf();
 	void load_mesh();
 	void set_exposure(float exposure) { m_exposure = exposure; }
@@ -269,22 +316,26 @@ public:
 	void generate_training_samples_sdf(Eigen::Vector3f* positions, float* distances, uint32_t n_to_generate, cudaStream_t stream, bool uniform_only);
 	void update_density_grid_nerf(float decay, uint32_t n_uniform_density_grid_samples, uint32_t n_nonuniform_density_grid_samples, cudaStream_t stream);
 	void update_density_grid_mean_and_bitfield(cudaStream_t stream);
-	void train_nerf(uint32_t target_batch_size, uint32_t n_training_steps, cudaStream_t stream);
+	void train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
 	void train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_batch, uint32_t* counter, uint32_t* compacted_counter, float* loss, cudaStream_t stream);
-	void train_sdf(size_t target_batch_size, size_t n_steps, cudaStream_t stream);
-	void train_image(size_t target_batch_size, size_t n_steps, cudaStream_t stream);
+	void train_sdf(size_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
+	void train_image(size_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
 	void set_train(bool mtrain);
+	void dump_parameters_as_images();
 	void imgui();
-	void training_prep_nerf(uint32_t batch_size, uint32_t n_training_steps, cudaStream_t stream);
-	void training_prep_sdf(uint32_t batch_size, uint32_t n_training_steps, cudaStream_t stream);
-	void training_prep_image(uint32_t batch_size, uint32_t n_training_steps, cudaStream_t stream) {}
-	void train(uint32_t n_training_steps, uint32_t batch_size);
+	void training_prep_nerf(uint32_t batch_size, cudaStream_t stream);
+	void training_prep_sdf(uint32_t batch_size, cudaStream_t stream);
+	void training_prep_image(uint32_t batch_size, cudaStream_t stream) {}
+	void train(uint32_t batch_size);
 	Eigen::Vector2f calc_focal_length(const Eigen::Vector2i& resolution, int fov_axis, float zoom) const ;
 	Eigen::Vector2f render_screen_center() const ;
 	void optimise_mesh_step(uint32_t N_STEPS);
 	void compute_mesh_vertex_colors();
-	tcnn::GPUMemory<float> get_density_on_grid(Eigen::Vector3i res3d, const BoundingBox& aabb);
+	tcnn::GPUMemory<float> get_density_on_grid(Eigen::Vector3i res3d, const BoundingBox& aabb); // network version (nerf or sdf)
+	tcnn::GPUMemory<float> get_sdf_gt_on_grid(Eigen::Vector3i res3d, const BoundingBox& aabb); // sdf gt version (sdf only)
+	tcnn::GPUMemory<Eigen::Array4f> get_rgba_on_grid(Eigen::Vector3i res3d, Eigen::Vector3f ray_dir);
 	int marching_cubes(Eigen::Vector3i res3d, const BoundingBox& aabb, float thresh);
+
 	// Determines the 3d focus point by rendering a little 16x16 depth image around
 	// the mouse cursor and picking the median depth.
 	void determine_autofocus_target_from_pixel(const Eigen::Vector2i& focus_pixel);
@@ -296,20 +347,20 @@ public:
 #ifdef NGP_PYTHON
 	pybind11::dict compute_marching_cubes_mesh(Eigen::Vector3i res3d = Eigen::Vector3i::Constant(128), BoundingBox aabb = BoundingBox{Eigen::Vector3f::Zero(), Eigen::Vector3f::Ones()}, float thresh=2.5f);
 	pybind11::array_t<float> render_to_cpu(int width, int height, int spp, bool linear, float start_t, float end_t, float fps, float shutter_fraction);
+	pybind11::array_t<float> render_with_rolling_shutter_to_cpu(const Eigen::Matrix<float, 3, 4>& camera_transform_start, const Eigen::Matrix<float, 3, 4>& camera_transform_end, const Eigen::Vector4f& rolling_shutter, int width, int height, int spp, bool linear);
 	pybind11::array_t<float> screenshot(bool linear) const;
 	void override_sdf_training_data(pybind11::array_t<float> points, pybind11::array_t<float> distances);
 #endif
 
 	double calculate_iou(uint32_t n_samples=128*1024*1024, float scale_existing_results_factor=0.0, bool blocking=true, bool force_use_octree = true);
-	void draw_visualizations(const Eigen::Matrix<float, 3, 4>& camera_matrix);
-	void draw_contents();
+	void draw_visualizations(ImDrawList* list, const Eigen::Matrix<float, 3, 4>& camera_matrix);
+	void train_and_render(bool skip_rendering);
 	filesystem::path training_data_path() const;
-	static void glfw_error_callback(int error, const char* description){	fprintf(stderr, "Glfw Error %d: %s\n", error, description); }
 	void init_window(int resw, int resh, bool hidden = false);
 	void destroy_window();
 	void apply_camera_smoothing(float elapsed_ms);
 	int find_best_training_view(int default_view);
-	bool handle_user_input();
+	bool begin_frame_and_handle_user_input();
 	void gather_histograms();
 	void draw_gui();
 	bool frame();
@@ -331,9 +382,10 @@ public:
 	void update_loss_graph();
 	void load_camera_path(const std::string& filepath_string);
 
-	float compute_image_mse();
+	float compute_image_mse(bool quantize_to_byte);
 
 	void compute_and_save_marching_cubes_mesh(const char* filename, Eigen::Vector3i res3d = Eigen::Vector3i::Constant(128), BoundingBox aabb = {}, float thresh = 2.5f, bool unwrap_it = false);
+	Eigen::Vector3i compute_and_save_png_slices(const char* filename, int res, BoundingBox aabb = {}, float thresh = 2.5f, float density_range = 4.f, bool flip_y_and_z_axes = false);
 
 	////////////////////////////////////////////////////////////////
 	// marching cubes related state
@@ -366,7 +418,6 @@ public:
 		}
 	};
 	MeshState m_mesh;
-
 	bool m_want_repl = false;
 
 	bool m_render_window = false;
@@ -383,10 +434,12 @@ public:
 
 	// Rendering stuff
 	Eigen::Vector2i m_window_res = Eigen::Vector2i::Constant(0);
-	bool m_dynamic_res=true;
-	int m_fixed_res_factor=8;
+	bool m_dynamic_res = true;
+	float m_dynamic_res_target_fps = 20.0f;
+	int m_fixed_res_factor = 8;
 	float m_last_render_res_factor = 1.0f;
-	float m_scale = 1;
+	float m_scale = 1.0;
+	float m_prev_scale = 1.0;
 	float m_dof = 0.0f;
 	Eigen::Vector2f m_relative_focal_length = Eigen::Vector2f::Ones();
 	uint32_t m_fov_axis = 1;
@@ -395,6 +448,9 @@ public:
 
 	Eigen::Matrix<float, 3, 4> m_camera = Eigen::Matrix<float, 3, 4>::Zero();
 	Eigen::Matrix<float, 3, 4> m_smoothed_camera = Eigen::Matrix<float, 3, 4>::Zero();
+	Eigen::Matrix<float, 3, 4> m_prev_camera = Eigen::Matrix<float, 3, 4>::Zero();
+	size_t m_render_skip_due_to_lack_of_camera_movement_counter = 0;
+
 	bool m_fps_camera = false;
 	bool m_camera_smoothing = false;
 	bool m_autofocus = false;
@@ -410,23 +466,35 @@ public:
 	ERenderMode m_render_mode = ERenderMode::Shade;
 	EMeshRenderMode m_mesh_render_mode = EMeshRenderMode::VertexNormals;
 
-	int m_seed = 1337;
+	uint32_t m_seed = 1337;
+
 #ifdef NGP_GUI
+
 	GLFWwindow* m_glfw_window = nullptr;
+
 	std::shared_ptr<GLTexture> m_pip_render_texture;
 	std::vector<std::shared_ptr<GLTexture>> m_render_textures;
 #endif
 
+
 	std::vector<CudaRenderBuffer> m_render_surfaces;
 	std::unique_ptr<CudaRenderBuffer> m_pip_render_surface;
+
+	SharedQueue<std::unique_ptr<ICallable>> m_task_queue;
+
+	void redraw_gui_next_frame() {
+		m_gui_redraw = true;
+	}
+
+	bool m_gui_redraw = true;
 
 	struct Nerf {
 		NerfTracer tracer;
 
 		struct Training {
 			NerfDataset dataset;
-			Eigen::Vector2i image_resolution;
-			int n_images = 0; // how many images
+			int n_images_for_training = 0; // how many images to train from, as a high watermark compared to the dataset size
+			int n_images_for_training_prev = 0; // how many images we saw last time we updated the density grid
 
 			struct ErrorMap {
 				tcnn::GPUMemory<float> data;
@@ -439,11 +507,10 @@ public:
 				bool is_cdf_valid = false;
 			} error_map;
 
-			std::vector<Eigen::Vector2f> focal_lengths;
-			tcnn::GPUMemory<Eigen::Vector2f> focal_lengths_gpu;
+			tcnn::GPUMemory<TrainingImageMetadata> metadata_gpu;
 
-			std::vector<Eigen::Matrix<float, 3, 4>> transforms;
-			tcnn::GPUMemory<Eigen::Matrix<float, 3, 4>> transforms_gpu;
+			std::vector<TrainingXForm> transforms;
+			tcnn::GPUMemory<TrainingXForm> transforms_gpu;
 
 			std::vector<Eigen::Vector3f> cam_pos_gradient;
 			tcnn::GPUMemory<Eigen::Vector3f> cam_pos_gradient_gpu;
@@ -463,35 +530,41 @@ public:
 			std::vector<RotationAdamOptimizer> cam_rot_offset;
 			AdamOptimizer<Eigen::Vector2f> cam_focal_length_offset = AdamOptimizer<Eigen::Vector2f>(0.f);
 
-			tcnn::GPUMemory<uint32_t> ray_indices;
-			tcnn::GPUMemory<Ray> rays;
-			tcnn::GPUMemory<uint32_t> numsteps; // number of steps each ray took
-			tcnn::GPUMemory<uint32_t> numsteps_counter; // number of steps each ray took
-			tcnn::GPUMemory<uint32_t> numsteps_counter_compacted; // number of steps each ray took
-			tcnn::GPUMemory<uint32_t> ray_counter;
-			tcnn::GPUMemory<NerfCoordinate> coords;
-			tcnn::GPUMemory<NerfCoordinate> coords_compacted;
-			tcnn::GPUMemory<NerfCoordinate> coords_gradient;
-			tcnn::GPUMemory<precision_t> mlp_out; // space for mlp to output into - half, padded output size
-			tcnn::GPUMemory<precision_t> mlp_out_trimmed;
-			tcnn::GPUMemory<precision_t> dloss_dmlp_out; // space for loss gradients - padded_output_width
-			tcnn::GPUMemory<float> loss;
-			tcnn::GPUMemory<float> max_level;
-			tcnn::GPUMemory<float> max_level_compacted;
+			tcnn::GPUMemory<float> extra_dims_gpu; // if the model demands a latent code per training image, we put them in here.
+			tcnn::GPUMemory<float> extra_dims_gradient_gpu;
+			std::vector<AdamOptimizer<Eigen::ArrayXf>> extra_dims_opt;
 
-			uint32_t rays_per_batch = 1<<12;
-			uint32_t n_rays_total = 0;
-			uint32_t measured_batch_size = 0;
-			uint32_t measured_batch_size_before_compaction = 0;
+			void reset_extra_dims(default_rng_t &rng);
+
+			float extrinsic_l2_reg = 1e-4f;
+			float intrinsic_l2_reg = 1e-4f;
+			float exposure_l2_reg = 0.0f;
+
+			struct Counters {
+				tcnn::GPUMemory<uint32_t> numsteps_counter; // number of steps each ray took
+				tcnn::GPUMemory<uint32_t> numsteps_counter_compacted; // number of steps each ray took
+				tcnn::GPUMemory<float> loss;
+
+				uint32_t rays_per_batch = 1<<12;
+				uint32_t n_rays_total = 0;
+				uint32_t measured_batch_size = 0;
+				uint32_t measured_batch_size_before_compaction = 0;
+
+				void prepare_for_training_steps(cudaStream_t stream);
+				float update_after_training(uint32_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
+			};
+
+			Counters counters_rgb;
+
 			bool random_bg_color = true;
 			bool linear_colors = false;
 			ELossType loss_type = ELossType::L2;
 			bool snap_to_pixel_centers = true;
-
 			bool train_envmap = false;
 
 			bool optimize_distortion = false;
 			bool optimize_extrinsics = false;
+			bool optimize_extra_dims = false;
 			bool optimize_focal_length = false;
 			bool optimize_exposure = false;
 			bool render_error_overlay = false;
@@ -510,25 +583,41 @@ public:
 			float density_grid_decay = 0.95f;
 			int view = 0;
 
+			float depth_supervision_lambda = 0.f;
+
 			tcnn::GPUMemory<float> sharpness_grid;
+
+			void set_camera_intrinsics(int frame_idx, float fx, float fy = 0.0f, float cx = -0.5f, float cy = -0.5f, float k1 = 0.0f, float k2 = 0.0f, float p1 = 0.0f, float p2 = 0.0f);
+			void set_camera_extrinsics(int frame_idx, const Eigen::Matrix<float, 3, 4>& camera_to_world);
+			Eigen::Matrix<float, 3, 4> get_camera_extrinsics(int frame_idx);
+			void update_metadata(int first = 0, int last = -1);
+			void update_transforms(int first = 0, int last = -1);
+
+#ifdef NGP_PYTHON
+			void set_image(int frame_idx, pybind11::array_t<float> img, pybind11::array_t<float> depth_img, float depth_scale);
+#endif
+
+			void reset_camera_extrinsics();
+			void export_camera_extrinsics(const std::string& filename, bool export_extrinsics_in_quat_format = true);
+
 		} training = {};
 
 		tcnn::GPUMemory<float> density_grid; // NERF_GRIDSIZE()^3 grid of EMA smoothed densities from the network
-		tcnn::GPUMemory<NerfPosition> density_grid_positions;
-		tcnn::GPUMemory<uint32_t> density_grid_indices;
 		tcnn::GPUMemory<uint8_t> density_grid_bitfield;
 		uint8_t* get_density_grid_bitfield_mip(uint32_t mip);
-		tcnn::GPUMemory<float> density_grid_tmp;
 		tcnn::GPUMemory<float> density_grid_mean;
 		uint32_t density_grid_ema_step = 0;
 
 		uint32_t max_cascade = 0;
 
-		tcnn::GPUMemory<NerfCoordinate> vis_input;
+		tcnn::GPUMemory<float> vis_input;
 		tcnn::GPUMemory<Eigen::Array4f> vis_rgba;
 
 		ENerfActivation rgb_activation = ENerfActivation::Exponential;
 		ENerfActivation density_activation = ENerfActivation::Exponential;
+
+		Eigen::Vector3f light_dir = Eigen::Vector3f::Constant(0.5f);
+		uint32_t extra_dim_idx_for_inference = 0; // which training image's latent code should be presented at inference time
 
 		int show_accel = -1;
 
@@ -538,21 +627,27 @@ public:
 
 		bool visualize_cameras = false;
 		bool render_with_camera_distortion = false;
+		CameraDistortion render_distortion = {};
 
-		float rendering_min_alpha = 0.01f;
+		float rendering_min_transmittance = 0.01f;
+
+		float m_glow_y_cutoff = 0.f;
+		int m_glow_mode = 0;
 	} m_nerf;
 
 	struct Sdf {
 		SphereTracer tracer;
 		SphereTracer shadow_tracer;
 		float shadow_sharpness = 2048.0f;
+		float maximum_distance = 0.00005f;
+		float fd_normals_epsilon = 0.0005f;
 
-		bool groundtruth_spheremarch = false;
+		ESDFGroundTruthMode groundtruth_mode = ESDFGroundTruthMode::RaytracedMesh;
 
 		BRDFParams brdf;
 
 		FiniteDifferenceNormalsApproximator fd_normals;
-		float fd_normals_epsilon = 0.0005f;
+
 
 		// Mesh data
 		EMeshSdfMode mesh_sdf_mode = EMeshSdfMode::Raystab;
@@ -570,6 +665,12 @@ public:
 		int octree_depth_target = 0; // we duplicate this state so that you can waggle the slider without triggering it immediately
 		std::shared_ptr<TriangleOctree> triangle_octree;
 
+		tcnn::GPUMemory<float> brick_data;
+		uint32_t brick_res = 0;
+		uint32_t brick_level = 10;
+		uint32_t brick_quantise_bits = 0;
+		bool brick_smooth_normals = false; // if true, then we space the central difference taps by one voxel
+
 		bool analytic_normals = false;
 		float zero_offset = 0;
 		float distance_scale = 0.95f;
@@ -584,6 +685,7 @@ public:
 			size_t max_size = 1 << 24;
 			bool did_generate_more_training_data = false;
 			bool generate_sdf_data_online = true;
+			float surface_offset_scale = 1.0f;
 			tcnn::GPUMemory<Eigen::Vector3f> positions;
 			tcnn::GPUMemory<Eigen::Vector3f> positions_shuffled;
 			tcnn::GPUMemory<float> distances;
@@ -596,8 +698,10 @@ public:
 		Float,
 		Half,
 	};
+
 	struct Image {
 		Eigen::Vector2f pos = Eigen::Vector2f::Constant(0.0f);
+		Eigen::Vector2f prev_pos = Eigen::Vector2f::Constant(0.0f);
 		tcnn::GPUMemory<char> data;
 
 		EDataType type = EDataType::Float;
@@ -649,6 +753,9 @@ public:
 	float m_camera_velocity = 1.0f;
 	EColorSpace m_color_space = EColorSpace::Linear;
 	ETonemapCurve m_tonemap_curve = ETonemapCurve::Identity;
+	bool m_dlss = false;
+	bool m_dlss_supported = false;
+	float m_dlss_sharpening = 0.0f;
 
 	// 3D stuff
 	float m_slice_plane_z = 0.0f;
@@ -659,11 +766,14 @@ public:
 	BoundingBox m_render_aabb;
 
 	// Rendering/UI bookkeeping
-	float m_training_prep_milliseconds = 0;
-	float m_training_milliseconds = 0;
-	float m_frame_milliseconds = 0;
+	Ema m_training_prep_ms = {EEmaType::Time, 100};
+	Ema m_training_ms = {EEmaType::Time, 100};
+	Ema m_render_ms = {EEmaType::Time, 100};
+	// The frame contains everything, i.e. training + rendering + GUI and buffer swapping
+	Ema m_frame_ms = {EEmaType::Time, 100};
 	std::chrono::time_point<std::chrono::steady_clock> m_last_frame_time_point;
-	float m_gui_elapsed_ms = 0;
+	std::chrono::time_point<std::chrono::steady_clock> m_last_gui_draw_time_point;
+	std::chrono::time_point<std::chrono::steady_clock> m_training_start_time_point;
 	Eigen::Array4f m_background_color = {0.0f, 0.0f, 0.0f, 1.0f};
 
 	// Visualization of neuron activations
@@ -678,24 +788,29 @@ public:
 	bool m_visualize_unit_cube = false;
 	bool m_snap_to_pixel_centers = false;
 
+	Eigen::Vector2f m_parallax_shift = {0.f, 0.f}; // to shift the viewer's head position by some amount parallel to the screen
+	Eigen::Vector3f get_scaled_parallax_shift() const { return {m_parallax_shift.x(), m_parallax_shift.y(), m_scale}; } // pack m_scale into the parallax parameter so we know where the screen plane is.
+
 	// CUDA stuff
 	cudaStream_t m_training_stream;
 	cudaStream_t m_inference_stream;
 
 	// Hashgrid encoding analysis
 	float m_quant_percent = 0.f;
-	LevelStats m_level_stats[32] = {};
+	std::vector<LevelStats> m_level_stats;
+	std::vector<LevelStats> m_first_layer_column_stats;
 	int m_num_levels = 0;
 	int m_histo_level = 0; // collect a histogram for this level
-	int m_base_grid_resolution;
+	uint32_t m_base_grid_resolution;
 	float m_per_level_scale;
 	float m_histo[257] = {};
 	float m_histo_scale = 1.f;
 
 	uint32_t m_training_step = 0;
-	float m_loss_scalar = 0.f;
-	float m_loss_graph[256] = {};
-	int m_loss_graph_samples = 0;
+	uint32_t m_training_batch_size = 1 << 18;
+	Ema m_loss_scalar = {EEmaType::Time, 100};
+	std::vector<float> m_loss_graph = std::vector<float>(256, 0.0f);
+	size_t m_loss_graph_samples = 0;
 
 	bool m_train_encoding = true;
 	bool m_train_network = true;
@@ -718,14 +833,16 @@ public:
 	std::shared_ptr<tcnn::Encoding<precision_t>> m_encoding;
 	std::shared_ptr<tcnn::Network<float, precision_t>> m_network;
 	std::shared_ptr<tcnn::Trainer<float, precision_t, precision_t>> m_trainer;
+
 	struct TrainableEnvmap {
-		std::shared_ptr<tcnn::Optimizer<precision_t>> optimizer;
-		std::shared_ptr<TrainableBuffer<4, 2, precision_t>> envmap;
-		std::shared_ptr<tcnn::Trainer<float, precision_t, precision_t>> trainer;
+		std::shared_ptr<tcnn::Optimizer<float>> optimizer;
+		std::shared_ptr<TrainableBuffer<4, 2, float>> envmap;
+		std::shared_ptr<tcnn::Trainer<float, float, float>> trainer;
 
 		Eigen::Vector2i resolution;
 		ELossType loss_type;
 	} m_envmap;
+
 	struct TrainableDistortionMap {
 		std::shared_ptr<tcnn::Optimizer<float>> optimizer;
 		std::shared_ptr<TrainableBuffer<2, 2, float>> map;

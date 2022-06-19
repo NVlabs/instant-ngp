@@ -19,7 +19,7 @@
 #include <tiny-cuda-nn/common.h>
 
 #include <imgui/imgui.h>
-#include <imgui/ImGuizmo.h>
+#include <imguizmo/ImGuizmo.h>
 
 #include <vector>
 
@@ -87,14 +87,14 @@ struct CameraPath {
 	ImGuizmo::MODE m_gizmo_mode = ImGuizmo::LOCAL;
 	ImGuizmo::OPERATION m_gizmo_op = ImGuizmo::TRANSLATE;
 	int imgui(char path_filename_buf[128], float frame_milliseconds, Eigen::Matrix<float, 3, 4> &camera, float slice_plane_z, float scale, float fov, float dof, float bounding_radius, const Eigen::Matrix<float, 3, 4> &first_xform);
-	bool imgui_viz(Eigen::Matrix<float, 4, 4> &view2proj, Eigen::Matrix<float, 4, 4> &world2proj, Eigen::Matrix<float, 4, 4> &world2view, Eigen::Vector2f focal, float aspect);
+	bool imgui_viz(ImDrawList* list, Eigen::Matrix<float, 4, 4> &view2proj, Eigen::Matrix<float, 4, 4> &world2proj, Eigen::Matrix<float, 4, 4> &world2view, Eigen::Vector2f focal, float aspect);
 #endif
 };
 
 #ifdef NGP_GUI
-void add_debug_line(const Eigen::Matrix<float, 4, 4>&proj, ImDrawList* list, Eigen::Vector3f a, Eigen::Vector3f b, uint32_t col=0xffffffff, float thickness=1.f);
-void visualize_unit_cube(const Eigen::Matrix<float, 4, 4>& world2proj);
-void visualize_nerf_camera(const Eigen::Matrix<float, 4, 4>& world2proj, const Eigen::Matrix<float, 3, 4>& xform, float aspect, uint32_t col = 0x80ffffff);
+void add_debug_line(ImDrawList* list, const Eigen::Matrix<float, 4, 4>&proj, Eigen::Vector3f a, Eigen::Vector3f b, uint32_t col=0xffffffff, float thickness=1.f);
+void visualize_unit_cube(ImDrawList* list, const Eigen::Matrix<float, 4, 4>& world2proj);
+void visualize_nerf_camera(ImDrawList* list, const Eigen::Matrix<float, 4, 4>& world2proj, const Eigen::Matrix<float, 3, 4>& xform, float aspect, uint32_t col = 0x80ffffff);
 #endif
 
 NGP_NAMESPACE_END

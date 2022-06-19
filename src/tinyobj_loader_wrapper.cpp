@@ -25,7 +25,6 @@
 
 using namespace Eigen;
 
-
 NGP_NAMESPACE_BEGIN
 
 std::vector<Vector3f> load_obj(const std::string& filename) {

@@ -12,7 +12,6 @@
  *  @author Thomas Müller & Alex Evans, NVIDIA
  */
 
-
 #include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/discrete_distribution.h>
@@ -34,11 +33,17 @@
 using namespace Eigen;
 using namespace tcnn;
 
-
 NGP_NAMESPACE_BEGIN
 
 static constexpr uint32_t MARCH_ITER = 10000;
-static constexpr float MIN_DIST = 0.00005f;
+
+Testbed::NetworkDims Testbed::network_dims_sdf() const {
+	NetworkDims dims;
+	dims.n_input = 3;
+	dims.n_output = 1;
+	dims.n_pos = 3;
+	return dims;
+}
 
 __device__ inline float square(float x) { return x * x; }
 __device__ inline float mix(float a, float b, float t) { return a + (b - a) * t; }
@@ -153,6 +158,7 @@ __global__ void advance_pos_kernel_sdf(
 	const TriangleOctreeNode* __restrict__ octree_nodes,
 	int max_depth,
 	float distance_scale,
+	float maximum_distance,
 	float k,
 	float* __restrict__ prev_distances,
 	float* __restrict__ total_distances,
@@ -200,7 +206,7 @@ __global__ void advance_pos_kernel_sdf(
 		total_distances[i] = total_distance + distance;
 	}
 
-	bool stay_alive = distance > MIN_DIST && fabsf(distance / 2) > 3*MIN_DIST;
+	bool stay_alive = distance > maximum_distance && fabsf(distance / 2) > 3*maximum_distance;
 	if (!stay_alive) {
 		payload.alive = false;
 		return;
@@ -290,7 +296,22 @@ __global__ void write_shadow_ray_result(const uint32_t n_elements, BoundingBox a
 	shadow_factors[shadow_payloads[i].idx] = aabb.contains(positions[i]) ? 0.0f : min_visibility[i];
 }
 
-__global__ void shade_kernel_sdf(const uint32_t n_elements, BoundingBox aabb, float floor_y, const ERenderMode mode, const BRDFParams brdf, Vector3f sun_dir, Vector3f up_dir, Matrix<float, 3, 4> camera_matrix, Vector3f* positions, Vector3f* normals, float* distances, SdfPayload* payloads, Array4f* frame_buffer) {
+__global__ void shade_kernel_sdf(
+	const uint32_t n_elements,
+	BoundingBox aabb,
+	float floor_y,
+	const ERenderMode mode,
+	const BRDFParams brdf,
+	Vector3f sun_dir,
+	Vector3f up_dir,
+	Matrix<float, 3, 4> camera_matrix,
+	Vector3f* __restrict__ positions,
+	Vector3f* __restrict__ normals,
+	float* __restrict__ distances,
+	SdfPayload* __restrict__ payloads,
+	Array4f* __restrict__ frame_buffer,
+	float* __restrict__ depth_buffer
+) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_elements) return;
 
@@ -302,21 +323,18 @@ __global__ void shade_kernel_sdf(const uint32_t n_elements, BoundingBox aabb, fl
 	// The normal in memory isn't normalized yet
 	Vector3f normal = normals[i].normalized();
 
-	Vector3f pos=positions[i];
-	bool floor=false;
-	if (pos.y()<floor_y+0.001f && payload.dir.y()<0.f) {
-		normal=Vector3f(0.f,1.f,0.f);
-		floor=true;
+	Vector3f pos = positions[i];
+	bool floor = false;
+	if (pos.y() < floor_y+0.001f && payload.dir.y() < 0.f) {
+		normal = Vector3f(0.f, 1.f, 0.f);
+		floor = true;
 	}
 	Vector3f cam_pos = camera_matrix.col(3);
 	Vector3f cam_fwd = camera_matrix.col(2);
 	float ao = powf(0.92f, payload.n_steps * 0.5f) * (1.f / 0.92f);
 	Array3f color;
 	switch (mode) {
-		case ERenderMode::AO: {
-			float col = powf(0.92f, payload.n_steps);
-			color = Array3f::Constant(col);
-		} break;
+		case ERenderMode::AO: color = Array3f::Constant(powf(0.92f, payload.n_steps)); break;
 		case ERenderMode::Shade: {
 			float skyam = normal.dot(up_dir)*-0.5f+0.5f;
 			Vector3f suncol = Array3f{255.f/255.0f, 225.f/255.0f, 195.f/255.0f} * 4.f * distances[i]; // Distance encodes shadow occlusion. 0=occluded, 1=no shadow
@@ -327,33 +345,17 @@ __global__ void shade_kernel_sdf(const uint32_t n_elements, BoundingBox aabb, fl
 			Vector3f col = evaluate_shading(floor ? floorcol : brdf.basecolor.array() * brdf.basecolor.array(), brdf.ambientcolor.array() * skycol.array(), suncol, floor ? 0.f : brdf.metallic, floor ? 0.f : brdf.subsurface, floor ? 1.f : brdf.specular, floor ? 0.5f : brdf.roughness, 0.f, floor ? 0.f : brdf.sheen, 0.f, floor ? 0.f : brdf.clearcoat, brdf.clearcoat_gloss, sun_dir, -payload.dir.normalized(), normal);
 			color = col.array();
 		} break;
-		case ERenderMode::Depth: {
-			float z=cam_fwd.dot(pos-cam_pos);
-			color = {z,z,z};
-		} break;
-		case ERenderMode::Distance: {
-			float z=(pos-cam_pos).norm();
-			color = {z,z,z};
-		} break;
+		case ERenderMode::Depth: color = Array3f::Constant(cam_fwd.dot(pos - cam_pos)); break;
 		case ERenderMode::Positions: {
-			pos=pos*10.f;
-			color = {pos.x()-floorf(pos.x()),pos.y()-floorf(pos.y()),pos.z()-floorf(pos.z())};
+			color = (pos.array() - Array3f::Constant(0.5f)) / 2.0f + Array3f::Constant(0.5f);
 		} break;
-		case ERenderMode::Normals: {
-			// Hack to make normals look nicer: treat them as sRGB valued and map that to linear.
-			// Gives a more perceptually uniform appearance (assuming sRGB is roughly perceptual).
-			color = srgb_to_linear(0.5f * normal.array() + Array3f::Constant(0.5f));
-		} break;
-		case ERenderMode::Cost: {
-			float col = (float)payload.n_steps / 30;
-			color = Array3f::Constant(col);
-		} break;
-		case ERenderMode::EncodingVis: {
-			color = normals[i];
-		} break;
+		case ERenderMode::Normals: color = 0.5f * normal.array() + Array3f::Constant(0.5f); break;
+		case ERenderMode::Cost: color = Array3f::Constant((float)payload.n_steps / 30); break;
+		case ERenderMode::EncodingVis: color = normals[i]; break;
 	}
 
 	frame_buffer[payload.idx] = {color.x(), color.y(), color.z(), 1.0f};
+	depth_buffer[payload.idx] = cam_fwd.dot(pos - cam_pos);
 }
 
 __global__ void compact_kernel_shadow_sdf(
@@ -489,7 +491,7 @@ __global__ void assign_float(uint32_t n_elements, float value, float* __restrict
 }
 
 __global__ void init_rays_with_payload_kernel_sdf(
-	uint32_t spp,
+	uint32_t sample_index,
 	Vector3f* __restrict__ positions,
 	float* __restrict__ distances,
 	SdfPayload* __restrict__ payloads,
@@ -497,14 +499,16 @@ __global__ void init_rays_with_payload_kernel_sdf(
 	Vector2f focal_length,
 	Matrix<float, 3, 4> camera_matrix,
 	Vector2f screen_center,
+	Vector3f parallax_shift,
 	bool snap_to_pixel_centers,
 	BoundingBox aabb,
 	float floor_y,
 	float plane_z,
 	float dof,
-	const network_precision_t* __restrict__ envmap_data,
+	const float* __restrict__ envmap_data,
 	const Vector2i envmap_resolution,
 	Array4f* __restrict__ framebuffer,
+	float* __restrict__ depthbuffer,
 	const TriangleOctreeNode* __restrict__ octree_nodes = nullptr,
 	int max_depth = 0
 ) {
@@ -521,7 +525,9 @@ __global__ void init_rays_with_payload_kernel_sdf(
 		dof = 0.0;
 	}
 
-	Ray ray = pixel_to_ray(spp, {x, y}, resolution, focal_length, camera_matrix, screen_center, snap_to_pixel_centers, plane_z, dof);
+	Ray ray = pixel_to_ray(sample_index, {x, y}, resolution, focal_length, camera_matrix, screen_center, parallax_shift, snap_to_pixel_centers, plane_z, dof);
+
+	distances[idx] = 10000.0f;
 
 	if (plane_z < 0) {
 		float n = ray.d.norm();
@@ -531,9 +537,11 @@ __global__ void init_rays_with_payload_kernel_sdf(
 		payload.n_steps = 0;
 		payload.alive = false;
 		positions[idx] = ray.o - plane_z * ray.d;
-		distances[idx] = 10000.0f;
+		depthbuffer[idx] = -plane_z;
 		return;
 	}
+
+	depthbuffer[idx] = 1e10f;
 
 	ray.d = ray.d.normalized();
 	float t = max(aabb.ray_intersect(ray.o, ray.d).x(), 0.0f);
@@ -558,12 +566,10 @@ __global__ void init_rays_with_payload_kernel_sdf(
 
 	SdfPayload& payload = payloads[idx];
 	if (!aabb.contains(ray.o)) {
-		distances[idx] = 10000.0f;
 		payload.alive = false;
 		return;
 	}
 
-	distances[idx] = 10000.0f;
 	payload.dir = ray.d;
 	payload.idx = idx;
 	payload.n_steps = 0;
@@ -584,20 +590,24 @@ __global__ void sample_uniform_on_triangle_kernel(uint32_t n_elements, const flo
 	sampled_positions[i] = triangles[tri_idx].sample_uniform_position(sample.tail<2>());
 }
 
-void Testbed::SphereTracer::init_rays_from_camera(uint32_t spp,
+void Testbed::SphereTracer::init_rays_from_camera(uint32_t sample_index,
 	const Vector2i& resolution,
 	const Vector2f& focal_length,
 	const Matrix<float, 3, 4>& camera_matrix,
 	const Vector2f& screen_center,
+	const Vector3f& parallax_shift,
 	bool snap_to_pixel_centers,
 	const BoundingBox& aabb,
 	float floor_y,
 	float plane_z,
 	float dof,
-	const network_precision_t* envmap_data,
+	const float* envmap_data,
 	const Vector2i& envmap_resolution,
 	Array4f* frame_buffer,
-	const TriangleOctree* octree, cudaStream_t stream
+	float* depth_buffer,
+	const TriangleOctree* octree,
+	uint32_t n_octree_levels,
+	cudaStream_t stream
 ) {
 	// Make sure we have enough memory reserved to render at the requested resolution
 	size_t n_pixels = (size_t)resolution.x() * resolution.y();
@@ -606,7 +616,7 @@ void Testbed::SphereTracer::init_rays_from_camera(uint32_t spp,
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)resolution.x(), threads.x), div_round_up((uint32_t)resolution.y(), threads.y), 1 };
 	init_rays_with_payload_kernel_sdf<<<blocks, threads, 0, stream>>>(
-		spp,
+		sample_index,
 		m_rays[0].pos.data(),
 		m_rays[0].distance.data(),
 		m_rays[0].payload.data(),
@@ -614,6 +624,7 @@ void Testbed::SphereTracer::init_rays_from_camera(uint32_t spp,
 		focal_length,
 		camera_matrix,
 		screen_center,
+		parallax_shift,
 		snap_to_pixel_centers,
 		aabb,
 		floor_y,
@@ -622,8 +633,9 @@ void Testbed::SphereTracer::init_rays_from_camera(uint32_t spp,
 		envmap_data,
 		envmap_resolution,
 		frame_buffer,
+		depth_buffer,
 		octree ? octree->nodes_gpu() : nullptr,
-		octree ? octree->depth() : 0
+		octree ? n_octree_levels : 0
 	);
 	m_n_rays_initialized = (uint32_t)n_pixels;
 }
@@ -651,7 +663,17 @@ uint32_t Testbed::SphereTracer::trace_bvh(TriangleBvh* bvh, const Triangle* tria
 	return n_alive;
 }
 
-uint32_t Testbed::SphereTracer::trace(const distance_fun_t& distance_function, float zero_offset, float distance_scale, const BoundingBox& aabb, const float floor_y, const TriangleOctree* octree, cudaStream_t stream) {
+uint32_t Testbed::SphereTracer::trace(
+	const distance_fun_t& distance_function,
+	float zero_offset,
+	float distance_scale,
+	float maximum_distance,
+	const BoundingBox& aabb,
+	const float floor_y,
+	const TriangleOctree* octree,
+	const uint32_t n_octree_levels,
+	cudaStream_t stream
+) {
 	if (m_n_rays_initialized == 0) {
 		return 0;
 	}
@@ -716,8 +738,9 @@ uint32_t Testbed::SphereTracer::trace(const distance_fun_t& distance_function, f
 				aabb,
 				floor_y,
 				octree ? octree->nodes_gpu() : nullptr,
-				octree ? octree->depth() : 0,
+				octree ? n_octree_levels : 0,
 				distance_scale,
+				maximum_distance,
 				m_shadow_sharpness,
 				m_trace_shadow_rays ? rays_current.prev_distance.data() : nullptr,
 				m_trace_shadow_rays ? rays_current.total_distance.data() : nullptr,
@@ -735,7 +758,7 @@ uint32_t Testbed::SphereTracer::trace(const distance_fun_t& distance_function, f
 }
 
 void Testbed::SphereTracer::enlarge(size_t n_elements) {
-	n_elements = next_multiple(n_elements, size_t(BATCH_SIZE_MULTIPLE)); // network inference rounds n_elements up to 256, and uses these arrays, so we must do so also.
+	n_elements = next_multiple(n_elements, size_t(tcnn::batch_size_granularity));
 	m_rays[0].enlarge(n_elements);
 	m_rays[1].enlarge(n_elements);
 	m_rays_hit.enlarge(n_elements);
@@ -758,7 +781,7 @@ void Testbed::FiniteDifferenceNormalsApproximator::enlarge(uint32_t n_elements) 
 void Testbed::FiniteDifferenceNormalsApproximator::normal(uint32_t n_elements, const distance_fun_t& distance_function, GPUMemory<Vector3f>& pos, GPUMemory<Vector3f>& normal, float epsilon, cudaStream_t stream) {
 	enlarge(n_elements);
 
-	parallel_for_gpu(stream, n_elements, [=, *this] __device__ (size_t i) {
+	parallel_for_gpu(stream, n_elements, [pos=pos.data(), dx=dx.data(), dy=dy.data(), dz=dz.data(), epsilon] __device__ (size_t i) {
 		Vector3f p = pos[i];
 		dx[i] = Vector3f{p.x() + epsilon, p.y(), p.z()};
 		dy[i] = Vector3f{p.x(), p.y() + epsilon, p.z()};
@@ -769,7 +792,7 @@ void Testbed::FiniteDifferenceNormalsApproximator::normal(uint32_t n_elements, c
 	distance_function(n_elements, dy, dist_dy_pos, stream);
 	distance_function(n_elements, dz, dist_dz_pos, stream);
 
-	parallel_for_gpu(stream, n_elements, [=, *this] __device__ (size_t i) {
+	parallel_for_gpu(stream, n_elements, [pos=pos.data(), dx=dx.data(), dy=dy.data(), dz=dz.data(), epsilon] __device__ (size_t i) {
 		Vector3f p = pos[i];
 		dx[i] = Vector3f{p.x() - epsilon, p.y(), p.z()};
 		dy[i] = Vector3f{p.x(), p.y() - epsilon, p.z()};
@@ -780,7 +803,7 @@ void Testbed::FiniteDifferenceNormalsApproximator::normal(uint32_t n_elements, c
 	distance_function(n_elements, dy, dist_dy_neg, stream);
 	distance_function(n_elements, dz, dist_dz_neg, stream);
 
-	parallel_for_gpu(stream, n_elements, [=, *this] __device__ (size_t i) {
+	parallel_for_gpu(stream, n_elements, [normal=normal.data(), dist_dx_pos=dist_dx_pos.data(), dist_dx_neg=dist_dx_neg.data(), dist_dy_pos=dist_dy_pos.data(), dist_dy_neg=dist_dy_neg.data(), dist_dz_pos=dist_dz_pos.data(), dist_dz_neg=dist_dz_neg.data()] __device__ (size_t i) {
 		normal[i] = {dist_dx_pos[i] - dist_dx_neg[i], dist_dy_pos[i] - dist_dy_neg[i], dist_dz_pos[i] - dist_dz_neg[i]};
 	});
 }
@@ -804,14 +827,20 @@ void Testbed::render_sdf(
 	// Reserve the memory for max-res rendering to prevent stuttering
 	m_sdf.tracer.enlarge(max_res.x() * max_res.y());
 
+	uint32_t n_octree_levels = octree_ptr ? octree_ptr->depth() : 0;
+	if (m_render_ground_truth && m_sdf.groundtruth_mode == ESDFGroundTruthMode::SDFBricks) {
+		n_octree_levels = std::min(n_octree_levels, m_sdf.brick_level);
+	}
+
 	BoundingBox sdf_bounding_box = m_aabb;
 	sdf_bounding_box.inflate(m_sdf.zero_offset);
 	m_sdf.tracer.init_rays_from_camera(
 		render_buffer.spp(),
-		render_buffer.resolution(),
+		render_buffer.in_resolution(),
 		focal_length,
 		camera_matrix,
 		screen_center,
+		get_scaled_parallax_shift(),
 		m_snap_to_pixel_centers,
 		sdf_bounding_box,
 		get_floor_y(),
@@ -820,17 +849,29 @@ void Testbed::render_sdf(
 		m_envmap.envmap->params_inference(),
 		m_envmap.resolution,
 		render_buffer.frame_buffer(),
+		render_buffer.depth_buffer(),
 		octree_ptr,
+		n_octree_levels,
 		stream
 	);
 
-	bool gt_raytrace = m_render_ground_truth && !m_sdf.groundtruth_spheremarch;
+	bool gt_raytrace = m_render_ground_truth && m_sdf.groundtruth_mode == ESDFGroundTruthMode::RaytracedMesh;
 
 	auto trace = [&](SphereTracer& tracer) {
 		if (gt_raytrace) {
 			return tracer.trace_bvh(m_sdf.triangle_bvh.get(), m_sdf.triangles_gpu.data(), stream);
 		} else {
-			return tracer.trace(distance_function, m_sdf.zero_offset, m_sdf.distance_scale, sdf_bounding_box, get_floor_y(), octree_ptr, stream);
+			return tracer.trace(
+				distance_function,
+				m_sdf.zero_offset,
+				m_sdf.distance_scale,
+				m_sdf.maximum_distance,
+				sdf_bounding_box,
+				get_floor_y(),
+				octree_ptr,
+				n_octree_levels,
+				stream
+			);
 		}
 	};
 
@@ -845,10 +886,10 @@ void Testbed::render_sdf(
 	if (m_render_mode == ERenderMode::Slice) {
 		if (m_visualized_dimension == -1) {
 			distance_function(n_hit, rays_hit.pos, rays_hit.distance, stream);
-			extract_dimension_pos_neg_kernel<float><<<n_blocks_linear(n_hit*3), n_threads_linear, 0, stream>>>(n_hit*3, 0, 1, 3, rays_hit.distance.data(), (float*)rays_hit.normal.data());
+			extract_dimension_pos_neg_kernel<float><<<n_blocks_linear(n_hit*3), n_threads_linear, 0, stream>>>(n_hit*3, 0, 1, 3, rays_hit.distance.data(), CM, (float*)rays_hit.normal.data());
 		} else {
 			// Store colors in the normal buffer
-			uint32_t n_elements = next_multiple(n_hit, BATCH_SIZE_MULTIPLE);
+			uint32_t n_elements = next_multiple(n_hit, tcnn::batch_size_granularity);
 
 			GPUMatrix<float> positions_matrix((float*)rays_hit.pos.data(), 3, n_elements);
 			GPUMatrix<float> colors_matrix((float*)rays_hit.normal.data(), 3, n_elements);
@@ -862,8 +903,12 @@ void Testbed::render_sdf(
 			normals_function(n_hit, rays_hit.pos, rays_hit.normal, stream);
 		} else {
 			// Prevent spurious enlargements by reserving enough memory to hold a full-res image in any case.
-			m_sdf.fd_normals.enlarge(render_buffer.resolution().x() * render_buffer.resolution().y());
-			m_sdf.fd_normals.normal(n_hit, distance_function, rays_hit.pos, rays_hit.normal, m_sdf.fd_normals_epsilon, stream);
+			m_sdf.fd_normals.enlarge(render_buffer.in_resolution().x() * render_buffer.in_resolution().y());
+			float fd_normals_epsilon = m_sdf.fd_normals_epsilon;
+			if (m_render_ground_truth && m_sdf.groundtruth_mode == ESDFGroundTruthMode::SDFBricks && m_sdf.brick_smooth_normals) {
+				fd_normals_epsilon = exp2f(-float(n_octree_levels)) * (1.f/(m_sdf.brick_res-1)); // in sdf brick mode, use one voxel as the normal central difference radius
+			}
+			m_sdf.fd_normals.normal(n_hit, distance_function, rays_hit.pos, rays_hit.normal, fd_normals_epsilon, stream);
 		}
 
 		if (render_mode == ERenderMode::Shade && n_hit > 0) {
@@ -884,7 +929,7 @@ void Testbed::render_sdf(
 				shadow_rays_init.payload.data(),
 				sdf_bounding_box,
 				octree_ptr ? octree_ptr->nodes_gpu() : nullptr,
-				octree_ptr ? octree_ptr->depth() : 0
+				n_octree_levels
 			);
 			uint32_t n_hit_shadow = trace(m_sdf.shadow_tracer);
 			auto& shadow_rays_hit = gt_raytrace ? m_sdf.shadow_tracer.rays_init() : m_sdf.shadow_tracer.rays_hit();
@@ -902,7 +947,7 @@ void Testbed::render_sdf(
 		}
 	} else if (render_mode == ERenderMode::EncodingVis && m_render_mode != ERenderMode::Slice) {
 		// HACK: Store colors temporarily in the normal buffer
-		uint32_t n_elements = next_multiple(n_hit, BATCH_SIZE_MULTIPLE);
+		uint32_t n_elements = next_multiple(n_hit, tcnn::batch_size_granularity);
 
 		GPUMatrix<float> positions_matrix((float*)rays_hit.pos.data(), 3, n_elements);
 		GPUMatrix<float> colors_matrix((float*)rays_hit.normal.data(), 3, n_elements);
@@ -922,7 +967,8 @@ void Testbed::render_sdf(
 		rays_hit.normal.data(),
 		rays_hit.distance.data(),
 		rays_hit.payload.data(),
-		render_buffer.frame_buffer()
+		render_buffer.frame_buffer(),
+		render_buffer.depth_buffer()
 	);
 
 	if (render_mode == ERenderMode::Cost) {
@@ -937,13 +983,39 @@ void Testbed::render_sdf(
 }
 
 void Testbed::load_mesh() {
-	if (!equals_case_insensitive(m_data_path.extension(), "obj")) {
-		throw std::runtime_error{"Sdf data path must be a mesh in .obj format."};
+	std::vector<Vector3f> vertices;
+	if (equals_case_insensitive(m_data_path.extension(), "obj")) {
+		vertices = load_obj(m_data_path.str());
+	} else if (equals_case_insensitive(m_data_path.extension(), "stl")) {
+		FILE* f = fopen(m_data_path.str().c_str(), "rb");
+		if (!f) {
+			throw std::runtime_error{"stl file not found"};
+		}
+		uint32_t buf[21]={};
+		if (fread(buf, 4, 21, f) != 4*21) {
+			throw std::runtime_error{"stl file too small for header"};
+		}
+		uint32_t nfaces = buf[20];
+		if (memcmp(buf,"solid",5)==0 || buf[20]==0) {
+			fclose(f);
+			throw std::runtime_error{"ascii stl files are not supported"};
+		}
+		vertices.reserve(nfaces * 3);
+		for (uint32_t i = 0; i < nfaces; ++i) {
+			if (fread(buf, 1, 50, f) < 50) {
+				nfaces = i;
+				break;
+			}
+			vertices.push_back(*(Vector3f*)(buf + 3));
+			vertices.push_back(*(Vector3f*)(buf + 6));
+			vertices.push_back(*(Vector3f*)(buf + 9));
+		}
+		fclose(f);
+	} else {
+		throw std::runtime_error{"Sdf data path must be a mesh in ascii .obj or binary .stl format."};
 	}
-
 	// The expected format is
 	// [v1.x][v1.y][v1.z][v2.x]...
-	std::vector<Vector3f> vertices = load_obj(m_data_path.str());
 	size_t n_vertices = vertices.size();
 	size_t n_triangles = n_vertices/3;
 
@@ -954,7 +1026,7 @@ void Testbed::load_mesh() {
 	}
 
 	// Inflate AABB by 1% to give the network a little wiggle room.
-	m_raw_aabb.inflate(m_raw_aabb.diag().norm()*0.005f);
+	m_raw_aabb.inflate(m_raw_aabb.diag().norm() * 0.005f);
 	m_sdf.mesh_scale = m_raw_aabb.diag().maxCoeff();
 
 	// Normalize vertex coordinates to lie within [0,1]^3.
@@ -985,6 +1057,7 @@ void Testbed::load_mesh() {
 
 	m_sdf.triangle_octree.reset(new TriangleOctree{});
 	m_sdf.triangle_octree->build(*m_sdf.triangle_bvh, m_sdf.triangles_cpu, 10);
+	m_sdf.brick_data.free_memory();
 
 	m_bounding_radius = Vector3f::Constant(0.5f).norm();
 	set_scale(m_bounding_radius * 1.5f);
@@ -1033,7 +1106,7 @@ void Testbed::generate_training_samples_sdf(Vector3f* positions, float* distance
 	// If we have an octree, generate uniform samples within that octree.
 	// Otherwise, at least confine uniform samples to the AABB.
 	// (For the uniform_only case, we always use the AABB, then the IoU kernel checks against the octree later)
-	float stddev = m_bounding_radius/1024.0f ; // * 8.f;
+	float stddev = m_bounding_radius/1024.0f * m_sdf.training.surface_offset_scale;
 	if (!uniform_only && (m_sdf.uses_takikawa_encoding || m_sdf.use_triangle_octree)) {
 		linear_kernel(uniform_octree_sample_kernel, 0, stream,
 			n_to_generate_uniform,
@@ -1098,59 +1171,87 @@ void Testbed::generate_training_samples_sdf(Vector3f* positions, float* distance
 	CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
 }
 
-void Testbed::train_sdf(size_t target_batch_size, size_t n_steps, cudaStream_t stream) {
+__global__ void generate_grid_samples_sdf_uniform(Eigen::Vector3i res_3d, BoundingBox aabb, Vector3f* __restrict__ out) {
+	uint32_t x = threadIdx.x + blockIdx.x * blockDim.x;
+	uint32_t y = threadIdx.y + blockIdx.y * blockDim.y;
+	uint32_t z = threadIdx.z + blockIdx.z * blockDim.z;
+	if (x>=res_3d.x() || y>=res_3d.y() || z>=res_3d.z())
+		return;
+	uint32_t i = x+ y*res_3d.x() + z*res_3d.x()*res_3d.y();
+	Vector3f pos = Array3f{(float)x, (float)y, (float)z} * Array3f{1.f/res_3d.x(),1.f/res_3d.y(),1.f/res_3d.z()};
+	pos = pos.cwiseProduct(aabb.max - aabb.min) + aabb.min;
+	out[i] = pos;
+}
+
+GPUMemory<float> Testbed::get_sdf_gt_on_grid(Vector3i res3d, const BoundingBox& aabb) {
+	const uint32_t n_elements = (res3d.x()*res3d.y()*res3d.z());
+	GPUMemory<float> density(n_elements);
+	GPUMemoryArena::Allocation alloc;
+	auto scratch = allocate_workspace_and_distribute<
+		Vector3f
+	>(m_inference_stream, &alloc, n_elements);
+	Vector3f* positions = std::get<0>(scratch);
+	float* sdf_out = density.data();
+	const dim3 threads = { 16, 8, 1 };
+	const dim3 blocks = { div_round_up((uint32_t)res3d.x(), threads.x), div_round_up((uint32_t)res3d.y(), threads.y), div_round_up((uint32_t)res3d.z(), threads.z) };
+	generate_grid_samples_sdf_uniform<<<blocks, threads, 0, m_inference_stream>>>(res3d, aabb, positions);
+	CUDA_CHECK_THROW(cudaStreamSynchronize(m_inference_stream));
+	m_sdf.triangle_bvh->signed_distance_gpu(
+			n_elements,
+			m_sdf.mesh_sdf_mode,
+			positions,
+			sdf_out,
+			m_sdf.triangles_gpu.data(),
+			false,
+			m_inference_stream
+		);
+	CUDA_CHECK_THROW(cudaStreamSynchronize(m_inference_stream));
+	/*
+	std::vector<float> cpudensity(density.size());
+	std::vector<Vector3f> cpupositions(n_elements);
+	density.copy_to_host(cpudensity);
+	cudaMemcpy(cpupositions.data(),positions,n_elements*12,cudaMemcpyDeviceToHost);
+	for (int i=0;i<64;++i)
+		printf("[%0.3f %0.3f %0.3f] -> %0.3f\n", cpupositions[i].x(),cpupositions[i].y(),cpupositions[i].z(),cpudensity[i]);
+	*/
+	return density;
+}
+
+
+void Testbed::train_sdf(size_t target_batch_size, bool get_loss_scalar, cudaStream_t stream) {
 	const uint32_t n_output_dims = 1;
 	const uint32_t n_input_dims = 3;
 
 	if (m_sdf.training.size >= target_batch_size) {
 		// Auxiliary matrices for training
 		const uint32_t batch_size = (uint32_t)std::min(m_sdf.training.size, target_batch_size);
-		const uint32_t n_batches = (uint32_t)m_sdf.training.size / batch_size;
-
-		const uint32_t GRAPH_SIZE = (uint32_t)std::min((size_t)16, n_steps);
 
 		// Permute all training records to de-correlate training data
 		linear_kernel(shuffle<Vector3f>, 0, stream, m_sdf.training.size, 1, m_training_step, m_sdf.training.positions.data(), m_sdf.training.positions_shuffled.data());
 		linear_kernel(shuffle<float>, 0, stream, m_sdf.training.size, 1, m_training_step, m_sdf.training.distances.data(), m_sdf.training.distances_shuffled.data());
 
-		float total_loss = 0;
-		uint32_t n_loss_samples = 0;
+		GPUMatrix<float> training_target_matrix(m_sdf.training.distances_shuffled.data(), n_output_dims, batch_size);
+		GPUMatrix<float> training_batch_matrix((float*)(m_sdf.training.positions_shuffled.data()), n_input_dims, batch_size);
 
-		for (size_t i = 0; i < n_steps; i += GRAPH_SIZE) {
-			float loss_value;
-			for (uint32_t j = 0; j < GRAPH_SIZE; ++j) {
-				uint32_t training_offset = (uint32_t)((i+j) % n_batches) * batch_size;
+		auto ctx = m_trainer->training_step(stream, training_batch_matrix, training_target_matrix);
 
-				GPUMatrix<float> training_target_matrix(m_sdf.training.distances_shuffled.data()+training_offset, n_output_dims, batch_size);
-				GPUMatrix<float> training_batch_matrix((float*)(m_sdf.training.positions_shuffled.data()+training_offset), n_input_dims, batch_size);
+		m_training_step++;
 
-				float* p_loss = j == (GRAPH_SIZE - 1) ? &loss_value : nullptr;
-				m_trainer->training_step(stream, training_batch_matrix, training_target_matrix, p_loss);
-
-				if (p_loss) {
-					total_loss += loss_value;
-					++n_loss_samples;
-				}
-
-				m_training_step++;
-			}
+		if (get_loss_scalar) {
+			m_loss_scalar.update(m_trainer->loss(stream, *ctx));
 		}
-
-		m_loss_scalar = total_loss / (float)n_loss_samples;
-		update_loss_graph();
 	}
 }
 
-
-void Testbed::training_prep_sdf(uint32_t batch_size, uint32_t n_training_steps, cudaStream_t stream) {
+void Testbed::training_prep_sdf(uint32_t batch_size, cudaStream_t stream) {
 	if (m_sdf.training.generate_sdf_data_online) {
-		m_sdf.training.size = batch_size*n_training_steps;
+		m_sdf.training.size = batch_size;
 		m_sdf.training.positions.enlarge(m_sdf.training.size);
 		m_sdf.training.positions_shuffled.enlarge(m_sdf.training.size);
 		m_sdf.training.distances.enlarge(m_sdf.training.size);
 		m_sdf.training.distances_shuffled.enlarge(m_sdf.training.size);
 
-		generate_training_samples_sdf(m_sdf.training.positions.data(), m_sdf.training.distances.data(), batch_size*n_training_steps, stream, false);
+		generate_training_samples_sdf(m_sdf.training.positions.data(), m_sdf.training.distances.data(), batch_size, stream, false);
 	}
 }
 

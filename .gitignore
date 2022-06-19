@@ -5,6 +5,7 @@
 /out
 /results
 /tmp
+/venv
 /video
 /*.json
 *.msgpack

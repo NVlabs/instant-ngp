@@ -20,7 +20,6 @@
 
 #include <optix.h>
 
-
 NGP_NAMESPACE_BEGIN
 
 struct Raytrace {

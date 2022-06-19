@@ -1,6 +1,6 @@
 {
 	"loss": {
-		"otype": "SmoothL1"
+		"otype": "Huber"
 	},
 	"optimizer": {
 		"otype": "Ema",
@@ -35,8 +35,19 @@
 		"n_hidden_layers": 1
 	},
 	"dir_encoding": {
-		"otype": "SphericalHarmonics",
-		"degree": 4
+		"otype": "Composite",
+		"nested": [
+			{
+				"n_dims_to_encode": 3,
+				"otype": "SphericalHarmonics",
+				"degree": 4
+			},
+			{
+				"otype": "Identity",
+				"n_bins": 4,
+				"degree": 4
+			}
+		]
 	},
 	"rgb_network": {
 		"otype": "FullyFusedMLP",
@@ -91,3 +102,4 @@
 		}
 	}
 }
+

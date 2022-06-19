@@ -16,7 +16,6 @@
 
 #include <chrono>
 
-
 NGP_NAMESPACE_BEGIN
 
 using namespace std;

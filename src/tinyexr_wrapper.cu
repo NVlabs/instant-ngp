@@ -33,7 +33,6 @@
 #define TINYEXR_IMPLEMENTATION
 #include <tinyexr/tinyexr.h>
 
-
 using namespace tcnn;
 
 NGP_NAMESPACE_BEGIN
@@ -88,8 +87,12 @@ void save_exr(const float* data, int width, int height, int nChannels, int chann
 	header.channels = (EXRChannelInfo *)malloc(sizeof(EXRChannelInfo) * header.num_channels);
 	// Must be (A)BGR order, since most of EXR viewers expect this channel order.
 	strncpy(header.channels[0].name, "B", 255); header.channels[0].name[strlen("B")] = '\0';
-	strncpy(header.channels[1].name, "G", 255); header.channels[1].name[strlen("G")] = '\0';
-	strncpy(header.channels[2].name, "R", 255); header.channels[2].name[strlen("R")] = '\0';
+	if (nChannels > 1) {
+		strncpy(header.channels[1].name, "G", 255); header.channels[1].name[strlen("G")] = '\0';
+	}
+	if (nChannels > 2) {
+		strncpy(header.channels[2].name, "R", 255); header.channels[2].name[strlen("R")] = '\0';
+	}
 	if (nChannels > 3) {
 		strncpy(header.channels[3].name, "A", 255); header.channels[3].name[strlen("A")] = '\0';
 	}
@@ -108,7 +111,7 @@ void save_exr(const float* data, int width, int height, int nChannels, int chann
 		FreeEXRErrorMessage(err); // free's buffer for an error message
 		throw std::runtime_error(error_message);
 	}
-	printf("Saved exr file. [ %s ] \n", outfilename);
+	tlog::info() << "Saved exr file: " << outfilename;
 
 	free(header.channels);
 	free(header.pixel_types);

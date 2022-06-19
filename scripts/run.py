@@ -36,6 +36,7 @@ def parse_args():
 
 	parser.add_argument("--nerf_compatibility", action="store_true", help="Matches parameters with original NeRF. Can cause slowness and worse results on some scenes.")
 	parser.add_argument("--test_transforms", default="", help="Path to a nerf style transforms json from which we will compute PSNR.")
+	parser.add_argument("--near_distance", default=-1, type=float, help="set the distance from the camera at which training rays start for nerf. <0 means use ngp default")
 
 	parser.add_argument("--screenshot_transforms", default="", help="Path to a nerf style transforms.json from which to save screenshots.")
 	parser.add_argument("--screenshot_frames", nargs="*", help="Which frame(s) to take screenshots of.")
@@ -54,6 +55,7 @@ def parse_args():
 
 	parser.add_argument("--sharpen", default=0, help="Set amount of sharpening applied to NeRF training images.")
 	parser.add_argument("--crop", default="", help="Set render abb min max i.e. 0,0,0,1,1,1")
+
 	args = parser.parse_args()
 	return args
 
@@ -99,19 +101,23 @@ if __name__ == "__main__":
 
 	testbed = ngp.Testbed(mode)
 	testbed.nerf.sharpen = float(args.sharpen)
+
 	if args.crop:
 		bb = args.crop.split(",")
 		if len(bb) == 6:
 			testbed.render_aabb.min = [float(bb[0]), float(bb[1]), float(bb[2])]
 			testbed.render_aabb.max = [float(bb[3]), float(bb[4]), float(bb[5])]
+   
 	if args.mode == "sdf":
+	if mode == ngp.TestbedMode.Sdf:
 		testbed.tonemap_curve = ngp.TonemapCurve.ACES
 
 	if args.scene:
-		scene=args.scene
+		scene = args.scene
 		if not os.path.exists(args.scene) and args.scene in scenes:
 			scene = os.path.join(scenes[args.scene]["data_dir"], scenes[args.scene]["dataset"])
 		testbed.load_training_data(scene)
+
 
 	if args.load_snapshot:
 		print("Loading snapshot ", args.load_snapshot)
@@ -136,11 +142,16 @@ if __name__ == "__main__":
 
 	testbed.shall_train = args.train if args.gui else True
 
+
 	testbed.nerf.render_with_camera_distortion = True
 
 	network_stem = os.path.splitext(os.path.basename(network))[0]
 	if args.mode == "sdf":
 		setup_colored_sdf(testbed, args.scene)
+
+	if args.near_distance >= 0.0:
+		print("NeRF training ray near_distance ", args.near_distance)
+		testbed.nerf.training.near_distance = args.near_distance
 
 	if args.nerf_compatibility:
 		print(f"NeRF compatibility mode enabled")
@@ -154,7 +165,10 @@ if __name__ == "__main__":
 		testbed.color_space = ngp.ColorSpace.SRGB
 
 		# No exponential cone tracing. Slightly increases
-		# quality at the cost of speed on synthetic scenes.
+		# quality at the cost of speed. This is done by
+		# default on scenes with AABB 1 (like the synthetic
+		# ones), but not on larger scenes. So force the
+		# setting here.
 		testbed.nerf.cone_angle_constant = 0
 
 		# Optionally match nerf paper behaviour and train on a
@@ -162,12 +176,12 @@ if __name__ == "__main__":
 		# testbed.background_color = [1.0, 1.0, 1.0, 1.0]
 		# testbed.nerf.training.random_bg_color = False
 
-
 	old_training_step = 0
 	n_steps = args.n_steps
 	if n_steps < 0:
 		n_steps = 100000
 
+	tqdm_last_update = 0
 	if n_steps > 0:
 		with tqdm(desc="Training", total=n_steps, unit="step") as t:
 			while testbed.frame():
@@ -184,9 +198,12 @@ if __name__ == "__main__":
 					old_training_step = 0
 					t.reset()
 
-				t.update(testbed.training_step - old_training_step)
-				t.set_postfix(loss=testbed.loss)
-				old_training_step = testbed.training_step
+				now = time.monotonic()
+				if now - tqdm_last_update > 0.1:
+					t.update(testbed.training_step - old_training_step)
+					t.set_postfix(loss=testbed.loss)
+					old_training_step = testbed.training_step
+					tqdm_last_update = now
 
 	if args.save_snapshot:
 		print("Saving snapshot ", args.save_snapshot)
@@ -212,7 +229,7 @@ if __name__ == "__main__":
 		testbed.snap_to_pixel_centers = True
 		spp = 8
 
-		testbed.nerf.rendering_min_alpha = 1e-4
+		testbed.nerf.rendering_min_transmittance = 1e-4
 
 		testbed.fov_axis = 0
 		testbed.fov = test_transforms["camera_angle_x"] * 180 / np.pi

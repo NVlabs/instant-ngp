@@ -40,6 +40,15 @@ def nerf_real_360(name, frameidx):
 		"dataset"       : "",
 		"frameidx"      : frameidx
 	}
+
+def mipnerf_360(name, frameidx):
+	return {
+		"data_dir"      : os.path.join(NERF_DATA_FOLDER, f"mipnerf_360/{name}"),
+		"dataset_train" : "transforms.json",
+		"dataset_test"  : "transforms.json",
+		"dataset"       : "",
+		"frameidx"      : frameidx
+	}
 scenes_nerf = {
 	"fox"         : ours_real_converted("fox/", frameidx=0),
 	"lego"      : nerf_synthetic("lego", frameidx=52),
@@ -54,6 +63,15 @@ scenes_nerf = {
 	# nerf real 360
 	"pinecone" : nerf_real_360("pinecone", frameidx=0),
 	"vasedeck" : nerf_real_360("vasedeck", frameidx=0),
+
+	# mipnerf 360
+	"bicycle" : mipnerf_360("bicycle", frameidx=0),
+	"bonsai"  : mipnerf_360("bonsai", frameidx=0),
+	"counter" : mipnerf_360("counter", frameidx=0),
+	"garden"  : mipnerf_360("garden", frameidx=0),
+	"kitchen" : mipnerf_360("kitchen", frameidx=0),
+	"room"    : mipnerf_360("room", frameidx=0),
+	"stump"   : mipnerf_360("stump", frameidx=0),
 }
 
 
@@ -69,7 +87,7 @@ scenes_sdf = {
 }
 
 
-def ours_image(name,infolder=True):
+def ours_image(name, infolder=True):
 	data_dir = os.path.join(IMAGE_DATA_FOLDER, f"{name}") if infolder else IMAGE_DATA_FOLDER
 	dataset = f"{name}.bin"
 	if not os.path.exists(os.path.join(data_dir, dataset)):
@@ -87,6 +105,8 @@ def ours_image(name,infolder=True):
 scenes_image = {
 	"albert"        : ours_image("albert", False),
 }
+
+
 
 def ours_volume(name, ds):
 	return {
@@ -203,3 +223,4 @@ def setup_colored_sdf(testbed, scene, softshadow=True):
 	col = list(testbed.background_color)
 	testbed.sdf.brdf.ambientcolor = np.multiply(col,col)[0:3]
 	testbed.sdf.shadow_sharpness = 16 if softshadow else 2048
+	testbed.scale = testbed.scale * 1.13

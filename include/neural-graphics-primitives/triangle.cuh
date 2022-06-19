@@ -40,18 +40,21 @@ struct Triangle {
 		return (b - a).cross(c - a).normalized();
 	}
 
-	NGP_HOST_DEVICE float ray_intersect(const Eigen::Vector3f &ro, const Eigen::Vector3f &rd, Eigen::Vector3f& n) const { // based on https://www.iquilezles.org/www/articles/intersectors/intersectors.htm
+	// based on https://www.iquilezles.org/www/articles/intersectors/intersectors.htm
+	NGP_HOST_DEVICE float ray_intersect(const Eigen::Vector3f &ro, const Eigen::Vector3f &rd, Eigen::Vector3f& n) const {
 		Eigen::Vector3f v1v0 = b - a;
 		Eigen::Vector3f v2v0 = c - a;
 		Eigen::Vector3f rov0 = ro - a;
-		n = v1v0.cross( v2v0 );
-		Eigen::Vector3f q = rov0.cross( rd );
-		float d = 1.0f/rd.dot( n );
-		float u = d*-q.dot( v2v0 );
-		float v = d* q.dot( v1v0 );
-		float t = d*-n.dot( rov0 );
-		if( u<0.0f || u>1.0f || v<0.0f || (u+v)>1.0f || t<0.0f) t = 1e6f;
-		return t; // Eigen::Vector3f( t, u, v );
+		n = v1v0.cross(v2v0);
+		Eigen::Vector3f q = rov0.cross(rd);
+		float d = 1.0f / rd.dot(n);
+		float u = d * -q.dot(v2v0);
+		float v = d *  q.dot(v1v0);
+		float t = d * -n.dot(rov0);
+		if (u < 0.0f || u > 1.0f || v < 0.0f || (u+v) > 1.0f || t < 0.0f) {
+			t = std::numeric_limits<float>::max(); // No intersection
+		}
+		return t;
 	}
 
 	NGP_HOST_DEVICE float ray_intersect(const Eigen::Vector3f &ro, const Eigen::Vector3f &rd) const {
@@ -59,8 +62,8 @@ struct Triangle {
 		return ray_intersect(ro, rd, n);
 	}
 
+	// based on https://www.iquilezles.org/www/articles/distfunctions/distfunctions.htm
 	NGP_HOST_DEVICE float distance_sq(const Eigen::Vector3f& pos) const {
-		// prepare data
 		Eigen::Vector3f v21 = b - a; Eigen::Vector3f p1 = pos - a;
 		Eigen::Vector3f v32 = c - b; Eigen::Vector3f p2 = pos - b;
 		Eigen::Vector3f v13 = a - c; Eigen::Vector3f p3 = pos - c;
@@ -71,13 +74,11 @@ struct Triangle {
 			(sign(v21.cross(nor).dot(p1)) + sign(v32.cross(nor).dot(p2)) + sign(v13.cross(nor).dot(p3)) < 2.0f)
 			?
 			// 3 edges
-			std::min(
-				std::min(
-					(v21 * tcnn::clamp(v21.dot(p1) / v21.squaredNorm(), 0.0f, 1.0f)-p1).squaredNorm(),
-					(v32 * tcnn::clamp(v32.dot(p2) / v32.squaredNorm(), 0.0f, 1.0f)-p2).squaredNorm()
-				),
-				(v13 * tcnn::clamp(v13.dot(p3) / v13.squaredNorm(), 0.0f, 1.0f)-p3).squaredNorm()
-			)
+			std::min({
+				(v21 * tcnn::clamp(v21.dot(p1) / v21.squaredNorm(), 0.0f, 1.0f)-p1).squaredNorm(),
+				(v32 * tcnn::clamp(v32.dot(p2) / v32.squaredNorm(), 0.0f, 1.0f)-p2).squaredNorm(),
+				(v13 * tcnn::clamp(v13.dot(p3) / v13.squaredNorm(), 0.0f, 1.0f)-p3).squaredNorm(),
+			})
 			:
 			// 1 face
 			nor.dot(p1)*nor.dot(p1)/nor.squaredNorm();
@@ -108,17 +109,9 @@ struct Triangle {
 		Eigen::Vector3f v = local_c.cross(local_a);
 		Eigen::Vector3f w = local_a.cross(local_b);
 
-		// Test to see if the normals are facing
-		// the same direction, return false if not
-		if (u.dot(v) < 0.0f) {
-			return false;
-		}
-		if (u.dot(w) < 0.0f) {
-			return false;
-		}
-
-		// All normals facing the same way, return true
-		return true;
+		// Test to see if the normals are facing the same direction.
+		// If yes, the point is inside, otherwise it isn't.
+		return u.dot(v) >= 0.0f && u.dot(w) >= 0.0f;
 	}
 
 	NGP_HOST_DEVICE Eigen::Vector3f closest_point_to_line(const Eigen::Vector3f& a, const Eigen::Vector3f& b, const Eigen::Vector3f& c) const {
@@ -142,16 +135,15 @@ struct Triangle {
 		float mag2 = (point - c2).squaredNorm();
 		float mag3 = (point - c3).squaredNorm();
 
-		float min = std::min(mag1, mag2);
-		min = std::min(min, mag3);
+		float min = std::min({mag1, mag2, mag3});
 
 		if (min == mag1) {
 			return c1;
-		}
-		else if (min == mag2) {
+		} else if (min == mag2) {
 			return c2;
+		} else {
+			return c3;
 		}
-		return c3;
 	}
 
 	NGP_HOST_DEVICE Eigen::Vector3f centroid() const {

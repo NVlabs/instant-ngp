@@ -12,13 +12,11 @@
  *  @author Thomas Müller & Alex Evans, NVIDIA
  */
 
-
 #pragma once
 
 #include <neural-graphics-primitives/common.h>
 
 #include <tiny-cuda-nn/gpu_memory.h>
-
 
 NGP_NAMESPACE_BEGIN
 

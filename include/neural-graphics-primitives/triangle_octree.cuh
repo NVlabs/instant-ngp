@@ -14,7 +14,6 @@
 
 #pragma once
 
-
 #include <neural-graphics-primitives/triangle_bvh.cuh>
 #include <neural-graphics-primitives/thread_pool.h>
 
@@ -23,7 +22,6 @@
 #include <tiny-cuda-nn/gpu_memory.h>
 
 #include <stack>
-
 
 namespace std {
 	template<>
@@ -45,7 +43,6 @@ namespace std {
 	};
 }
 
-
 NGP_NAMESPACE_BEGIN
 
 struct TriangleOctreeNode {
@@ -58,8 +55,52 @@ struct TriangleOctreeDualNode {
 	uint32_t vertices[8];
 };
 
+inline void write_brick_voxel_positions(Eigen::Vector3f* dst, uint32_t B, float size, const Eigen::Vector3f& base_pos) {
+	float rstep = size / (B - 1);
+	for (uint32_t z = 0; z < B; ++z) {
+		for (uint32_t y = 0; y < B; ++y) {
+			for (uint32_t x = 0; x < B; ++x) {
+				*dst++ = base_pos + Eigen::Vector3f{x * rstep, y * rstep, z * rstep};
+			}
+		}
+	}
+}
+
 class TriangleOctree {
 public:
+	std::vector<Eigen::Vector3f> build_brick_voxel_position_list(uint32_t B) const { // brick size B^3
+		std::vector<Eigen::Vector3f> brick_pos;
+		brick_pos.resize(m_dual_nodes.size() * B * B * B);
+		float rstep = 1.f / (B - 1);
+		write_brick_voxel_positions(brick_pos.data(), B, 1.f, Eigen::Vector3f::Zero());
+		uint32_t last_level = 0;
+		uint32_t prev_ni = 0, ni = 0;
+		for (ni = 0; ni < (uint32_t)m_nodes.size(); ++ni) {
+			auto const &n = m_nodes[ni];
+			if (n.depth > last_level) {
+				tlog::info() << (ni-prev_ni) << " bricks at level " << last_level << " with " << (ni-prev_ni)*B*B*B << " values.";
+				last_level = n.depth;
+				prev_ni = ni;
+			}
+			float child_size = std::scalbnf(1.f, -(int)n.depth - 1);
+			Vector3i16 child_pos_base = n.pos * (uint16_t)2;
+			for (int i = 0; i < 8; ++i) {
+				int child_idx = n.children[i];
+				if (child_idx < 0)
+					continue;
+				Vector3i16 child_pos = child_pos_base;
+				if (i&1) ++child_pos.x();
+				if (i&2) ++child_pos.y();
+				if (i&4) ++child_pos.z();
+				Eigen::Vector3f base_pos = child_pos.cast<float>() * child_size;
+				write_brick_voxel_positions(brick_pos.data() + (child_idx * B * B * B), B, child_size, base_pos);
+			}
+		}
+		tlog::info() << (ni-prev_ni) << " bricks at level " << last_level << " with " << (ni-prev_ni)*B*B*B << " values.";
+		tlog::info() << (m_dual_nodes.size()-ni) << " bricks at level " << last_level+1 << " with " << (m_dual_nodes.size()-ni)*B*B*B << " values.";
+		return brick_pos;
+	}
+
 	void build(const TriangleBvh& bvh, const std::vector<Triangle>& triangles, uint32_t max_depth) {
 		m_nodes.clear();
 		m_dual_nodes.clear();

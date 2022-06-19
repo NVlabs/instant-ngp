@@ -23,7 +23,6 @@
 
 #include <memory>
 
-
 NGP_NAMESPACE_BEGIN
 
 struct TriangleBvhNode {

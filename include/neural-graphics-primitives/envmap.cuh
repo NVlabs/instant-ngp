@@ -24,7 +24,6 @@
 #include <tiny-cuda-nn/gpu_memory.h>
 #include <tiny-cuda-nn/network.h>
 
-
 NGP_NAMESPACE_BEGIN
 
 template <typename T>
@@ -64,8 +63,8 @@ __device__ Eigen::Array4f read_envmap(const T* __restrict__ envmap_data, const E
 	return result;
 }
 
-template <typename T>
-__device__ void deposit_envmap_gradient(const tcnn::vector_t<T, 4>& value, T* __restrict__ envmap_gradient, const Eigen::Vector2i envmap_resolution, const Eigen::Vector3f& dir) {
+template <typename T, typename GRAD_T>
+__device__ void deposit_envmap_gradient(const tcnn::vector_t<T, 4>& value, GRAD_T* __restrict__ envmap_gradient, const Eigen::Vector2i envmap_resolution, const Eigen::Vector3f& dir) {
 	auto dir_cyl = dir_to_spherical_unorm({dir.z(), -dir.x(), dir.y()});
 
 	auto envmap_float = Eigen::Vector2f{dir_cyl.y() * (envmap_resolution.x()-1), dir_cyl.x() * (envmap_resolution.y()-1)};
@@ -83,8 +82,8 @@ __device__ void deposit_envmap_gradient(const tcnn::vector_t<T, 4>& value, T* __
 
 		Eigen::Array4f result;
 
-#if TCNN_MIN_GPU_ARCH >= 60 // atomicAdd(__half2) is only supported with compute capability 60 and above
-		if (std::is_same<T, __half>::value) {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600 // atomicAdd(__half2) is only supported with compute capability 60 and above
+		if (std::is_same<GRAD_T, __half>::value) {
 			for (uint32_t c = 0; c < 4; c += 2) {
 				atomicAdd((__half2*)&envmap_gradient[(pos.x() + pos.y() * envmap_resolution.x()) * 4 + c], {value[c] * weight, value[c+1] * weight});
 			}
@@ -92,7 +91,7 @@ __device__ void deposit_envmap_gradient(const tcnn::vector_t<T, 4>& value, T* __
 #endif
 		{
 			for (uint32_t c = 0; c < 4; ++c) {
-				atomicAdd(&envmap_gradient[(pos.x() + pos.y() * envmap_resolution.x()) * 4 + c], value[c] * weight);
+				atomicAdd(&envmap_gradient[(pos.x() + pos.y() * envmap_resolution.x()) * 4 + c], (GRAD_T)(value[c] * weight));
 			}
 		}
 	};

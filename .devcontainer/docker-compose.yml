@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  instant-ngp:
+    image: instantngp:latest
+    build:
+      context: ..
+      dockerfile: ./.devcontainer/Dockerfile
+    stdin_open: true
+    tty: true
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,graphics
+      DISPLAY: $DISPLAY
+    volumes:
+      - ../:/volume
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    working_dir: /volume
+    command: /bin/bash
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+

@@ -22,7 +22,6 @@
 using namespace Eigen;
 using namespace tcnn;
 
-
 NGP_NAMESPACE_BEGIN
 
 extern "C" {
@@ -67,7 +66,7 @@ extern "C" __global__ void __raygen__rg() {
 
 	default_rng_t rng;
 	rng.advance(idx.x * 4 * N_PATHS * N_BOUNCES);
-
+	uint32_t n_escaped = 0;
 	for (uint32_t i = 0; i < N_PATHS; ++i) {
 		Vector3f ray_origin = query_point;
 		Vector3f ray_direction = random_dir(rng);
@@ -92,8 +91,12 @@ extern "C" __global__ void __raygen__rg() {
 
 			// If the ray didn't escape, p0 contains the index of the triangle that was hit.
 			if ((int)p0 == -1) {
-				// One ray escaped. We are outside. Distance doesn't need to be signed.
-				return;
+				// 2 rays escaped. We are definitely outside and the escape was likely not a numerical fluke.
+				// Distance doesn't need to be signed.
+				if (++n_escaped > 2) {
+					return;
+				}
+				break;
 			}
 
 			Vector3f N_0;
@@ -108,7 +111,6 @@ extern "C" __global__ void __raygen__rg() {
 			onb.inverse_transform(ray_direction);
 		}
 	}
-
 	params.distances[idx.x] = -params.distances[idx.x];
 }
 

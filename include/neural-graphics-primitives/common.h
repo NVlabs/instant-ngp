@@ -15,6 +15,7 @@
 
 #pragma once
 
+
 #include <tinylogger/tinylogger.h>
 
 // Eigen uses __device__ __host__ on a bunch of defaulted constructors.
@@ -49,8 +50,8 @@
 	#define NGP_PRAGMA_NO_UNROLL
 #endif
 
+#include <chrono>
 #include <functional>
-
 
 NGP_NAMESPACE_BEGIN
 
@@ -58,19 +59,6 @@ using Vector2i32 = Eigen::Matrix<uint32_t, 2, 1>;
 using Vector3i16 = Eigen::Matrix<uint16_t, 3, 1>;
 using Vector4i16 = Eigen::Matrix<uint16_t, 4, 1>;
 using Vector4i32 = Eigen::Matrix<uint32_t, 4, 1>;
-
-static constexpr uint32_t BATCH_SIZE_MULTIPLE = 256;
-
-class ScopeGuard {
-public:
-    ScopeGuard(const std::function<void()>& callback) : mCallback{callback} {}
-    ScopeGuard(std::function<void()>&& callback) : mCallback{std::move(callback)} {}
-    ScopeGuard(const ScopeGuard& other) = delete;
-    ScopeGuard(ScopeGuard&& other) { mCallback = std::move(other.mCallback); other.mCallback = {}; }
-    ~ScopeGuard() { mCallback(); }
-private:
-    std::function<void()> mCallback;
-};
 
 enum class EMeshRenderMode : int {
 	Off,
@@ -85,15 +73,13 @@ enum class ERenderMode : int {
 	Normals,
 	Positions,
 	Depth,
-	Distance,
-	Stepsize,
 	Distortion,
 	Cost,
 	Slice,
 	NumRenderModes,
 	EncodingVis, // EncodingVis exists outside of the standard render modes
 };
-static constexpr const char* RenderModeStr = "AO\0Shade\0Normals\0Positions\0Depth\0Distance\0Stepsize\0Distortion\0Cost\0Slice\0\0";
+static constexpr const char* RenderModeStr = "AO\0Shade\0Normals\0Positions\0Depth\0Distortion\0Cost\0Slice\0\0";
 
 enum class ERandomMode : int {
 	Random,
@@ -109,11 +95,11 @@ enum class ELossType : int {
 	L1,
 	Mape,
 	Smape,
-	SmoothL1,
+	Huber,
 	LogL1,
 	RelativeL2,
 };
-static constexpr const char* LossTypeStr = "L2\0L1\0MAPE\0SMAPE\0SmoothL1\0LogL1\0RelativeL2\0\0";
+static constexpr const char* LossTypeStr = "L2\0L1\0MAPE\0SMAPE\0Huber\0LogL1\0RelativeL2\0\0";
 
 enum class ENerfActivation : int {
 	None,
@@ -145,6 +131,18 @@ enum class ETonemapCurve : int {
 };
 static constexpr const char* TonemapCurveStr = "Identity\0ACES\0Hable\0Reinhard\0\0";
 
+enum class EDlssQuality : int {
+	UltraPerformance,
+	MaxPerformance,
+	Balanced,
+	MaxQuality,
+	UltraQuality,
+	NumDlssQualitySettings,
+	None,
+};
+static constexpr const char* DlssQualityStr = "UltraPerformance\0MaxPerformance\0Balanced\0MaxQuality\0UltraQuality\0Invalid\0None\0\0";
+static constexpr const char* DlssQualityStrArray[] = {"UltraPerformance", "MaxPerformance", "Balanced", "MaxQuality", "UltraQuality", "Invalid", "None"};
+
 enum class ETestbedMode : int {
 	Nerf,
 	Sdf,
@@ -152,18 +150,31 @@ enum class ETestbedMode : int {
 	Volume,
 };
 
+enum class ESDFGroundTruthMode : int {
+	RaytracedMesh,
+	SpheretracedMesh,
+	SDFBricks,
+};
+
 struct Ray {
 	Eigen::Vector3f o;
 	Eigen::Vector3f d;
 };
 
+struct TrainingXForm {
+	Eigen::Matrix<float, 3, 4> start;
+	Eigen::Matrix<float, 3, 4> end;
+};
+
+enum class ECameraDistortionMode : int {
+	None,
+	Iterative,
+	FTheta,
+};
+
 struct CameraDistortion {
-	float params[4] = {};
-#ifdef __NVCC__
-	inline __host__ __device__ bool is_zero() const {
-		return params[0] == 0.0f && params[1] == 0.0f && params[2] == 0.0f && params[3] == 0.0f;
-	}
-#endif
+	ECameraDistortionMode mode = ECameraDistortionMode::None;
+	float params[7] = {};
 };
 
 #ifdef __NVCC__
@@ -200,5 +211,79 @@ inline NGP_HOST_DEVICE uint32_t binary_search(float val, const float* data, uint
 
 	return std::min(first, length-1);
 }
+
+inline std::string replace_all(std::string str, const std::string& a, const std::string& b) {
+	std::string::size_type n = 0;
+	while ((n = str.find(a, n)) != std::string::npos) {
+		str.replace(n, a.length(), b);
+		n += b.length();
+	}
+	return str;
+}
+
+template <typename T>
+std::string join(const T& components, const std::string& delim) {
+	std::ostringstream s;
+	for (const auto& component : components) {
+		if (&components[0] != &component) {
+			s << delim;
+		}
+		s << component;
+	}
+
+	return s.str();
+}
+
+enum class EEmaType {
+	Time,
+	Step,
+};
+
+class Ema {
+public:
+	Ema(EEmaType type, float half_life)
+	: m_type{type}, m_decay{std::pow(0.5f, 1.0f / half_life)}, m_creation_time{std::chrono::steady_clock::now()} {}
+
+	int64_t current_progress() {
+		if (m_type == EEmaType::Time) {
+			auto now = std::chrono::steady_clock::now();
+			return std::chrono::duration_cast<std::chrono::milliseconds>(now - m_creation_time).count();
+		} else {
+			return m_last_progress + 1;
+		}
+	}
+
+	void update(float val) {
+		int64_t cur = current_progress();
+		int64_t elapsed = cur - m_last_progress;
+		m_last_progress = cur;
+
+		float decay = std::pow(m_decay, elapsed);
+		m_val = val;
+		m_ema_val = decay * m_ema_val + (1.0f - decay) * val;
+	}
+
+	void set(float val) {
+		m_last_progress = current_progress();
+		m_val = m_ema_val = val;
+	}
+
+	float val() const {
+		return m_val;
+	}
+
+	float ema_val() const {
+		return m_ema_val;
+	}
+
+private:
+	float m_val = 0.0f;
+	float m_ema_val = 0.0f;
+	EEmaType m_type;
+	float m_decay;
+
+	int64_t m_last_progress = 0;
+	std::chrono::time_point<std::chrono::steady_clock> m_creation_time;
+};
 
 NGP_NAMESPACE_END

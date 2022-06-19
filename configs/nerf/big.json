@@ -1,11 +1,6 @@
 {
 	"parent": "base.json",
-	"encoding": {
-		"n_levels": 32,
+	"encoding": {		
 		"log2_hashmap_size": 21
-	},
-	"network": {
-		"n_neurons": 64,
-		"n_hidden_layers": 4
 	}
 }

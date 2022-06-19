@@ -8,26 +8,18 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-import os
-import sys
-import shutil
-import math
-from pathlib import Path, PurePath, PurePosixPath
-import numpy as np
-import pyexr as exr
-import csv
-from scipy.ndimage.filters import convolve1d
+import code
 import glob
+import imageio
+import numpy as np
+import os
+from pathlib import Path, PurePosixPath
+from scipy.ndimage.filters import convolve1d
 import struct
-import io
-
-import PIL.Image
-PIL.Image.MAX_IMAGE_PIXELS = 10000000000
+import sys
 
 import flip
 import flip.utils
-
-import code
 
 PAPER_FOLDER = Path(__file__).resolve().parent.parent
 SUPPL_FOLDER = PAPER_FOLDER/"supplemental"
@@ -127,20 +119,21 @@ def diagonally_combine_images(images, x_thresholds, angle, gap=0, color=1):
 		result = diagonally_combine_two_images(result, img, thres, angle, gap, color)
 	return result
 
-def write_image_pillow(img_file, img, quality):
-	img_array = (np.clip(img, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
-	im = PIL.Image.fromarray(img_array)
-	if os.path.splitext(img_file)[1] == ".jpg":
-		im = im.convert("RGB") # Bake the alpha channel
-	im.save(img_file, quality=quality, subsampling=0)
+def write_image_imageio(img_file, img, quality):
+	img = (np.clip(img, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
+	kwargs = {}
+	if os.path.splitext(img_file)[1].lower() in [".jpg", ".jpeg"]:
+		if img.ndim >= 3 and img.shape[2] > 3:
+			img = img[:,:,:3]
+		kwargs["quality"] = quality
+		kwargs["subsampling"] = 0
+	imageio.imwrite(img_file, img, **kwargs)
 
-def read_image_pillow(img_file):
-	img = PIL.Image.open(img_file, "r")
-	if os.path.splitext(img_file)[1] == ".jpg":
-		img = img.convert("RGB")
-	else:
-		img = img.convert("RGBA")
+def read_image_imageio(img_file):
+	img = imageio.imread(img_file)
 	img = np.asarray(img).astype(np.float32)
+	if len(img.shape) == 2:
+		img = img[:,:,np.newaxis]
 	return img / 255.0
 
 def srgb_to_linear(img):
@@ -152,15 +145,13 @@ def linear_to_srgb(img):
 	return np.where(img > limit, 1.055 * (img ** (1.0 / 2.4)) - 0.055, 12.92 * img)
 
 def read_image(file):
-	if os.path.splitext(file)[1] == ".exr":
-		img = exr.read(file).astype(np.float32)
-	elif os.path.splitext(file)[1] == ".bin":
+	if os.path.splitext(file)[1] == ".bin":
 		with open(file, "rb") as f:
 			bytes = f.read()
 			h, w = struct.unpack("ii", bytes[:8])
 			img = np.frombuffer(bytes, dtype=np.float16, count=h*w*4, offset=8).astype(np.float32).reshape([h, w, 4])
 	else:
-		img = read_image_pillow(file)
+		img = read_image_imageio(file)
 		if img.shape[2] == 4:
 			img[...,0:3] = srgb_to_linear(img[...,0:3])
 			# Premultiply alpha
@@ -170,9 +161,7 @@ def read_image(file):
 	return img
 
 def write_image(file, img, quality=95):
-	if os.path.splitext(file)[1] == ".exr":
-		img = exr.write(file, img)
-	elif os.path.splitext(file)[1] == ".bin":
+	if os.path.splitext(file)[1] == ".bin":
 		if img.shape[2] < 4:
 			img = np.dstack((img, np.ones([img.shape[0], img.shape[1], 4 - img.shape[2]])))
 		with open(file, "wb") as f:
@@ -186,14 +175,7 @@ def write_image(file, img, quality=95):
 			img[...,0:3] = linear_to_srgb(img[...,0:3])
 		else:
 			img = linear_to_srgb(img)
-		write_image_pillow(file, img, quality)
-
-def write_image_gamma(file, img, gamma, quality=95):
-	if os.path.splitext(file)[1] == ".exr":
-		img = exr.write(file, img)
-	else:
-		img = img**(1.0/gamma) # this will break alpha channels
-		write_image_pillow(file, img, quality)
+		write_image_imageio(file, img, quality)
 
 def trim(error, skip=0.000001):
 	error = np.sort(error.flatten())
@@ -279,15 +261,10 @@ def compute_error_img(metric, img, ref):
 
 	raise ValueError(f"Unknown metric: {metric}.")
 
-def compute_error(metric, img, ref, metric_map_filename=None):
+def compute_error(metric, img, ref):
 	metric_map = compute_error_img(metric, img, ref)
 	metric_map[np.logical_not(np.isfinite(metric_map))] = 0
 	if len(metric_map.shape) == 3:
 		metric_map = np.mean(metric_map, axis=2)
 	mean = np.mean(metric_map)
-	if metric_map_filename:
-		if not metric_map_filename.suffix.lower() == ".exr":
-			index_map = np.clip(255.0 * np.squeeze(metric_map), 0, 255)
-			metric_map = flip.utils.CHWtoHWC(flip.utils.index2color(index_map, flip.utils.get_magma_map()))
-		exr.write(data=metric_map, filename=str(metric_map_filename))
 	return mean
