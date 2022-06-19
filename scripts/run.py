@@ -10,12 +10,11 @@
 
 import argparse
 import os
-import commentjson as json
-
-import numpy as np
-
 import sys
 import time
+
+import commentjson as json
+import numpy as np
 
 from common import *
 from scenes import scenes_nerf, scenes_image, scenes_sdf, scenes_volume, setup_colored_sdf
@@ -61,7 +60,6 @@ def parse_args():
 
 if __name__ == "__main__":
 	args = parse_args()
-	print("  RUNNING ")
 	if args.mode == "":
 		if args.scene in scenes_sdf:
 			args.mode = "sdf"
@@ -103,8 +101,9 @@ if __name__ == "__main__":
 	testbed.nerf.sharpen = float(args.sharpen)
 	if args.crop:
 		bb = args.crop.split(",")
-		testbed.render_aabb.min = [float(bb[0]), float(bb[1]), float(bb[2])]
-		testbed.render_aabb.max = [float(bb[3]), float(bb[4]), float(bb[5])]
+		if len(bb) == 6:
+			testbed.render_aabb.min = [float(bb[0]), float(bb[1]), float(bb[2])]
+			testbed.render_aabb.max = [float(bb[3]), float(bb[4]), float(bb[5])]
 	if args.mode == "sdf":
 		testbed.tonemap_curve = ngp.TonemapCurve.ACES
 
