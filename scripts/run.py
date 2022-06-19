@@ -9,7 +9,7 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 import argparse
-import os, sys
+import os
 import commentjson as json
 
 import numpy as np
@@ -168,7 +168,7 @@ if __name__ == "__main__":
 	n_steps = args.n_steps
 	if n_steps < 0:
 		n_steps = 100000
-	print(args)
+
 	if n_steps > 0:
 		with tqdm(desc="Training", total=n_steps, unit="step") as t:
 			while testbed.frame():
@@ -188,9 +188,7 @@ if __name__ == "__main__":
 				t.update(testbed.training_step - old_training_step)
 				t.set_postfix(loss=testbed.loss)
 				old_training_step = testbed.training_step
-				print("__testbed.training_step:")
-				print(testbed.training_step)
-	sys.exit()
+
 	if args.save_snapshot:
 		print("Saving snapshot ", args.save_snapshot)
 		testbed.save_snapshot(args.save_snapshot, False)
