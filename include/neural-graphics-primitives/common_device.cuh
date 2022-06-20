@@ -223,9 +223,16 @@ inline __host__ __device__ Ray pixel_to_ray_pinhole(
 	return {origin, dir};
 }
 
-inline __host__ __device__ Eigen::Matrix<float, 3, 4> get_xform_given_rolling_shutter(const TrainingXForm &training_xform, const Eigen::Vector4f &rolling_shutter, const Eigen::Vector2f &uv, float motionblur_time) {
+inline __host__ __device__ Eigen::Matrix<float, 3, 4> get_xform_given_rolling_shutter(const TrainingXForm& training_xform, const Eigen::Vector4f& rolling_shutter, const Eigen::Vector2f& uv, float motionblur_time) {
 	float pixel_t = rolling_shutter.x() + rolling_shutter.y() * uv.x() + rolling_shutter.z() * uv.y() + rolling_shutter.w() * motionblur_time;
-	return training_xform.start + (training_xform.end - training_xform.start) * pixel_t;
+
+	Eigen::Vector3f pos = training_xform.start.col(3) + (training_xform.end.col(3) - training_xform.start.col(3)) * pixel_t;
+	Eigen::Quaternionf rot = Eigen::Quaternionf(training_xform.start.block<3, 3>(0, 0)).slerp(pixel_t, Eigen::Quaternionf(training_xform.end.block<3, 3>(0, 0)));
+
+	Eigen::Matrix<float, 3, 4> rv;
+	rv.col(3) = pos;
+	rv.block<3, 3>(0, 0) = Eigen::Quaternionf(rot).normalized().toRotationMatrix();
+	return rv;
 }
 
 inline __host__ __device__ Eigen::Vector3f f_theta_undistortion(const Eigen::Vector2f& uv, const float* params, const Eigen::Vector3f& error_direction) {
