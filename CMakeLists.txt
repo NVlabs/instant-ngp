@@ -170,7 +170,7 @@ if (NGP_BUILD_WITH_GUI)
 	else()
 		find_package(GLEW REQUIRED)
 		include_directories(${GLEW_INCLUDE_DIRS})
-		set(NGP_LIBRARIES ${NGP_LIBRARIES} GL ${GLEW_LIBRARIES} $<TARGET_OBJECTS:glfw_objects>)
+		set(NGP_LIBRARIES ${NGP_LIBRARIES} GL ${GLEW_LIBRARIES} $<TARGET_OBJECTS:glfw_objects> ${CMAKE_DL_LIBS})
 	endif()
 
 	set(GUI_SOURCES
