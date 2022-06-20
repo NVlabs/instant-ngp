@@ -44,6 +44,13 @@ def parse_args():
 	parser.add_argument("--screenshot_dir", default="", help="Which directory to output screenshots to.")
 	parser.add_argument("--screenshot_spp", type=int, default=16, help="Number of samples per pixel in screenshots.")
 
+	parser.add_argument("--video_camera_path", default="", help="The camera path to render.")
+	parser.add_argument("--video_camera_smoothing", action="store_true", help="Applies additional smoothing to the camera trajectory with the caveat that the endpoint of the camera path may not be reached.")
+	parser.add_argument("--video_fps", type=int, default=60, help="Number of frames per second.")
+	parser.add_argument("--video_n_seconds", type=int, default=1, help="Number of seconds the rendered video should be long.")
+	parser.add_argument("--video_spp", type=int, default=8, help="Number of samples per pixel. A larger number means less noise, but slower rendering.")
+	parser.add_argument("--video_output", type=str, default="video.mp4", help="Filename of the output video.")
+
 	parser.add_argument("--save_mesh", default="", help="Output a marching-cubes based mesh from the NeRF or SDF model. Supports OBJ and PLY format.")
 	parser.add_argument("--marching_cubes_res", default=256, type=int, help="Sets the resolution for the marching cubes grid.")
 
@@ -332,3 +339,20 @@ if __name__ == "__main__":
 			os.makedirs(os.path.dirname(outname), exist_ok=True)
 		write_image(outname + ".png", image)
 
+	if args.video_camera_path:
+		testbed.load_camera_path(args.video_camera_path)
+
+		resolution = [args.width or 1920, args.height or 1080]
+		n_frames = args.video_n_seconds * args.video_fps
+
+		if "tmp" in os.listdir():
+			shutil.rmtree("tmp")
+		os.makedirs("tmp")
+
+		for i in tqdm(list(range(min(n_frames, n_frames+1))), unit="frames", desc=f"Rendering video"):
+			testbed.camera_smoothing = args.video_camera_smoothing and i > 0
+			frame = testbed.render(resolution[0], resolution[1], args.video_spp, True, float(i)/n_frames, float(i + 1)/n_frames, args.video_fps, shutter_fraction=0.5)
+			write_image(f"tmp/{i:04d}.jpg", np.clip(frame * 2**args.exposure, 0.0, 1.0), quality=100)
+
+		os.system(f"ffmpeg -y -framerate {args.video_fps} -i tmp/%04d.jpg -c:v libx264 -pix_fmt yuv420p {args.video_output}")
+		shutil.rmtree("tmp")
