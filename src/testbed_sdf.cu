@@ -47,7 +47,7 @@ Testbed::NetworkDims Testbed::network_dims_sdf() const {
 
 __device__ inline float square(float x) { return x * x; }
 __device__ inline float mix(float a, float b, float t) { return a + (b - a) * t; }
-__device__ inline Vector3f mix(const Vector3f &a, const Vector3f &b, float t) { return a + (b - a) * t; }
+__device__ inline Vector3f mix(const Vector3f& a, const Vector3f& b, float t) { return a + (b - a) * t; }
 
 __device__ inline float SchlickFresnel(float u) {
 	float m = __saturatef(1.0 - u);
@@ -1042,6 +1042,7 @@ void Testbed::load_mesh() {
 	}
 	m_aabb = m_aabb.intersection(BoundingBox{Vector3f::Zero(), Vector3f::Ones()});
 	m_render_aabb = m_aabb;
+	m_render_aabb_to_local = Matrix3f::Identity();
 	m_mesh.thresh = 0.f;
 
 	m_sdf.triangles_cpu.resize(n_triangles);
@@ -1171,7 +1172,7 @@ void Testbed::generate_training_samples_sdf(Vector3f* positions, float* distance
 	CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
 }
 
-__global__ void generate_grid_samples_sdf_uniform(Eigen::Vector3i res_3d, BoundingBox aabb, Vector3f* __restrict__ out) {
+__global__ void generate_grid_samples_sdf_uniform(Eigen::Vector3i res_3d, BoundingBox aabb, const Matrix3f& render_aabb_to_local, Vector3f* __restrict__ out) {
 	uint32_t x = threadIdx.x + blockIdx.x * blockDim.x;
 	uint32_t y = threadIdx.y + blockIdx.y * blockDim.y;
 	uint32_t z = threadIdx.z + blockIdx.z * blockDim.z;
@@ -1180,10 +1181,10 @@ __global__ void generate_grid_samples_sdf_uniform(Eigen::Vector3i res_3d, Boundi
 	uint32_t i = x+ y*res_3d.x() + z*res_3d.x()*res_3d.y();
 	Vector3f pos = Array3f{(float)x, (float)y, (float)z} * Array3f{1.f/res_3d.x(),1.f/res_3d.y(),1.f/res_3d.z()};
 	pos = pos.cwiseProduct(aabb.max - aabb.min) + aabb.min;
-	out[i] = pos;
+	out[i] = render_aabb_to_local.transpose() * pos;
 }
 
-GPUMemory<float> Testbed::get_sdf_gt_on_grid(Vector3i res3d, const BoundingBox& aabb) {
+GPUMemory<float> Testbed::get_sdf_gt_on_grid(Vector3i res3d, const BoundingBox& aabb, const Matrix3f& render_aabb_to_local) {
 	const uint32_t n_elements = (res3d.x()*res3d.y()*res3d.z());
 	GPUMemory<float> density(n_elements);
 	GPUMemoryArena::Allocation alloc;
@@ -1194,7 +1195,7 @@ GPUMemory<float> Testbed::get_sdf_gt_on_grid(Vector3i res3d, const BoundingBox& 
 	float* sdf_out = density.data();
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)res3d.x(), threads.x), div_round_up((uint32_t)res3d.y(), threads.y), div_round_up((uint32_t)res3d.z(), threads.z) };
-	generate_grid_samples_sdf_uniform<<<blocks, threads, 0, m_inference_stream>>>(res3d, aabb, positions);
+	generate_grid_samples_sdf_uniform<<<blocks, threads, 0, m_inference_stream>>>(res3d, aabb, render_aabb_to_local, positions);
 	CUDA_CHECK_THROW(cudaStreamSynchronize(m_inference_stream));
 	m_sdf.triangle_bvh->signed_distance_gpu(
 			n_elements,

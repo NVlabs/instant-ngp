@@ -68,12 +68,17 @@ struct NerfDataset {
 	std::vector<tcnn::GPUMemory<float>> depthmemory;
 
 	std::vector<TrainingImageMetadata> metadata;
+	tcnn::GPUMemory<TrainingImageMetadata> metadata_gpu;
+
+	void update_metadata(int first = 0, int last = -1);
+
 	std::vector<TrainingXForm> xforms;
 	tcnn::GPUMemory<float> sharpness_data;
 	Eigen::Vector2i sharpness_resolution = {0, 0};
 	tcnn::GPUMemory<float> envmap_data;
 
 	BoundingBox render_aabb = {};
+	Eigen::Matrix3f render_aabb_to_local = Eigen::Matrix3f::Identity();
 	Eigen::Vector3f up = {0.0f, 1.0f, 0.0f};
 	Eigen::Vector3f offset = {0.0f, 0.0f, 0.0f};
 	size_t n_images = 0;

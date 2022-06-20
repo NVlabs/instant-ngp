@@ -21,6 +21,7 @@ NGP_NAMESPACE_BEGIN
 
 class ICallable {
 public:
+	virtual ~ICallable() {}
 	virtual void operator()() = 0;
 };
 
@@ -65,6 +66,11 @@ public:
 		std::lock_guard<std::mutex> lock{mMutex};
 		mRawQueue.emplace_back(std::forward<T>(newElem));
 		mDataCondition.notify_one();
+	}
+
+	void clear() {
+		std::lock_guard<std::mutex> lock{mMutex};
+		mRawQueue.clear();
 	}
 
 	void clearAndPush(T&& newElem) {

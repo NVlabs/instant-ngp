@@ -280,7 +280,7 @@ if __name__ == "__main__":
 			f["transform_matrix"] = np.matmul(f["transform_matrix"], flip_mat) # flip cameras (it just works)
 	else:
 		# don't keep colmap coords - reorient the scene to be easier to work with
-		
+
 		up = up / np.linalg.norm(up)
 		print("up vector was", up)
 		R = rotmat(up,[0,0,1]) # rotate up vector to [0,0,1]
@@ -289,7 +289,7 @@ if __name__ == "__main__":
 
 		for f in out["frames"]:
 			f["transform_matrix"] = np.matmul(R, f["transform_matrix"]) # rotate up to be the z axis
-		
+
 		# find a central point they are all looking at
 		print("computing center of attention...")
 		totw = 0.0

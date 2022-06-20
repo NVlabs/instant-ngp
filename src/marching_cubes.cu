@@ -273,13 +273,13 @@ with z=1
 
 edges 8-11 go in +z direction from vertex 0-3
 */
-__global__ void gen_vertices(BoundingBox aabb, Vector3i res_3d, const float* __restrict__ density, int*__restrict__ vertidx_grid, Vector3f* verts_out, float thresh, uint32_t* __restrict__ counters) {
+__global__ void gen_vertices(BoundingBox render_aabb, Matrix3f render_aabb_to_local, Vector3i res_3d, const float* __restrict__ density, int*__restrict__ vertidx_grid, Vector3f* verts_out, float thresh, uint32_t* __restrict__ counters) {
 	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
 	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
 	uint32_t z = blockIdx.z * blockDim.z + threadIdx.z;
 	if (x>=res_3d.x() || y>=res_3d.y() || z>=res_3d.z()) return;
-	Vector3f scale=(aabb.max-aabb.min).cwiseQuotient(res_3d.cast<float>());
-	Vector3f offset=aabb.min;
+	Vector3f scale=(render_aabb.max-render_aabb.min).cwiseQuotient(res_3d.cast<float>());
+	Vector3f offset=render_aabb.min;
 	uint32_t res2=res_3d.x()*res_3d.y();
 	uint32_t res3=res_3d.x()*res_3d.y()*res_3d.z();
 	uint32_t idx=x+y*res_3d.x()+z*res2;
@@ -293,7 +293,7 @@ __global__ void gen_vertices(BoundingBox aabb, Vector3i res_3d, const float* __r
 				vertidx_grid[idx]=vidx+1;
 				float prevf=f0,nextf=f1;
 				float dt=((thresh-prevf)/(nextf-prevf));
-				verts_out[vidx]=Vector3f{float(x)+dt, float(y), float(z)}.cwiseProduct(scale) + offset;
+				verts_out[vidx]=render_aabb_to_local.transpose() * (Vector3f{float(x)+dt, float(y), float(z)}.cwiseProduct(scale) + offset);
 			}
 		}
 	}
@@ -305,7 +305,7 @@ __global__ void gen_vertices(BoundingBox aabb, Vector3i res_3d, const float* __r
 				vertidx_grid[idx+res3]=vidx+1;
 				float prevf=f0,nextf=f1;
 				float dt=((thresh-prevf)/(nextf-prevf));
-				verts_out[vidx]=Vector3f{float(x), float(y)+dt, float(z)}.cwiseProduct(scale) + offset;
+				verts_out[vidx]=render_aabb_to_local.transpose() * (Vector3f{float(x), float(y)+dt, float(z)}.cwiseProduct(scale) + offset);
 			}
 		}
 	}
@@ -317,7 +317,7 @@ __global__ void gen_vertices(BoundingBox aabb, Vector3i res_3d, const float* __r
 				vertidx_grid[idx+res3*2]=vidx+1;
 				float prevf=f0,nextf=f1;
 				float dt=((thresh-prevf)/(nextf-prevf));
-				verts_out[vidx]=Vector3f{float(x), float(y), float(z)+dt}.cwiseProduct(scale) + offset;
+				verts_out[vidx]=render_aabb_to_local.transpose() * (Vector3f{float(x), float(y), float(z)+dt}.cwiseProduct(scale) + offset);
 			}
 		}
 	}
@@ -786,7 +786,7 @@ void compute_mesh_opt_gradients(
 	);
 }
 
-void marching_cubes_gpu(cudaStream_t stream, BoundingBox aabb, Vector3i res_3d, float thresh, const tcnn::GPUMemory<float>& density, tcnn::GPUMemory<Vector3f>& verts_out, tcnn::GPUMemory<uint32_t>& indices_out) {
+void marching_cubes_gpu(cudaStream_t stream, BoundingBox render_aabb, Matrix3f render_aabb_to_local, Vector3i res_3d, float thresh, const tcnn::GPUMemory<float>& density, tcnn::GPUMemory<Vector3f>& verts_out, tcnn::GPUMemory<uint32_t>& indices_out) {
 	GPUMemory<uint32_t> counters;
 
 	counters.enlarge(4);
@@ -801,7 +801,7 @@ void marching_cubes_gpu(cudaStream_t stream, BoundingBox aabb, Vector3i res_3d, 
 	const dim3 threads = { 4, 4, 4 };
 	const dim3 blocks = { div_round_up((uint32_t)res_3d.x(), threads.x), div_round_up((uint32_t)res_3d.y(), threads.y), div_round_up((uint32_t)res_3d.z(), threads.z) };
 	// count only
-	gen_vertices<<<blocks, threads, 0>>>(aabb, res_3d, density.data(), nullptr, nullptr, thresh, counters.data());
+	gen_vertices<<<blocks, threads, 0>>>(render_aabb, render_aabb_to_local, res_3d, density.data(), nullptr, nullptr, thresh, counters.data());
 	gen_faces<<<blocks, threads, 0>>>(res_3d, density.data(), nullptr, nullptr, thresh, counters.data());
 	std::vector<uint32_t> cpucounters; cpucounters.resize(4);
 	counters.copy_to_host(cpucounters);
@@ -812,7 +812,7 @@ void marching_cubes_gpu(cudaStream_t stream, BoundingBox aabb, Vector3i res_3d, 
 	verts_out.memset(0);
 	indices_out.resize(cpucounters[1]);
 	// actually generate verts
-	gen_vertices<<<blocks, threads, 0>>>(aabb, res_3d, density.data(), vertex_grid, verts_out.data(), thresh, counters.data()+2);
+	gen_vertices<<<blocks, threads, 0>>>(render_aabb, render_aabb_to_local, res_3d, density.data(), vertex_grid, verts_out.data(), thresh, counters.data()+2);
 	gen_faces<<<blocks, threads, 0>>>(res_3d, density.data(), vertex_grid, indices_out.data(), thresh, counters.data()+2);
 }
 

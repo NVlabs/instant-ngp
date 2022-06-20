@@ -243,30 +243,31 @@ void add_debug_line(ImDrawList* list, const Matrix<float, 4, 4>& proj, Vector3f 
 	}
 }
 
-void visualize_unit_cube(ImDrawList* list, const Matrix<float, 4, 4>& world2proj) {
-	add_debug_line(list, world2proj, Vector3f{0.f,0.f,0.f}, Vector3f{0.f,0.f,1.f}, 0xffff4040); // Z
-	add_debug_line(list, world2proj, Vector3f{1.f,0.f,0.f}, Vector3f{1.f,0.f,1.f}, 0xffffffff);
-	add_debug_line(list, world2proj, Vector3f{0.f,1.f,0.f}, Vector3f{0.f,1.f,1.f}, 0xffffffff);
-	add_debug_line(list, world2proj, Vector3f{1.f,1.f,0.f}, Vector3f{1.f,1.f,1.f}, 0xffffffff);
+void visualize_unit_cube(ImDrawList* list, const Matrix<float, 4, 4>& world2proj, const Vector3f& a, const Vector3f& b, const Matrix3f& render_aabb_to_local) {
+	Eigen::Matrix3f m = render_aabb_to_local.transpose();
+	add_debug_line(list, world2proj, m * Vector3f{a.x(),a.y(),a.z()}, m * Vector3f{a.x(),a.y(),b.z()}, 0xffff4040); // Z
+	add_debug_line(list, world2proj, m * Vector3f{b.x(),a.y(),a.z()}, m * Vector3f{b.x(),a.y(),b.z()}, 0xffffffff);
+	add_debug_line(list, world2proj, m * Vector3f{a.x(),b.y(),a.z()}, m * Vector3f{a.x(),b.y(),b.z()}, 0xffffffff);
+	add_debug_line(list, world2proj, m * Vector3f{b.x(),b.y(),a.z()}, m * Vector3f{b.x(),b.y(),b.z()}, 0xffffffff);
 
-	add_debug_line(list, world2proj, Vector3f{0.f,0.f,0.f}, Vector3f{1.f,0.f,0.f}, 0xff4040ff); // X
-	add_debug_line(list, world2proj, Vector3f{0.f,1.f,0.f}, Vector3f{1.f,1.f,0.f}, 0xffffffff);
-	add_debug_line(list, world2proj, Vector3f{0.f,0.f,1.f}, Vector3f{1.f,0.f,1.f}, 0xffffffff);
-	add_debug_line(list, world2proj, Vector3f{0.f,1.f,1.f}, Vector3f{1.f,1.f,1.f}, 0xffffffff);
+	add_debug_line(list, world2proj, m * Vector3f{a.x(),a.y(),a.z()}, m * Vector3f{b.x(),a.y(),a.z()}, 0xff4040ff); // X
+	add_debug_line(list, world2proj, m * Vector3f{a.x(),b.y(),a.z()}, m * Vector3f{b.x(),b.y(),a.z()}, 0xffffffff);
+	add_debug_line(list, world2proj, m * Vector3f{a.x(),a.y(),b.z()}, m * Vector3f{b.x(),a.y(),b.z()}, 0xffffffff);
+	add_debug_line(list, world2proj, m * Vector3f{a.x(),b.y(),b.z()}, m * Vector3f{b.x(),b.y(),b.z()}, 0xffffffff);
 
-	add_debug_line(list, world2proj, Vector3f{0.f,0.f,0.f}, Vector3f{0.f,1.f,0.f}, 0xff40ff40); // Y
-	add_debug_line(list, world2proj, Vector3f{1.f,0.f,0.f}, Vector3f{1.f,1.f,0.f}, 0xffffffff);
-	add_debug_line(list, world2proj, Vector3f{0.f,0.f,1.f}, Vector3f{0.f,1.f,1.f}, 0xffffffff);
-	add_debug_line(list, world2proj, Vector3f{1.f,0.f,1.f}, Vector3f{1.f,1.f,1.f}, 0xffffffff);
+	add_debug_line(list, world2proj, m * Vector3f{a.x(),a.y(),a.z()}, m * Vector3f{a.x(),b.y(),a.z()}, 0xff40ff40); // Y
+	add_debug_line(list, world2proj, m * Vector3f{b.x(),a.y(),a.z()}, m * Vector3f{b.x(),b.y(),a.z()}, 0xffffffff);
+	add_debug_line(list, world2proj, m * Vector3f{a.x(),a.y(),b.z()}, m * Vector3f{a.x(),b.y(),b.z()}, 0xffffffff);
+	add_debug_line(list, world2proj, m * Vector3f{b.x(),a.y(),b.z()}, m * Vector3f{b.x(),b.y(),b.z()}, 0xffffffff);
 }
 
-void visualize_nerf_camera(ImDrawList* list, const Matrix<float, 4, 4>& world2proj, const Eigen::Matrix<float, 3, 4>& xform, float aspect, uint32_t col) {
+void visualize_nerf_camera(ImDrawList* list, const Matrix<float, 4, 4>& world2proj, const Eigen::Matrix<float, 3, 4>& xform, float aspect, uint32_t col, float thickness) {
 	const float axis_size = 0.025f;
 	const Vector3f *xforms = (const Vector3f*)&xform;
 	Vector3f pos = xforms[3];
-	add_debug_line(list, world2proj, pos, pos+axis_size*xforms[0], 0xff4040ff);
-	add_debug_line(list, world2proj, pos, pos+axis_size*xforms[1], 0xff40ff40);
-	add_debug_line(list, world2proj, pos, pos+axis_size*xforms[2], 0xffff4040);
+	add_debug_line(list, world2proj, pos, pos+axis_size*xforms[0], 0xff4040ff, thickness);
+	add_debug_line(list, world2proj, pos, pos+axis_size*xforms[1], 0xff40ff40, thickness);
+	add_debug_line(list, world2proj, pos, pos+axis_size*xforms[2], 0xffff4040, thickness);
 	float xs=axis_size*aspect;
 	float ys=axis_size;
 	float zs=axis_size*2.f*aspect;
@@ -274,14 +275,14 @@ void visualize_nerf_camera(ImDrawList* list, const Matrix<float, 4, 4>& world2pr
 	Vector3f b=pos-xs*xforms[0]+ys*xforms[1]+zs*xforms[2];
 	Vector3f c=pos-xs*xforms[0]-ys*xforms[1]+zs*xforms[2];
 	Vector3f d=pos+xs*xforms[0]-ys*xforms[1]+zs*xforms[2];
-	add_debug_line(list, world2proj, pos, a, col);
-	add_debug_line(list, world2proj, pos, b, col);
-	add_debug_line(list, world2proj, pos, c, col);
-	add_debug_line(list, world2proj, pos, d, col);
-	add_debug_line(list, world2proj, a, b, col);
-	add_debug_line(list, world2proj, b, c, col);
-	add_debug_line(list, world2proj, c, d, col);
-	add_debug_line(list, world2proj, d, a, col);
+	add_debug_line(list, world2proj, pos, a, col, thickness);
+	add_debug_line(list, world2proj, pos, b, col, thickness);
+	add_debug_line(list, world2proj, pos, c, col, thickness);
+	add_debug_line(list, world2proj, pos, d, col, thickness);
+	add_debug_line(list, world2proj, a, b, col, thickness);
+	add_debug_line(list, world2proj, b, c, col, thickness);
+	add_debug_line(list, world2proj, c, d, col, thickness);
+	add_debug_line(list, world2proj, d, a, col, thickness);
 }
 
 bool CameraPath::imgui_viz(ImDrawList* list, Matrix<float, 4, 4> &view2proj, Matrix<float, 4, 4> &world2proj, Matrix<float, 4, 4> &world2view, Vector2f focal, float aspect) {

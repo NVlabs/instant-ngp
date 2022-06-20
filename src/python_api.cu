@@ -97,11 +97,13 @@ void Testbed::override_sdf_training_data(py::array_t<float> points, py::array_t<
 }
 
 pybind11::dict Testbed::compute_marching_cubes_mesh(Eigen::Vector3i res3d, BoundingBox aabb, float thresh) {
+	Matrix3f render_aabb_to_local = Matrix3f::Identity();
 	if (aabb.is_empty()) {
 		aabb = m_testbed_mode == ETestbedMode::Nerf ? m_render_aabb : m_aabb;
+		render_aabb_to_local = m_render_aabb_to_local;
 	}
 
-	marching_cubes(res3d, aabb, thresh);
+	marching_cubes(res3d, aabb, render_aabb_to_local, thresh);
 
 	py::array_t<float> cpuverts({(int)m_mesh.verts.size(), 3});
 	py::array_t<float> cpunormals({(int)m_mesh.vert_normals.size(), 3});
@@ -402,6 +404,7 @@ PYBIND11_MODULE(pyngp, m) {
 	// Interesting members.
 	testbed
 		.def_readwrite("dynamic_res", &Testbed::m_dynamic_res)
+		.def_readwrite("dynamic_res_target_fps", &Testbed::m_dynamic_res_target_fps)
 		.def_readwrite("fixed_res_factor", &Testbed::m_fixed_res_factor)
 		.def_readwrite("background_color", &Testbed::m_background_color)
 		.def_readwrite("shall_train", &Testbed::m_train)
@@ -418,6 +421,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_property("scale", &Testbed::scale, &Testbed::set_scale)
 		.def_readonly("bounding_radius", &Testbed::m_bounding_radius)
 		.def_readwrite("render_aabb", &Testbed::m_render_aabb)
+		.def_readwrite("render_aabb_to_local", &Testbed::m_render_aabb_to_local)
 		.def_readwrite("aabb", &Testbed::m_aabb)
 		.def_readwrite("raw_aabb", &Testbed::m_raw_aabb)
 		.def_property("fov", &Testbed::fov, &Testbed::set_fov)
@@ -450,6 +454,21 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("parallax_shift", &Testbed::m_parallax_shift)
 		.def_readwrite("color_space", &Testbed::m_color_space)
 		.def_readwrite("tonemap_curve", &Testbed::m_tonemap_curve)
+		.def_property("dlss",
+			[](py::object& obj) { return obj.cast<Testbed&>().m_dlss; },
+			[](const py::object& obj, bool value) {
+				if (value && !obj.cast<Testbed&>().m_dlss_supported) {
+					if (obj.cast<Testbed&>().m_render_window) {
+						throw std::runtime_error{"DLSS not supported."};
+					} else {
+						throw std::runtime_error{"DLSS requires a Window to be initialized via `init_window`."};
+					}
+				}
+
+				obj.cast<Testbed&>().m_dlss = value;
+			}
+		)
+		.def_readwrite("dlss_sharpening", &Testbed::m_dlss_sharpening)
 		;
 
 	py::class_<CameraDistortion> camera_distortion(m, "CameraDistortion");
@@ -501,6 +520,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readonly("metadata", &NerfDataset::metadata)
 		.def_readonly("transforms", &NerfDataset::xforms)
 		.def_readonly("render_aabb", &NerfDataset::render_aabb)
+		.def_readonly("render_aabb_to_local", &NerfDataset::render_aabb_to_local)
 		.def_readonly("up", &NerfDataset::up)
 		.def_readonly("offset", &NerfDataset::offset)
 		.def_readonly("n_images", &NerfDataset::n_images)
@@ -531,6 +551,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("near_distance", &Testbed::Nerf::Training::near_distance)
 		.def_readwrite("density_grid_decay", &Testbed::Nerf::Training::density_grid_decay)
 		.def_readwrite("extrinsic_l2_reg", &Testbed::Nerf::Training::extrinsic_l2_reg)
+		.def_readwrite("extrinsic_learning_rate", &Testbed::Nerf::Training::extrinsic_learning_rate)
 		.def_readwrite("intrinsic_l2_reg", &Testbed::Nerf::Training::intrinsic_l2_reg)
 		.def_readwrite("exposure_l2_reg", &Testbed::Nerf::Training::exposure_l2_reg)
 		.def_readwrite("depth_supervision_lambda", &Testbed::Nerf::Training::depth_supervision_lambda)
@@ -546,6 +567,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("set_camera_extrinsics", &Testbed::Nerf::Training::set_camera_extrinsics,
 			py::arg("frame_idx"),
 			py::arg("camera_to_world"),
+			py::arg("convert_to_ngp")=true,
 			"Set up the camera extrinsics for the given training image index, from the given 3x4 transformation matrix."
 		)
 		.def("get_camera_extrinsics", &Testbed::Nerf::Training::get_camera_extrinsics, py::arg("frame_idx"), "return the 3x4 transformation matrix of given training frame")

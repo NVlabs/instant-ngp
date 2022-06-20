@@ -193,6 +193,99 @@ NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale, bool is_h
 	return result;
 }
 
+void read_camera_distortion(const nlohmann::json &json, CameraDistortion &camera_distortion, Vector2f &principal_point, Vector4f &rolling_shutter) {
+	if (json.contains("k1")) {
+		camera_distortion.params[0] = json["k1"];
+		if (camera_distortion.params[0] != 0.f) {
+			camera_distortion.mode = ECameraDistortionMode::Iterative;
+		}
+	}
+
+	if (json.contains("k2")) {
+		camera_distortion.params[1] = json["k2"];
+		if (camera_distortion.params[1] != 0.f) {
+			camera_distortion.mode = ECameraDistortionMode::Iterative;
+		}
+	}
+
+	if (json.contains("p1")) {
+		camera_distortion.params[2] = json["p1"];
+		if (camera_distortion.params[2] != 0.f) {
+			camera_distortion.mode = ECameraDistortionMode::Iterative;
+		}
+	}
+
+	if (json.contains("p2")) {
+		camera_distortion.params[3] = json["p2"];
+		if (camera_distortion.params[3] != 0.f) {
+			camera_distortion.mode = ECameraDistortionMode::Iterative;
+		}
+	}
+
+	if (json.contains("cx")) {
+		principal_point.x() = (float)json["cx"] / (float)json["w"];
+	}
+
+	if (json.contains("cy")) {
+		principal_point.y() = (float)json["cy"] / (float)json["h"];
+	}
+
+	if (json.contains("rolling_shutter")) {
+		// the rolling shutter is a float3 of [A,B,C] where the time
+		// for each pixel is t= A + B * u + C * v
+		// where u and v are the pixel coordinates (0-1),
+		// and the resulting t is used to interpolate between the start
+		// and end transforms for each training xform
+		float motionblur_amount = 0.f;
+		if (json["rolling_shutter"].size() >= 4) {
+			motionblur_amount = float(json["rolling_shutter"][3]);
+		}
+
+		rolling_shutter = {float(json["rolling_shutter"][0]), float(json["rolling_shutter"][1]), float(json["rolling_shutter"][2]), motionblur_amount};
+	}
+
+	if (json.contains("ftheta_p0")) {
+		camera_distortion.params[0] = json["ftheta_p0"];
+		camera_distortion.params[1] = json["ftheta_p1"];
+		camera_distortion.params[2] = json["ftheta_p2"];
+		camera_distortion.params[3] = json["ftheta_p3"];
+		camera_distortion.params[4] = json["ftheta_p4"];
+		camera_distortion.params[5] = json["w"];
+		camera_distortion.params[6] = json["h"];
+		camera_distortion.mode = ECameraDistortionMode::FTheta;
+	}
+}
+
+bool read_focal_length(const nlohmann::json &json, Vector2f &focal_length, const Vector2i &res) {
+	auto read_focal_length = [&](int resolution, const std::string& axis) {
+		if (json.contains(axis + "_fov")) {
+			return fov_to_focal_length(resolution, (float)json[axis + "_fov"]);
+		} else if (json.contains("fl_"s + axis)) {
+			return (float)json["fl_"s + axis];
+		} else if (json.contains("camera_angle_"s + axis)) {
+			return fov_to_focal_length(resolution, (float)json["camera_angle_"s + axis] * 180 / PI());
+		} else {
+			return 0.0f;
+		}
+	};
+
+	// x_fov is in degrees, camera_angle_x in radians. Yes, it's silly.
+	float x_fl = read_focal_length(res.x(), "x");
+	float y_fl = read_focal_length(res.y(), "y");
+
+	if (x_fl != 0) {
+		focal_length = Vector2f::Constant(x_fl);
+		if (y_fl != 0) {
+			focal_length.y() = y_fl;
+		}
+	} else if (y_fl != 0) {
+		focal_length = Vector2f::Constant(y_fl);
+	} else {
+		return false;
+	}
+	return true;
+}
+
 NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float sharpen_amount) {
 	if (jsonpaths.empty()) {
 		throw std::runtime_error{"Cannot load NeRF data from an empty set of paths."};
@@ -381,68 +474,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 		}
 
 		// Camera distortion
-		{
-			if (json.contains("k1")) {
-				camera_distortion.params[0] = json["k1"];
-				if (camera_distortion.params[0] != 0.f) {
-					camera_distortion.mode = ECameraDistortionMode::Iterative;
-				}
-			}
-
-			if (json.contains("k2")) {
-				camera_distortion.params[1] = json["k2"];
-				if (camera_distortion.params[1] != 0.f) {
-					camera_distortion.mode = ECameraDistortionMode::Iterative;
-				}
-			}
-
-			if (json.contains("p1")) {
-				camera_distortion.params[2] = json["p1"];
-				if (camera_distortion.params[2] != 0.f) {
-					camera_distortion.mode = ECameraDistortionMode::Iterative;
-				}
-			}
-
-			if (json.contains("p2")) {
-				camera_distortion.params[3] = json["p2"];
-				if (camera_distortion.params[3] != 0.f) {
-					camera_distortion.mode = ECameraDistortionMode::Iterative;
-				}
-			}
-
-			if (json.contains("cx")) {
-				principal_point.x() = (float)json["cx"] / (float)json["w"];
-			}
-
-			if (json.contains("cy")) {
-				principal_point.y() = (float)json["cy"] / (float)json["h"];
-			}
-
-			if (json.contains("rolling_shutter")) {
-				// the rolling shutter is a float3 of [A,B,C] where the time
-				// for each pixel is t= A + B * u + C * v
-				// where u and v are the pixel coordinates (0-1),
-				// and the resulting t is used to interpolate between the start
-				// and end transforms for each training xform
-				float motionblur_amount = 0.f;
-				if (json["rolling_shutter"].size() >= 4) {
-					motionblur_amount = float(json["rolling_shutter"][3]);
-				}
-
-				rolling_shutter = {float(json["rolling_shutter"][0]), float(json["rolling_shutter"][1]), float(json["rolling_shutter"][2]), motionblur_amount};
-			}
-
-			if (json.contains("ftheta_p0")) {
-				camera_distortion.params[0] = json["ftheta_p0"];
-				camera_distortion.params[1] = json["ftheta_p1"];
-				camera_distortion.params[2] = json["ftheta_p2"];
-				camera_distortion.params[3] = json["ftheta_p3"];
-				camera_distortion.params[4] = json["ftheta_p4"];
-				camera_distortion.params[5] = json["w"];
-				camera_distortion.params[6] = json["h"];
-				camera_distortion.mode = ECameraDistortionMode::FTheta;
-			}
-		}
+		read_camera_distortion(json, camera_distortion, principal_point, rolling_shutter);
 
 		if (json.contains("aabb_scale")) {
 			result.aabb_scale = json["aabb_scale"];
@@ -628,30 +660,9 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 				result.n_extra_learnable_dims = 0;
 			}
 
-			auto read_focal_length = [&](int resolution, const std::string& axis) {
-				if (frame.contains(axis + "_fov")) {
-					return fov_to_focal_length(resolution, (float)frame[axis + "_fov"]);
-				} else if (json.contains("fl_"s + axis)) {
-					return (float)json["fl_"s + axis];
-				} else if (json.contains("camera_angle_"s + axis)) {
-					return fov_to_focal_length(resolution, (float)json["camera_angle_"s + axis] * 180 / PI());
-				} else {
-					return 0.0f;
-				}
-			};
-
-			// x_fov is in degrees, camera_angle_x in radians. Yes, it's silly.
-			float x_fl = read_focal_length(dst.res.x(), "x");
-			float y_fl = read_focal_length(dst.res.y(), "y");
-
-			if (x_fl != 0) {
-				result.metadata[i_img].focal_length = Vector2f::Constant(x_fl);
-				if (y_fl != 0) {
-					result.metadata[i_img].focal_length.y() = y_fl;
-				}
-			} else if (y_fl != 0) {
-				result.metadata[i_img].focal_length = Vector2f::Constant(y_fl);
-			} else {
+			bool got_fl = read_focal_length(json, result.metadata[i_img].focal_length, dst.res);
+			got_fl |= read_focal_length(frame, result.metadata[i_img].focal_length, dst.res);
+			if (!got_fl) {
 				throw std::runtime_error{"Couldn't read fov."};
 			}
 
@@ -662,9 +673,12 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 				}
 			}
 
+			// set these from the base settings
 			result.metadata[i_img].rolling_shutter = rolling_shutter;
 			result.metadata[i_img].principal_point = principal_point;
 			result.metadata[i_img].camera_distortion = camera_distortion;
+			// see if there is a per-frame override
+			read_camera_distortion(frame, result.metadata[i_img].camera_distortion, result.metadata[i_img].principal_point, result.metadata[i_img].rolling_shutter);
 
 			result.xforms[i_img].start = result.nerf_matrix_to_ngp(result.xforms[i_img].start);
 			result.xforms[i_img].end = result.nerf_matrix_to_ngp(result.xforms[i_img].end);
@@ -793,7 +807,7 @@ void NerfDataset::set_training_image(int frame_idx, const Eigen::Vector2i& image
 		dst = pixelmemory[frame_idx].data();
 	}
 
-	if (sharpness_data.size()>0) {
+	if (sharpness_data.size() > 0) {
 		// compute overall sharpness
 		const dim3 threads = { 16, 8, 1 };
 		const dim3 blocks = { div_round_up((uint32_t)sharpness_resolution.x(), threads.x), div_round_up((uint32_t)sharpness_resolution.y(), threads.y), 1 };
@@ -812,7 +826,25 @@ void NerfDataset::set_training_image(int frame_idx, const Eigen::Vector2i& image
 		raymemory[frame_idx].free_memory();
 	}
 	metadata[frame_idx].rays = raymemory[frame_idx].data();
+	update_metadata(frame_idx, frame_idx + 1);
 }
 
+void NerfDataset::update_metadata(int first, int last) {
+	if (last < 0) {
+		last = n_images;
+	}
+
+	if (last > n_images) {
+		last = n_images;
+	}
+
+	int n = last - first;
+	if (n <= 0) {
+		return;
+	}
+
+	metadata_gpu.enlarge(last);
+	CUDA_CHECK_THROW(cudaMemcpy(metadata_gpu.data() + first, metadata.data() + first, n * sizeof(TrainingImageMetadata), cudaMemcpyHostToDevice));
+}
 
 NGP_NAMESPACE_END

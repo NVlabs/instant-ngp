@@ -141,17 +141,12 @@ inline void to_json(nlohmann::json& j, const NerfDataset& dataset) {
 		to_json(j["xforms"].at(i), dataset.xforms[i]);
 	}
 	j["render_aabb"] = dataset.render_aabb;
+	to_json(j["render_aabb_to_local"], dataset.render_aabb_to_local);
 	to_json(j["up"], dataset.up);
 	to_json(j["offset"], dataset.offset);
-	// global resolution removed
-	//to_json(j["image_resolution"], dataset.image_resolution);
 	to_json(j["envmap_resolution"], dataset.envmap_resolution);
 	j["scale"] = dataset.scale;
 	j["aabb_scale"] = dataset.aabb_scale;
-	// global distortion removed
-	//j["camera_distortion"] = dataset.camera_distortion;
-	//to_json(j["principal_point"], dataset.principal_point);
-	//to_json(j["rolling_shutter"], dataset.rolling_shutter);
 	j["from_mitsuba"] = dataset.from_mitsuba;
 	j["is_hdr"] = dataset.is_hdr;
 	j["wants_importance_sampling"] = dataset.wants_importance_sampling;
@@ -171,22 +166,23 @@ inline void from_json(const nlohmann::json& j, NerfDataset& dataset) {
 		if (j.contains("image_resolution")) from_json(j.at("image_resolution"), dataset.metadata[i].resolution);
 
 		from_json(j.at("xforms").at(i), dataset.xforms[i]);
-		if (j.contains("focal_lengths"))
-			from_json(j.at("focal_lengths").at(i), dataset.metadata[i].focal_length);
+		if (j.contains("focal_lengths")) from_json(j.at("focal_lengths").at(i), dataset.metadata[i].focal_length);
 		if (j.contains("metadata")) {
 			auto &ji = j["metadata"].at(i);
-			from_json(ji.at("resolution"),dataset.metadata[i].resolution);
-			from_json(ji.at("focal_length"),dataset.metadata[i].focal_length);
-			from_json(ji.at("principal_point"),dataset.metadata[i].principal_point);
-			from_json(ji.at("rolling_shutter"),dataset.metadata[i].rolling_shutter);
-			from_json(ji.at("camera_distortion"),dataset.metadata[i].camera_distortion);
+			from_json(ji.at("resolution"), dataset.metadata[i].resolution);
+			from_json(ji.at("focal_length"), dataset.metadata[i].focal_length);
+			from_json(ji.at("principal_point"), dataset.metadata[i].principal_point);
+			from_json(ji.at("rolling_shutter"), dataset.metadata[i].rolling_shutter);
+			from_json(ji.at("camera_distortion"), dataset.metadata[i].camera_distortion);
 		}
 	}
+
 	dataset.render_aabb = j.at("render_aabb");
+	dataset.render_aabb_to_local = Eigen::Matrix3f::Identity();
+	if (j.contains("render_aabb_to_local")) from_json(j.at("render_aabb_to_local"), dataset.render_aabb_to_local);
+
 	from_json(j.at("up"), dataset.up);
 	from_json(j.at("offset"), dataset.offset);
-	// global resolution removed
-	//from_json(j.at("image_resolution"), dataset.image_resolution);
 	from_json(j.at("envmap_resolution"), dataset.envmap_resolution);
 	dataset.scale = j.at("scale");
 	dataset.aabb_scale = j.at("aabb_scale");
