@@ -60,7 +60,6 @@ def parse_args():
 	args = parser.parse_args()
 	return args
 
-
 if __name__ == "__main__":
 	args = parse_args()
 
@@ -80,10 +79,6 @@ if __name__ == "__main__":
 		mode = ngp.TestbedMode.Sdf
 		configs_dir = os.path.join(ROOT_DIR, "configs", "sdf")
 		scenes = scenes_sdf
-	elif args.mode == "volume":
-		mode = ngp.TestbedMode.Volume
-		configs_dir = os.path.join(ROOT_DIR, "configs", "volume")
-		scenes = scenes_volume
 	elif args.mode == "nerf":
 		mode = ngp.TestbedMode.Nerf
 		configs_dir = os.path.join(ROOT_DIR, "configs", "nerf")
@@ -92,6 +87,12 @@ if __name__ == "__main__":
 		mode = ngp.TestbedMode.Image
 		configs_dir = os.path.join(ROOT_DIR, "configs", "image")
 		scenes = scenes_image
+	elif args.mode == "volume":
+		mode = ngp.TestbedMode.Volume
+		configs_dir = os.path.join(ROOT_DIR, "configs", "volume")
+		scenes = scenes_volume
+	else:
+		raise ValueError("Must specify either a valid '--mode' or '--scene' argument.")
 
 	base_network = os.path.join(configs_dir, "base.json")
 	if args.scene in scenes:
@@ -303,34 +304,31 @@ if __name__ == "__main__":
 		print(f"Generating mesh via marching cubes and saving to {args.save_mesh}. Resolution=[{res},{res},{res}]")
 		testbed.compute_and_save_marching_cubes_mesh(args.save_mesh, [res, res, res])
 
-	if args.width:
-		if ref_transforms:
-			testbed.fov_axis = 0
-			testbed.fov = ref_transforms["camera_angle_x"] * 180 / np.pi
-			if not args.screenshot_frames:
-				args.screenshot_frames = range(len(ref_transforms["frames"]))
-			print(args.screenshot_frames)
-			for idx in args.screenshot_frames:
-				f = ref_transforms["frames"][int(idx)]
-				cam_matrix = f["transform_matrix"]
-				testbed.set_nerf_camera_matrix(np.matrix(cam_matrix)[:-1,:])
-				outname = os.path.join(args.screenshot_dir, os.path.basename(f["file_path"]))
+	if ref_transforms:
+		testbed.fov_axis = 0
+		testbed.fov = ref_transforms["camera_angle_x"] * 180 / np.pi
+		if not args.screenshot_frames:
+			args.screenshot_frames = range(len(ref_transforms["frames"]))
+		print(args.screenshot_frames)
+		for idx in args.screenshot_frames:
+			f = ref_transforms["frames"][int(idx)]
+			cam_matrix = f["transform_matrix"]
+			testbed.set_nerf_camera_matrix(np.matrix(cam_matrix)[:-1,:])
+			outname = os.path.join(args.screenshot_dir, os.path.basename(f["file_path"]))
 
-				# Some NeRF datasets lack the .png suffix in the dataset metadata
-				if not os.path.splitext(outname)[1]:
-					outname = outname + ".png"
+			# Some NeRF datasets lack the .png suffix in the dataset metadata
+			if not os.path.splitext(outname)[1]:
+				outname = outname + ".png"
 
-				print(f"rendering {outname}")
-				image = testbed.render(args.width or int(ref_transforms["w"]), args.height or int(ref_transforms["h"]), args.screenshot_spp, True)
-				os.makedirs(os.path.dirname(outname), exist_ok=True)
-				write_image(outname, image)
-		elif args.screenshot_dir:
-			outname = os.path.join(args.screenshot_dir, args.scene + "_" + network_stem)
-			print(f"Rendering {outname}.png")
-			image = testbed.render(args.width, args.height, args.screenshot_spp, True)
-			if os.path.dirname(outname) != "":
-				os.makedirs(os.path.dirname(outname), exist_ok=True)
-			write_image(outname + ".png", image)
-
-
+			print(f"rendering {outname}")
+			image = testbed.render(args.width or int(ref_transforms["w"]), args.height or int(ref_transforms["h"]), args.screenshot_spp, True)
+			os.makedirs(os.path.dirname(outname), exist_ok=True)
+			write_image(outname, image)
+	elif args.screenshot_dir:
+		outname = os.path.join(args.screenshot_dir, args.scene + "_" + network_stem)
+		print(f"Rendering {outname}.png")
+		image = testbed.render(args.width or 1920, args.height or 1080, args.screenshot_spp, True)
+		if os.path.dirname(outname) != "":
+			os.makedirs(os.path.dirname(outname), exist_ok=True)
+		write_image(outname + ".png", image)
 
