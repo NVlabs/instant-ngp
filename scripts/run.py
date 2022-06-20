@@ -173,8 +173,12 @@ if __name__ == "__main__":
 
 	old_training_step = 0
 	n_steps = args.n_steps
-	if n_steps < 0:
-		n_steps = 100000
+
+	# If we loaded a snapshot, didn't specify a number of steps, _and_ didn't open a GUI,
+	# don't train by default and instead assume that the goal is to render screenshots,
+	# compute PSNR, or render a video.
+	if n_steps < 0 and (not args.load_snapshot or args.gui):
+		n_steps = 35000
 
 	tqdm_last_update = 0
 	if n_steps > 0:
