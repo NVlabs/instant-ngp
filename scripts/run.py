@@ -113,6 +113,15 @@ if __name__ == "__main__":
 			scene = os.path.join(scenes[args.scene]["data_dir"], scenes[args.scene]["dataset"])
 		testbed.load_training_data(scene)
 
+	if args.gui:
+		# Pick a sensible GUI resolution depending on arguments.
+		sw = args.width or 1920
+		sh = args.height or 1080
+		while sw*sh > 1920*1080*4:
+			sw = int(sw / 2)
+			sh = int(sh / 2)
+		testbed.init_window(sw, sh)
+
 
 	if args.load_snapshot:
 		print("Loading snapshot ", args.load_snapshot)
@@ -125,15 +134,6 @@ if __name__ == "__main__":
 		print("Screenshot transforms from ", args.screenshot_transforms)
 		with open(args.screenshot_transforms) as f:
 			ref_transforms = json.load(f)
-
-	if args.gui:
-		# Pick a sensible GUI resolution depending on arguments.
-		sw = args.width or 1920
-		sh = args.height or 1080
-		while sw*sh > 1920*1080*4:
-			sw = int(sw / 2)
-			sh = int(sh / 2)
-		testbed.init_window(sw, sh)
 
 	testbed.shall_train = args.train if args.gui else True
 
