@@ -302,6 +302,7 @@ inline __host__ __device__ Ray pixel_to_ray(
         };
     }
     else { // Perspective
+        head_pos = {0.f, 0.f, 0.f};
         if (camera_distortion.mode == ECameraDistortionMode::FTheta) {
             dir = f_theta_undistortion(uv - screen_center, camera_distortion.params, {1000.f, 0.f, 0.f});
             if (dir.x() == 1000.f) {
@@ -322,10 +323,12 @@ inline __host__ __device__ Ray pixel_to_ray(
         if (distortion_data) {
 		    dir.head<2>() += read_image<2>(distortion_data, distortion_resolution, uv);
 	    }
-
-        head_pos = {parallax_shift.x(), parallax_shift.y(), 0.f};
-        dir -= head_pos / parallax_shift.z(); // we could use focus_z here in the denominator. for now, we pack m_scale in here.
     }
+
+    const Eigen::Vector3f shift = {parallax_shift.x(), parallax_shift.y(), 0.f};
+    head_pos += shift;
+    dir -= shift / parallax_shift.z(); // we could use focus_z here in the denominator. for now, we pack m_scale in here.
+
 
     dir = camera_matrix.block<3, 3>(0, 0) * dir;
     Eigen::Vector3f origin = camera_matrix.block<3, 3>(0, 0) * head_pos + camera_matrix.col(3);
