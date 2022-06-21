@@ -845,6 +845,7 @@ void Testbed::imgui() {
 		ImGui::Checkbox("Autofocus", &m_autofocus);
 
 		if (ImGui::TreeNode("Advanced camera settings")) {
+			accum_reset |= ImGui::Combo("Camera mode", (int*)&m_camera_mode, CameraModeStr);
 			accum_reset |= ImGui::SliderFloat2("Screen center", &m_screen_center.x(), 0.f, 1.f);
 			accum_reset |= ImGui::SliderFloat2("Parallax shift", &m_parallax_shift.x(), -1.f, 1.f);
 			accum_reset |= ImGui::SliderFloat("Slice / focus depth", &m_slice_plane_z, -m_bounding_radius, m_bounding_radius);

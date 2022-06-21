@@ -87,6 +87,8 @@ enum class ECameraMode : int {
     Environment
 };
 
+static constexpr const char* CameraModeStr = "Perspective\0Orthographic\0Environment\0\0";
+
 enum class ERandomMode : int {
 	Random,
 	Halton,
