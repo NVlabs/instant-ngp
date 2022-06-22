@@ -1260,6 +1260,7 @@ __global__ void compute_loss_kernel_train_nerf(
 	PitchedPtr<NerfCoordinate> coords_out,
 	tcnn::network_precision_t* dloss_doutput,
 	ELossType loss_type,
+	ELossType depth_loss_type,
 	float* __restrict__ loss_output,
 	bool max_level_rand_training,
 	float* __restrict__ max_level_compacted_ptr,
@@ -1402,7 +1403,8 @@ __global__ void compute_loss_kernel_train_nerf(
 	lg.loss /= img_pdf * xy_pdf;
 
 	float target_depth = rays_in_unnormalized[i].d.norm() * ((depth_supervision_lambda > 0.0f && metadata[img].depth) ? read_depth(xy, resolution, metadata[img].depth) : -1.0f);
-	float depth_loss_gradient = target_depth > 0.0f ? (depth_ray - target_depth) * 2.f * depth_supervision_lambda : 0.0f;
+	LossAndGradient lg_depth = loss_and_gradient(Array3f::Constant(target_depth), Array3f::Constant(depth_ray), depth_loss_type);
+	float depth_loss_gradient = target_depth>0.0f ? lg_depth.gradient.x() : 0; 
 
 	// Note: dividing the gradient by the PDF would cause unbiased loss estimates.
 	// Essentially: variance reduction, but otherwise the same optimization.
@@ -3132,6 +3134,7 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 		PitchedPtr<NerfCoordinate>((NerfCoordinate*)coords_compacted, 1 ,0, extra_stride),
 		dloss_dmlp_out,
 		m_nerf.training.loss_type,
+		m_nerf.training.depth_loss_type,
 		loss,
 		m_max_level_rand_training,
 		max_level_compacted,
