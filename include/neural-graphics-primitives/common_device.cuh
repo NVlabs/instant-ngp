@@ -273,7 +273,8 @@ inline __host__ __device__ Ray pixel_to_ray(
 	const ECameraMode camera_mode = ECameraMode::Perspective,
 	const CameraDistortion& camera_distortion = {},
 	const float* __restrict__ distortion_data = nullptr,
-	const Eigen::Vector2i distortion_resolution = Eigen::Vector2i::Zero()
+	const Eigen::Vector2i distortion_resolution = Eigen::Vector2i::Zero(),
+	const float dataset_scale = 1.f
 ) {
 	Eigen::Vector2f offset = ld_random_pixel_offset(snap_to_pixel_centers ? 0 : spp);
 	Eigen::Vector2f uv = (pixel.cast<float>() + offset).cwiseQuotient(resolution.cast<float>());
@@ -283,12 +284,16 @@ inline __host__ __device__ Ray pixel_to_ray(
 
 	Eigen::Vector3f head_pos;
 	if(camera_mode == ECameraMode::Orthographic){
+		// 'dataset_scale' argument is only required by the orthographic camera.
+		// The focal length of Environment and Perspective cameras isn't affected by the change of dataset_scale,
+		// because all rays originate from the same point
 		dir = {0.f, 0.f, 1.f}; // Camera forward
 		head_pos = {
 			(uv.x() - screen_center.x()) * (float)resolution.x() / focal_length.x(),
 			(uv.y() - screen_center.y()) * (float)resolution.y() / focal_length.y(),
 			0.0f
 		};
+		head_pos *= dataset_scale;
 		head_pos += shift;
 		dir -= shift / parallax_shift.z(); // we could use focus_z here in the denominator. for now, we pack m_scale in here.
 	}
@@ -354,7 +359,8 @@ inline __host__ __device__ Eigen::Vector2f pos_to_pixel(
 	const Eigen::Vector2f& screen_center,
 	const Eigen::Vector3f& parallax_shift,
 	const ECameraMode camera_mode,
-	const CameraDistortion& camera_distortion = {}
+	const CameraDistortion& camera_distortion = {},
+	const float dataset_scale = 1.f
 ) {
 	// We get 'pos' as an input. We have pos = origin + alpha*dir, with unknown alpha
 	// tmp_dir = R^-1*(pos-t)
@@ -368,7 +374,8 @@ inline __host__ __device__ Eigen::Vector2f pos_to_pixel(
 		// origin = R*(head_pos+shift) + t
 		tmp_dir -= shift;
 		const Eigen::Vector3f head_dir_minus_shift = Eigen::Vector3f(0.f, 0.f, 1.f) - shift/parallax_shift.z();
-		const Eigen::Vector3f head_pos = tmp_dir - tmp_dir.z() * head_dir_minus_shift; // Gives head_pos.z=0 since head_dir_minus_shift.z=1
+		Eigen::Vector3f head_pos = tmp_dir - tmp_dir.z() * head_dir_minus_shift; // Gives head_pos.z=0 since head_dir_minus_shift.z=1
+		head_pos /= dataset_scale;
 		return {
 			head_pos.x() * focal_length.x() + screen_center.x() * resolution.x(),
 			head_pos.y() * focal_length.y() + screen_center.y() * resolution.y(),
@@ -426,7 +433,8 @@ inline __host__ __device__ Eigen::Vector2f motion_vector_3d(
 	const bool snap_to_pixel_centers,
 	const float depth,
 	const ECameraMode camera_mode,
-	const CameraDistortion& camera_distortion = {}
+	const CameraDistortion& camera_distortion = {},
+	const float dataset_scale = 1.f
 ) {
 	Ray ray = pixel_to_ray(
 		sample_index,
@@ -442,7 +450,8 @@ inline __host__ __device__ Eigen::Vector2f motion_vector_3d(
 		camera_mode,
 		camera_distortion,
 		nullptr,
-		Eigen::Vector2i::Zero()
+		Eigen::Vector2i::Zero(),
+		dataset_scale
 	);
 
 	Eigen::Vector2f prev_pixel = pos_to_pixel(
@@ -453,7 +462,8 @@ inline __host__ __device__ Eigen::Vector2f motion_vector_3d(
 		screen_center,
 		parallax_shift,
 		camera_mode,
-		camera_distortion
+		camera_distortion,
+		dataset_scale
 	);
 
 	return prev_pixel - (pixel.cast<float>() + ld_random_pixel_offset(sample_index));

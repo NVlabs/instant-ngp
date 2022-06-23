@@ -1791,7 +1791,8 @@ __global__ void init_rays_with_payload_kernel_nerf(
 	const float* __restrict__ distortion_data,
 	const Vector2i distortion_resolution,
 	ERenderMode render_mode,
-	ECameraMode camera_mode
+	ECameraMode camera_mode,
+	float dataset_scale
 ) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
@@ -1825,7 +1826,8 @@ __global__ void init_rays_with_payload_kernel_nerf(
 		camera_mode,
 		camera_distortion,
 		distortion_data,
-		distortion_resolution
+		distortion_resolution,
+		dataset_scale
 	);
 
 	NerfPayload& payload = payloads[idx];
@@ -1973,7 +1975,8 @@ void Testbed::NerfTracer::init_rays_from_camera(
 	float cone_angle_constant,
 	ERenderMode render_mode,
 	ECameraMode camera_mode,
-	cudaStream_t stream
+	cudaStream_t stream,
+	float dataset_scale
 ) {
 	// Make sure we have enough memory reserved to render at the requested resolution
 	size_t n_pixels = (size_t)resolution.x() * resolution.y();
@@ -2004,7 +2007,8 @@ void Testbed::NerfTracer::init_rays_from_camera(
 		distortion_data,
 		distortion_resolution,
 		render_mode,
-		camera_mode
+		camera_mode,
+		dataset_scale
 	);
 
 	m_n_rays_initialized = resolution.x() * resolution.y();
@@ -2268,7 +2272,8 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 		m_nerf.cone_angle_constant,
 		render_mode,
 		m_camera_mode,
-		stream
+		stream,
+		m_nerf.training.dataset.scale
 	);
 
 	uint32_t n_hit;

@@ -157,7 +157,8 @@ public:
 			float cone_angle_constant,
 			ERenderMode render_mode,
 			ECameraMode camera_mode,
-			cudaStream_t stream
+			cudaStream_t stream,
+			float dataset_scale
 		);
 
 		uint32_t trace(
