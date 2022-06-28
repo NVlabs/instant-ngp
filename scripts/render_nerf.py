@@ -1,10 +1,13 @@
 import argparse
+import asyncio
 import json
 import math
 import os
 import re
+import sys
 
 import numpy as np
+import subprocess as sp
 
 from pathlib import Path
 
@@ -13,10 +16,13 @@ from common import write_image
 
 # pyngp
 import pyngp as ngp
-ngp.BoundingBox()
+
 # convenience method to parse arguments
 def parse_args():
     parser = argparse.ArgumentParser(description="Render script")
+
+    parser.add_argument("--gpus", type=str, default="all", help="Which GPUs to use for rendering.  Example: \"0,1,2,3\" (Default: \"all\" = use all available GPUs)")
+    parser.add_argument("--batch", type=str, default=None, help="For multi-GPU rendering. It is not recommended to use this feature directly.")
 
     parser.add_argument("--snapshot", required=True, type=str, help="Snapshot file (.msgpack) to use for rendering.")
 
@@ -31,17 +37,54 @@ def parse_args():
 
     return parser.parse_args()
 
+
 def safe_str(string_like) -> str:
     return re.sub(r'([\" \'])', r'\\\1', str(string_like))
 
-if __name__ == "__main__":
-    args = parse_args()
 
-    # load render json
-    render_data = {}
-    with open(args.frames_json, 'r') as json_file:
-        render_data = json.load(json_file)
-    
+def get_frame_output_path(args: dict, frame: dict) -> Path:
+    frame_path = Path(frame["file_path"])
+    if frame_path.suffix == '':
+        frame_path = f"{frame_path}.png"
+
+    return Path(args.frames_path) / frame_path
+
+
+def export_video_sequence(args: dict, frame_paths: list[dict]):
+    # combine frames into a video via ffmpeg
+    if args.video_out != None:
+        video_path = Path(args.video_out)
+        video_path.unlink(missing_ok=True)
+        fps = args.video_fps
+
+        # fetch all images and save to a playlist
+        playlist_path = video_path.parent / f"{video_path.stem}-playlist.txt"
+        playlist_path.unlink(missing_ok=True)
+        print(playlist_path)
+
+        # prepare ffmpeg playlist.txt, each line is `file 'path/to/image'`
+        ffmpeg_files = [f"file '{safe_str(p.absolute())}'" for p in frame_paths]
+        playlist_str = "\n".join(ffmpeg_files)
+
+        with open(playlist_path, "w+") as f:
+            f.write(playlist_str)
+        
+        os.system(f"\
+            ffmpeg \
+                -f concat \
+                -safe 0 \
+                -r {fps} \
+                -i \"{playlist_path}\" \
+                -c:v libx264 \
+                -pix_fmt yuv420p \
+                -vf fps={fps} \
+                \"{video_path}\" \
+            ")
+        
+        playlist_path.unlink(missing_ok=True)
+
+
+def render_images(args: dict, render_data: dict):
     # initialize testbed
     testbed = ngp.Testbed(ngp.TestbedMode.Nerf)
     testbed.load_snapshot(args.snapshot)
@@ -56,19 +99,14 @@ if __name__ == "__main__":
     render_spp = args.samples_per_pixel
 
     # prepare frames directory
-    frames_path = Path(args.frames_path)
-    frames_path.mkdir(exist_ok=True)
+    Path(args.frames_path).mkdir(exist_ok=True)
     rendered_frame_paths = []
 
     # render each frame via testbed
     for frame in render_data["frames"]:
 
         # prepare output_path
-        frame_path = Path(frame["file_path"])
-        if frame_path.suffix == '':
-            frame_path = f"{frame_path}.png"
-
-        output_path = frames_path / frame_path
+        output_path = get_frame_output_path(args, frame)
         rendered_frame_paths.append(output_path)
         
         print(f"Rendering frame: {output_path}")
@@ -90,36 +128,62 @@ if __name__ == "__main__":
 
         # save frame as image
         write_image(output_path, image)
+
+
+def get_gpus() -> list[int]:
+    proc = sp.Popen(['nvidia-smi', '--list-gpus'], stdout=sp.PIPE, stderr=sp.PIPE)
+    out, err = proc.communicate()
+    data = [line.decode() for line in out.splitlines(False)]
+    gpus = [f"{item[4:item.index(':')]}" for item in data]
+    return gpus
+
+if __name__ == "__main__":
+    args = parse_args()
+    # load render json
+    render_data = {}
+    with open(args.frames_json, 'r') as json_file:
+        render_data = json.load(json_file)
     
-    # combine frames into a video via ffmpeg
-    if args.video_out != None:
-        video_path = Path(args.video_out)
-        video_path.unlink(missing_ok=True)
-        fps = args.video_fps
+    if args.batch != None:
+        print("STARTING RENDER ON CUDA DEVICE: " + os.environ['CUDA_VISIBLE_DEVICES'])
 
-        # fetch all images and save to a playlist
-        playlist_path = video_path.parent / f"{video_path.stem}-playlist.txt"
-        playlist_path.unlink(missing_ok=True)
-        print(playlist_path)
+        # only use a portion of the render_data["frames"]
+        frames = render_data["frames"]
+        [n, d] = [int(s) for s in args.batch.split('/')]
+        t = len(frames)
 
-        # prepare ffmpeg playlist.txt, each line is `file 'path/to/image'`
-        ffmpeg_files = [f"file '{safe_str(p.absolute())}'" for p in rendered_frame_paths]
-        playlist_str = "\n".join(ffmpeg_files)
-
-        with open(playlist_path, "w+") as f:
-            f.write(playlist_str)
+        render_data["frames"] = [frames[i] for i in range(t) if i % d == n]
+        render_images(args, render_data)
         
-        os.system(f"\
-            ffmpeg \
-                -f concat \
-                -safe 0 \
-                -r {fps} \
-                -i \"{playlist_path}\" \
-                -c:v libx264 \
-                -pix_fmt yuv420p \
-                -vf fps={fps} \
-                \"{video_path}\" \
-            ")
-        
-        playlist_path.unlink(missing_ok=True)
+    # No --batch flag means we are part of the main process
+    else:
+        # split into subprocesses, one for each gpu
+        procs = []
+        gpus = get_gpus()
+        n = len(gpus)
+        i = 0
 
+        print(f"Found {n} GPUs.  Rendering images...")
+        
+        for gpu in gpus:
+            env = os.environ.copy()
+            env["CUDA_VISIBLE_DEVICES"] = gpu
+            
+            # rerun this command, but with a batch arg
+            cmd = sys.argv.copy()
+            cmd.insert(0, 'python')
+            cmd.extend(["--batch", f"{i}/{n}"])
+            print(cmd)
+            proc = sp.Popen(cmd, env=env, shell=True, stderr=sys.stderr, stdout=sys.stdout)
+            procs.append(proc)
+
+            i = i + 1
+
+        
+        for p in procs:
+            p.wait()
+        
+        print("Rendering output via ffmpeg...")
+
+        frame_paths = [get_frame_output_path(args, frame) for frame in render_data["frames"]]
+        export_video_sequence(args, frame_paths)
