@@ -1380,12 +1380,39 @@ bool Testbed::begin_frame_and_handle_user_input() {
 	return true;
 }
 
+void Testbed::SecondWindow::draw(GLuint texture) {
+	if (!window)
+		return;
+	int display_w, display_h;
+	GLFWwindow *old_context = glfwGetCurrentContext();
+	glfwMakeContextCurrent(window);
+	glfwGetFramebufferSize(window, &display_w, &display_h);
+	glViewport(0, 0, display_w, display_h);
+	glClearColor(0.f,0.f,0.f, 1.f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glEnable(GL_TEXTURE_2D);
+	glBindTexture(GL_TEXTURE_2D, texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glBindVertexArray(vao);
+	if (program)
+		glUseProgram(program);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glBindVertexArray(0);
+	glUseProgram(0);
+	glfwSwapBuffers(window);
+	glfwMakeContextCurrent(old_context);
+}
+
 void Testbed::draw_gui() {
 	// Make sure all the cuda code finished its business here
 	CUDA_CHECK_THROW(cudaDeviceSynchronize());
-
+	if (!m_render_textures.empty())
+		m_second_window.draw((GLuint)m_render_textures.front()->texture());
+	glfwMakeContextCurrent(m_glfw_window);
 	int display_w, display_h;
-
 	glfwGetFramebufferSize(m_glfw_window, &display_w, &display_h);
 	glViewport(0, 0, display_w, display_h);
 	glClearColor(0.f, 0.f, 0.f, 0.f);
@@ -1606,7 +1633,76 @@ void Testbed::train_and_render(bool skip_rendering) {
 }
 
 
-void Testbed::init_window(int resw, int resh, bool hidden) {
+void Testbed::create_second_window() {
+	if (m_second_window.window)
+		return;
+	bool frameless = false;
+	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+	glfwWindowHint(GLFW_RESIZABLE, !frameless);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	glfwWindowHint(GLFW_CENTER_CURSOR, false);
+	glfwWindowHint(GLFW_DECORATED, !frameless);
+	glfwWindowHint(GLFW_SCALE_TO_MONITOR, frameless);
+	glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, true);
+	// get the window size / coordinates
+	int win_w=0,win_h=0,win_x=0,win_y=0;
+	GLuint ps=0,vs=0;
+	{
+		win_w = 1920;
+		win_h = 1080;
+		win_x = 0x40000000;
+		win_y = 0x40000000;
+		static const char* copy_shader_vert = "\
+			layout (location = 0)\n\
+			in vec2 vertPos_data;\n\
+			out vec2 texCoords;\n\
+			void main(){\n\
+				gl_Position = vec4(vertPos_data.xy, 0.0, 1.0);\n\
+				texCoords = (vertPos_data.xy + 1.0) * 0.5; texCoords.y=1.0-texCoords.y;\n\
+			}";
+		static const char* copy_shader_frag = "\
+			in vec2 texCoords;\n\
+			out vec4 fragColor;\n\
+			uniform sampler2D screenTex;\n\
+			void main(){\n\
+				fragColor = texture(screenTex, texCoords.xy);\n\
+			}";
+		vs = compile_shader(false, copy_shader_vert);
+		ps = compile_shader(true, copy_shader_frag);
+	}
+	m_second_window.window = glfwCreateWindow(win_w, win_h, "Fullscreen Output", NULL, m_glfw_window);
+	if (win_x!=0x40000000) glfwSetWindowPos(m_second_window.window, win_x, win_y);
+	glfwMakeContextCurrent(m_second_window.window);
+	m_second_window.program = glCreateProgram();
+	glAttachShader(m_second_window.program, vs);
+	glAttachShader(m_second_window.program, ps);
+	glLinkProgram(m_second_window.program);
+	if (!check_shader(m_second_window.program, "shader program", true)) {
+		glDeleteProgram(m_second_window.program);
+		m_second_window.program = 0;
+	}
+	// vbo and vao
+	glGenVertexArrays(1, &m_second_window.vao);
+	glGenBuffers(1, &m_second_window.vbo);
+	glBindVertexArray(m_second_window.vao);
+	const float fsquadVerts[] = {
+		-1.0f, -1.0f,
+		-1.0f, 1.0f,
+		1.0f, 1.0f,
+		1.0f, 1.0f,
+		1.0f, -1.0f,
+		-1.0f, -1.0f};
+	glBindBuffer(GL_ARRAY_BUFFER, m_second_window.vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(fsquadVerts), fsquadVerts, GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
+	glEnableVertexAttribArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindVertexArray(0);
+}
+
+
+
+void Testbed::init_window(int resw, int resh, bool hidden, bool second_window) {
 #ifndef NGP_GUI
 	throw std::runtime_error{"init_window failed: NGP was built without GUI support"};
 #else
@@ -1743,7 +1839,11 @@ void Testbed::init_window(int resw, int resh, bool hidden) {
 
 	m_render_window = true;
 
-#endif
+	if (m_second_window.window == nullptr && second_window)
+	{
+		create_second_window();
+	}
+#endif // NGP_GUI
 }
 
 void Testbed::destroy_window() {

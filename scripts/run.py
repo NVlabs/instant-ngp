@@ -60,6 +60,7 @@ def parse_args():
 	parser.add_argument("--gui", action="store_true", help="Run the testbed GUI interactively.")
 	parser.add_argument("--train", action="store_true", help="If the GUI is enabled, controls whether training starts immediately.")
 	parser.add_argument("--n_steps", type=int, default=-1, help="Number of steps to train for before quitting.")
+	parser.add_argument("--second_window", action="store_true", help="Open a second window containing a copy of the main output.")
 
 	parser.add_argument("--sharpen", default=0, help="Set amount of sharpening applied to NeRF training images.")
 
@@ -128,7 +129,7 @@ if __name__ == "__main__":
 		while sw*sh > 1920*1080*4:
 			sw = int(sw / 2)
 			sh = int(sh / 2)
-		testbed.init_window(sw, sh)
+		testbed.init_window(sw, sh, second_window = args.second_window or False)
 
 
 	if args.load_snapshot:

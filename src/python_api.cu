@@ -325,10 +325,11 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("load_training_data", &Testbed::load_training_data, py::call_guard<py::gil_scoped_release>(), "Load training data from a given path.")
 		.def("clear_training_data", &Testbed::clear_training_data, "Clears training data to free up GPU memory.")
 		// General control
-		.def("init_window", &Testbed::init_window, "Init a GLFW window that shows real-time progress and a GUI.",
+		.def("init_window", &Testbed::init_window, "Init a GLFW window that shows real-time progress and a GUI. 'second_window' creates a second copy of the output in its own window",
 			py::arg("width"),
 			py::arg("height"),
-			py::arg("hidden") = false
+			py::arg("hidden") = false,
+			py::arg("second_window") = false
 		)
 		.def("want_repl", &Testbed::want_repl, "returns true if the user clicked the 'I want a repl' button")
 		.def("frame", &Testbed::frame, py::call_guard<py::gil_scoped_release>(), "Process a single frame. Renders if a window was previously created.")

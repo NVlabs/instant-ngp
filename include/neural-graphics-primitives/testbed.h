@@ -357,7 +357,7 @@ public:
 	void draw_visualizations(ImDrawList* list, const Eigen::Matrix<float, 3, 4>& camera_matrix);
 	void train_and_render(bool skip_rendering);
 	filesystem::path training_data_path() const;
-	void init_window(int resw, int resh, bool hidden = false);
+	void init_window(int resw, int resh, bool hidden = false, bool second_window = false);
 	void destroy_window();
 	void apply_camera_smoothing(float elapsed_ms);
 	int find_best_training_view(int default_view);
@@ -468,10 +468,16 @@ public:
 	EMeshRenderMode m_mesh_render_mode = EMeshRenderMode::VertexNormals;
 
 	uint32_t m_seed = 1337;
-
 #ifdef NGP_GUI
-
 	GLFWwindow* m_glfw_window = nullptr;
+	struct SecondWindow {
+		GLFWwindow* window = nullptr;
+		GLuint program = 0;
+		GLuint vao = 0, vbo = 0;
+		void draw(GLuint texture);
+	} m_second_window;
+
+	void create_second_window();
 
 	std::shared_ptr<GLTexture> m_pip_render_texture;
 	std::vector<std::shared_ptr<GLTexture>> m_render_textures;
