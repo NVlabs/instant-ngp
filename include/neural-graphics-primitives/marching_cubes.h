@@ -62,6 +62,10 @@ void draw_mesh_gl(
 	const Eigen::Vector2f& screen_center,
 	int mesh_render_mode
 );
+
+void glCheckError(const char* file, unsigned int line);
+uint32_t compile_shader(bool pixel, const char* code);
+bool check_shader(uint32_t handle, const char* desc, bool program);
 #endif
 
 void save_density_grid_to_png(const tcnn::GPUMemory<float>& density, const char* filename, Eigen::Vector3i res3d, float thresh, bool swap_y_z = true, float density_range = 4.f);
