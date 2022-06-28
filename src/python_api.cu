@@ -18,14 +18,16 @@
 #include <json/json.hpp>
 
 #include <pybind11/pybind11.h>
-#include <pybind11/numpy.h>
 #include <pybind11/eigen.h>
+#include <pybind11/functional.h>
+#include <pybind11/numpy.h>
 #include <pybind11/stl.h>
 #include <pybind11_json/pybind11_json.hpp>
 
 #include <filesystem/path.h>
 
 #ifdef NGP_GUI
+#  include <imgui/imgui.h>
 #  ifdef _WIN32
 #    include <GL/gl3w.h>
 #  else
@@ -185,8 +187,8 @@ py::array_t<float> Testbed::render_with_rolling_shutter_to_cpu(const Eigen::Matr
 	return result;
 }
 
-py::array_t<float> Testbed::screenshot(bool linear) const {
 #ifdef NGP_GUI
+py::array_t<float> Testbed::screenshot(bool linear) const {
 	std::vector<float> tmp(m_window_res.prod() * 4);
 	glReadPixels(0, 0, m_window_res.x(), m_window_res.y(), GL_RGBA, GL_FLOAT, tmp.data());
 
@@ -210,10 +212,8 @@ py::array_t<float> Testbed::screenshot(bool linear) const {
 	});
 
 	return result;
-#else
-	throw std::runtime_error{"testbed.screenshot() in only supported when compiling with NGP_GUI."};
-#endif
 }
+#endif
 
 PYBIND11_MODULE(pyngp, m) {
 	m.doc() = "Instant neural graphics primitives";
@@ -326,12 +326,21 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("load_training_data", &Testbed::load_training_data, py::call_guard<py::gil_scoped_release>(), "Load training data from a given path.")
 		.def("clear_training_data", &Testbed::clear_training_data, "Clears training data to free up GPU memory.")
 		// General control
+#ifdef NGP_GUI
 		.def("init_window", &Testbed::init_window, "Init a GLFW window that shows real-time progress and a GUI. 'second_window' creates a second copy of the output in its own window",
 			py::arg("width"),
 			py::arg("height"),
 			py::arg("hidden") = false,
 			py::arg("second_window") = false
 		)
+		.def_readwrite("keyboard_event_callback", &Testbed::m_keyboard_event_callback)
+		.def("is_key_pressed", [](py::object& obj, char key) { return ImGui::IsKeyPressed(key); })
+		.def("is_key_down", [](py::object& obj, char key) { return ImGui::IsKeyDown(key); })
+		.def("is_alt_down", [](py::object& obj) { return ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Alt; })
+		.def("is_ctrl_down", [](py::object& obj) { return ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Ctrl; })
+		.def("is_shift_down", [](py::object& obj) { return ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Shift; })
+		.def("is_super_down", [](py::object& obj) { return ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Super; })
+#endif
 		.def("want_repl", &Testbed::want_repl, "returns true if the user clicked the 'I want a repl' button")
 		.def("frame", &Testbed::frame, py::call_guard<py::gil_scoped_release>(), "Process a single frame. Renders if a window was previously created.")
 		.def("render", &Testbed::render_to_cpu, "Renders an image at the requested resolution. Does not require a window.",

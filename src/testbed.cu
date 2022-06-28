@@ -1138,6 +1138,10 @@ bool Testbed::keyboard_event() {
 		return false;
 	}
 
+	if (m_keyboard_event_callback && m_keyboard_event_callback()) {
+		return false;
+	}
+
 	for (int idx = 0; idx < std::min((int)ERenderMode::NumRenderModes, 10); ++idx) {
 		char c[] = { "1234567890" };
 		if (ImGui::IsKeyPressed(c[idx])) {

@@ -479,6 +479,8 @@ public:
 
 	void create_second_window();
 
+	std::function<bool()> m_keyboard_event_callback;
+
 	std::shared_ptr<GLTexture> m_pip_render_texture;
 	std::vector<std::shared_ptr<GLTexture>> m_render_textures;
 #endif
@@ -654,7 +656,6 @@ public:
 		BRDFParams brdf;
 
 		FiniteDifferenceNormalsApproximator fd_normals;
-
 
 		// Mesh data
 		EMeshSdfMode mesh_sdf_mode = EMeshSdfMode::Raystab;
