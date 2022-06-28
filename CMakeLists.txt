@@ -8,7 +8,7 @@
 
 cmake_minimum_required(VERSION 3.18)
 
-PROJECT(instant-ngp
+project(instant-ngp
 	VERSION 1.0
 	DESCRIPTION "Instant neural graphics primitives"
 	LANGUAGES C CXX CUDA
