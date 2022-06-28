@@ -170,6 +170,7 @@ enum class ECameraDistortionMode : int {
 	None,
 	Iterative,
 	FTheta,
+	LatLong,
 };
 
 struct CameraDistortion {

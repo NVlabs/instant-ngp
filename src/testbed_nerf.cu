@@ -381,7 +381,7 @@ __global__ void mark_untrained_density_grid(const uint32_t n_elements,  float* _
 	float voxel_radius = 0.5f*SQRT3()*scalbnf(1.0f, level) / NERF_GRIDSIZE();
 	int count=0;
 	for (uint32_t j=0; j < n_training_images; ++j) {
-		if (metadata[j].camera_distortion.mode == ECameraDistortionMode::FTheta) {
+		if (metadata[j].camera_distortion.mode == ECameraDistortionMode::FTheta || metadata[j].camera_distortion.mode == ECameraDistortionMode::LatLong) {
 			// not supported for now
 			count++;
 			break;
@@ -1126,6 +1126,8 @@ __global__ void generate_training_samples_nerf(
 		ray_unnormalized.o = xform.col(3);
 		if (camera_distortion.mode == ECameraDistortionMode::FTheta) {
 			ray_unnormalized.d = f_theta_undistortion(xy - principal_point, camera_distortion.params, {0.f, 0.f, 1.f});
+		} else if (camera_distortion.mode == ECameraDistortionMode::LatLong) {
+			ray_unnormalized.d = latlong_to_dir(xy);
 		} else {
 			ray_unnormalized.d = {
 				(xy.x()-principal_point.x())*resolution.x() / focal_length.x(),
@@ -1404,7 +1406,7 @@ __global__ void compute_loss_kernel_train_nerf(
 
 	float target_depth = rays_in_unnormalized[i].d.norm() * ((depth_supervision_lambda > 0.0f && metadata[img].depth) ? read_depth(xy, resolution, metadata[img].depth) : -1.0f);
 	LossAndGradient lg_depth = loss_and_gradient(Array3f::Constant(target_depth), Array3f::Constant(depth_ray), depth_loss_type);
-	float depth_loss_gradient = target_depth>0.0f ? lg_depth.gradient.x() : 0; 
+	float depth_loss_gradient = target_depth > 0.0f ? lg_depth.gradient.x() : 0;
 
 	// Note: dividing the gradient by the PDF would cause unbiased loss estimates.
 	// Essentially: variance reduction, but otherwise the same optimization.

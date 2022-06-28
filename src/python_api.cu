@@ -293,6 +293,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.value("None", ECameraDistortionMode::None)
 		.value("Iterative", ECameraDistortionMode::Iterative)
 		.value("FTheta", ECameraDistortionMode::FTheta)
+		.value("LatLong", ECameraDistortionMode::LatLong)
 		.export_values();
 
 	py::class_<BoundingBox>(m, "BoundingBox")

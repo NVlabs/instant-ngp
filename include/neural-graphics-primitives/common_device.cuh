@@ -250,6 +250,15 @@ inline __host__ __device__ Eigen::Vector3f f_theta_undistortion(const Eigen::Vec
 	return { sin_alpha * xpix, sin_alpha * ypix, cos_alpha };
 }
 
+inline __host__ __device__ Eigen::Vector3f latlong_to_dir(const Eigen::Vector2f& uv) {
+	float theta=(uv.y()-0.5f) * PI();
+	float phi = (uv.x()-0.5f) * (PI()*2.f);
+	float sp,cp,st,ct;
+	sincosf(theta, &st, &ct);
+	sincosf(phi, &sp, &cp);
+	return { sp * ct , st, cp * ct };
+}
+
 inline __host__ __device__ Ray pixel_to_ray(
 	uint32_t spp,
 	const Eigen::Vector2i& pixel,
@@ -274,6 +283,8 @@ inline __host__ __device__ Ray pixel_to_ray(
 		if (dir.x() == 1000.f) {
 			return {{1000.f, 0.f, 0.f}, {0.f, 0.f, 1.f}}; // return a point outside the aabb so the pixel is not rendered
 		}
+	} else if (camera_distortion.mode == ECameraDistortionMode::LatLong) {
+		dir = latlong_to_dir(uv);
 	} else {
 		dir = {
 			(uv.x() - screen_center.x()) * (float)resolution.x() / focal_length.x(),
@@ -329,6 +340,8 @@ inline __host__ __device__ Eigen::Vector2f pos_to_pixel(
 		dir.x() += du;
 		dir.y() += dv;
 	} else if (camera_distortion.mode == ECameraDistortionMode::FTheta) {
+		assert(false);
+	}  else if (camera_distortion.mode == ECameraDistortionMode::LatLong) {
 		assert(false);
 	}
 
