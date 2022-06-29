@@ -619,7 +619,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 					if (wa != dst.res.x() || ha != dst.res.y()) {
 						throw std::runtime_error{std::string{"Depth image has wrong resolution: "} + depthpath.str()};
 					}
-					//tlog::success() << "Depth loaded from " << depthpath;
+					tlog::success() << "Depth loaded from " << depthpath;
 				}
 			}
 
