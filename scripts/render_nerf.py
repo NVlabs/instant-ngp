@@ -155,6 +155,7 @@ def get_gpus() -> list[int]:
     gpus = [f"{item[4:item.index(':')]}" for item in data]
     return gpus
 
+# main
 if __name__ == "__main__":
     args = parse_args()
     # load render json
