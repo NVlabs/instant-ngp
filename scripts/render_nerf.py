@@ -16,6 +16,19 @@ from common import write_image
 # pyngp
 import pyngp as ngp
 
+# constants
+DEFAULT_NGP_SCALE = 0.33
+DEFAULT_NGP_ORIGIN = np.array([0.5, 0.5, 0.5])
+
+# convenience method to convert NeRF coordinates to NGP
+def nerf2ngp(
+        xyz: np.array,
+        origin = DEFAULT_NGP_ORIGIN,
+        scale = DEFAULT_NGP_SCALE
+    ) -> np.array:
+    xyz_cycled = np.array([xyz[1], xyz[2], xyz[0]])
+    return scale * xyz_cycled + origin
+
 # convenience method to parse arguments
 def parse_args():
     parser = argparse.ArgumentParser(description="Render script")
@@ -120,7 +133,13 @@ def render_images(args: dict, render_data: dict):
 
         # prepare testbed to render this frame
         testbed.set_nerf_camera_matrix(np.matrix(cam_matrix)[:-1,:])
-        # testbed.render_aabb = ngp.BoundingBox([-1, -1, -1], [1, 1, 1])
+        
+        if "aabb" in frame:
+            aabb = frame["aabb"]
+            aabb_min = np.array(aabb["min"])
+            aabb_max = np.array(aabb["max"])
+
+            testbed.render_aabb = ngp.BoundingBox(nerf2ngp(aabb_min), nerf2ngp(aabb_max))
         
         # render the frame
         image = testbed.render(frame_width, frame_height, render_spp, True)
