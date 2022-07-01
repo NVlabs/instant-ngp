@@ -377,6 +377,10 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 			}
 		}
 
+		for (int i = 0; i < (int)frames.size(); ++i) {
+			result.paths.push_back(frames[i]["file_path"]);
+		}
+
 		result.n_images += frames.size();
 	}
 
