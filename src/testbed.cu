@@ -1637,9 +1637,11 @@ void Testbed::train_and_render(bool skip_rendering) {
 }
 
 
+#ifdef NGP_GUI
 void Testbed::create_second_window() {
-	if (m_second_window.window)
+	if (m_second_window.window) {
 		return;
+	}
 	bool frameless = false;
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 	glfwWindowHint(GLFW_RESIZABLE, !frameless);
@@ -1703,8 +1705,7 @@ void Testbed::create_second_window() {
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
 }
-
-
+#endif //NGP_GUI
 
 void Testbed::init_window(int resw, int resh, bool hidden, bool second_window) {
 #ifndef NGP_GUI
@@ -1843,8 +1844,7 @@ void Testbed::init_window(int resw, int resh, bool hidden, bool second_window) {
 
 	m_render_window = true;
 
-	if (m_second_window.window == nullptr && second_window)
-	{
+	if (m_second_window.window == nullptr && second_window) {
 		create_second_window();
 	}
 #endif // NGP_GUI
