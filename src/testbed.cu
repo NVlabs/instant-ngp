@@ -789,10 +789,6 @@ void Testbed::imgui() {
 					set_camera_to_training_view(m_nerf.training.view);
 					accum_reset = true;
 				}
-				if (ImGui::SliderInt("Training view", &m_nerf.training.view, 0, (int)m_nerf.training.dataset.n_images-1)) {
-					set_camera_to_training_view(m_nerf.training.view);
-					accum_reset = true;
-				}
 				ImGui::PlotLines("Training view error", m_nerf.training.error_map.pmf_img_cpu.data(), m_nerf.training.error_map.pmf_img_cpu.size(), 0, nullptr, 0.0f, FLT_MAX, ImVec2(0, 60.f));
 
 				if (m_nerf.training.optimize_exposure) {
