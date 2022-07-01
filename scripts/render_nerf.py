@@ -1,5 +1,4 @@
 import argparse
-import asyncio
 import json
 import math
 import os
@@ -37,11 +36,11 @@ def parse_args():
 
     return parser.parse_args()
 
-
+# escapes a string for use in ffmpeg's playlist.txt
 def safe_str(string_like) -> str:
     return re.sub(r'([\" \'])', r'\\\1', str(string_like))
 
-
+# convenience function to generate a consistent frame output path
 def get_frame_output_path(args: dict, frame: dict) -> Path:
     frame_path = Path(frame["file_path"])
     if frame_path.suffix == '':
@@ -49,7 +48,7 @@ def get_frame_output_path(args: dict, frame: dict) -> Path:
 
     return Path(args.frames_path) / frame_path
 
-
+# convenience method to output a video from an image sequence, using ffmpeg
 def export_video_sequence(args: dict, frame_paths: list[dict]):
     # combine frames into a video via ffmpeg
     if args.video_out != None:
@@ -83,7 +82,7 @@ def export_video_sequence(args: dict, frame_paths: list[dict]):
         
         playlist_path.unlink(missing_ok=True)
 
-
+# render images
 def render_images(args: dict, render_data: dict):
     # initialize testbed
     testbed = ngp.Testbed(ngp.TestbedMode.Nerf)
@@ -121,7 +120,7 @@ def render_images(args: dict, render_data: dict):
 
         # prepare testbed to render this frame
         testbed.set_nerf_camera_matrix(np.matrix(cam_matrix)[:-1,:])
-        testbed.render_aabb = ngp.BoundingBox([-1, -1, -1], [1, 1, 1])
+        # testbed.render_aabb = ngp.BoundingBox([-1, -1, -1], [1, 1, 1])
         
         # render the frame
         image = testbed.render(frame_width, frame_height, render_spp, True)
@@ -129,7 +128,7 @@ def render_images(args: dict, render_data: dict):
         # save frame as image
         write_image(output_path, image)
 
-
+# convenience method to fetch gpu indices via `nvidia-smi`
 def get_gpus() -> list[int]:
     proc = sp.Popen(['nvidia-smi', '--list-gpus'], stdout=sp.PIPE, stderr=sp.PIPE)
     out, err = proc.communicate()
