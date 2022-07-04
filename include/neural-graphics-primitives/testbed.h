@@ -311,6 +311,8 @@ public:
 	Eigen::Vector3f view_up() const { return m_camera.col(1); }
 	Eigen::Vector3f view_side() const { return m_camera.col(0); }
 	void set_view_dir(const Eigen::Vector3f& dir);
+	void first_training_view();
+	void last_training_view();
 	void previous_training_view();
 	void next_training_view();
 	void set_camera_to_training_view(int trainview);

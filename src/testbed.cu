@@ -238,6 +238,18 @@ void Testbed::set_view_dir(const Vector3f& dir) {
 	set_look_at(old_look_at);
 }
 
+void Testbed::first_training_view() {
+	m_nerf.training.view = 0;
+	set_camera_to_training_view(m_nerf.training.view);
+	reset_accumulation();
+}
+
+void Testbed::last_training_view() {
+	m_nerf.training.view = m_nerf.training.dataset.n_images-1;
+	set_camera_to_training_view(m_nerf.training.view);
+	reset_accumulation();
+}
+
 void Testbed::previous_training_view() {
 	if (m_nerf.training.view != 0) {
 		m_nerf.training.view -= 1;
@@ -770,6 +782,10 @@ void Testbed::imgui() {
 			}
 
 			if (m_testbed_mode == ETestbedMode::Nerf) {
+				if (ImGui::Button("First")) {
+					first_training_view();
+				}
+				ImGui::SameLine();
 				if (ImGui::Button("<")) {
 					previous_training_view();
 				}
@@ -778,13 +794,14 @@ void Testbed::imgui() {
 					next_training_view();
 				}
 				ImGui::SameLine();
-				if (ImGui::Button("Reset")) {
-					m_nerf.training.view = 0;
-					set_camera_to_training_view(m_nerf.training.view);
-					accum_reset = true;
+				if (ImGui::Button("Last")) {
+					last_training_view();
 				}
 				ImGui::SameLine();
-				ImGui::Text(m_nerf.training.dataset.paths[m_nerf.training.view].c_str());
+				try
+				{
+					ImGui::Text("%s", m_nerf.training.dataset.paths.at(m_nerf.training.view).c_str());
+				} catch (std::out_of_range const&) {}
 				if (ImGui::SliderInt("Training view", &m_nerf.training.view, 0, (int)m_nerf.training.dataset.n_images-1)) {
 					set_camera_to_training_view(m_nerf.training.view);
 					accum_reset = true;
@@ -1251,7 +1268,11 @@ bool Testbed::keyboard_event() {
 		reset_accumulation();
 	}
 
-	if (ImGui::IsKeyPressed('[')) {
+	if (ImGui::IsKeyPressed('{')) {
+		first_training_view();
+	} else if (ImGui::IsKeyPressed('}')) {
+		last_training_view();
+	} else if (ImGui::IsKeyPressed('[')) {
 		previous_training_view();
 	} else if (ImGui::IsKeyPressed(']')) {
 		next_training_view();

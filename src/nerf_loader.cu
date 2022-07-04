@@ -186,6 +186,7 @@ NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale, bool is_h
 	result.offset = {0.5f, 0.5f, 0.5f};
 	result.aabb_scale = aabb_scale;
 	result.is_hdr = is_hdr;
+	result.paths = std::vector<std::string>(n_images, std::string());
 	for (size_t i = 0; i < n_images; ++i) {
 		result.xforms[i].start = Eigen::Matrix<float, 3, 4>::Identity();
 		result.xforms[i].end = Eigen::Matrix<float, 3, 4>::Identity();
