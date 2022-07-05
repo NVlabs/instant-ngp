@@ -334,8 +334,8 @@ PYBIND11_MODULE(pyngp, m) {
 			py::arg("second_window") = false
 		)
 		.def_readwrite("keyboard_event_callback", &Testbed::m_keyboard_event_callback)
-		.def("is_key_pressed", [](py::object& obj, char key) { return ImGui::IsKeyPressed(key); })
-		.def("is_key_down", [](py::object& obj, char key) { return ImGui::IsKeyDown(key); })
+		.def("is_key_pressed", [](py::object& obj, int key) { return ImGui::IsKeyPressed(key); })
+		.def("is_key_down", [](py::object& obj, int key) { return ImGui::IsKeyDown(key); })
 		.def("is_alt_down", [](py::object& obj) { return ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Alt; })
 		.def("is_ctrl_down", [](py::object& obj) { return ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Ctrl; })
 		.def("is_shift_down", [](py::object& obj) { return ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Shift; })
