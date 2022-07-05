@@ -291,6 +291,7 @@ public:
 	void reset_network();
 	void create_empty_nerf_dataset(size_t n_images, int aabb_scale = 1, bool is_hdr = false);
 	void load_nerf();
+	void load_nerf_post();
 	void load_mesh();
 	void set_exposure(float exposure) { m_exposure = exposure; }
 	void set_max_level(float maxlevel);
