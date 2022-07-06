@@ -228,5 +228,5 @@ def setup_colored_sdf(testbed, scene, softshadow=True):
 def default_snapshot_filename(scene):
 	filename = "base.msgpack"
 	if scene["dataset"]:
-		filename = f"{os.path.splitext(scene['dataset'][0])}_{filename}"
+		filename = f"{os.path.splitext(scene['dataset'])[0]}_{filename}"
 	return os.path.join(scene["data_dir"], filename)
