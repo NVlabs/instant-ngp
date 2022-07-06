@@ -46,6 +46,7 @@
 #  include <imgui/backends/imgui_impl_glfw.h>
 #  include <imgui/backends/imgui_impl_opengl3.h>
 #  include <imguizmo/ImGuizmo.h>
+#  include <stb_image/stb_image.h>
 #  ifdef _WIN32
 #    include <GL/gl3w.h>
 #  else
@@ -769,11 +770,11 @@ void Testbed::imgui() {
 					ImGui::PlotLines("Training view exposures", exposures.data(), exposures.size(), 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(0, 60.f));
 				}
 
-				if (ImGui::SliderInt("glow mode", &m_nerf.m_glow_mode, 0, 16)) {
+				if (ImGui::SliderInt("glow mode", &m_nerf.glow_mode, 0, 16)) {
 					accum_reset = true;
 				}
 
-				if (m_nerf.m_glow_mode && ImGui::SliderFloat("glow pos", &m_nerf.m_glow_y_cutoff, -2.f, 3.f)) {
+				if (m_nerf.glow_mode && ImGui::SliderFloat("glow pos", &m_nerf.glow_y_cutoff, -2.f, 3.f)) {
 					accum_reset = true;
 				}
 			}
@@ -1172,7 +1173,7 @@ bool Testbed::keyboard_event() {
 		}
 	}
 	if (ImGui::IsKeyPressed('O')) {
-		m_nerf.training.render_error_overlay=!m_nerf.training.render_error_overlay;
+		m_nerf.training.render_error_overlay = !m_nerf.training.render_error_overlay;
 	}
 	if (ImGui::IsKeyPressed('G')) {
 		m_render_ground_truth = !m_render_ground_truth;
@@ -1421,6 +1422,7 @@ void Testbed::draw_gui() {
 	glViewport(0, 0, display_w, display_h);
 	glClearColor(0.f, 0.f, 0.f, 0.f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
 
 	ImDrawList* list = ImGui::GetBackgroundDrawList();
 	list->AddCallback([](const ImDrawList*, const ImDrawCmd*) {
@@ -2075,7 +2077,7 @@ Testbed::NetworkDims Testbed::network_dims() const {
 	}
 }
 
-void Testbed::reset_network() {
+void Testbed::reset_network(bool clear_density_grid) {
 	m_sdf.iou_decay = 0;
 
 	m_rng = default_rng_t{m_seed};
@@ -2289,6 +2291,11 @@ void Testbed::reset_network() {
 		if (m_nerf.training.dataset.envmap_data.data()) {
 			m_envmap.trainer->set_params_full_precision(m_nerf.training.dataset.envmap_data.data(), m_nerf.training.dataset.envmap_data.size());
 		}
+	}
+
+	if (clear_density_grid) {
+		m_nerf.density_grid.memset(0);
+		m_nerf.density_grid_bitfield.memset(0);
 	}
 }
 
@@ -2791,13 +2798,24 @@ void Testbed::gather_histograms() {
 	}
 }
 
+// Increment this number when making a change to the snapshot format
+static const size_t SNAPSHOT_FORMAT_VERSION = 1;
+
 void Testbed::save_snapshot(const std::string& filepath_string, bool include_optimizer_state) {
 	fs::path filepath = filepath_string;
 	m_network_config["snapshot"] = m_trainer->serialize(include_optimizer_state);
+	m_network_config["snapshot"]["version"] = SNAPSHOT_FORMAT_VERSION;
 
 	if (m_testbed_mode == ETestbedMode::Nerf) {
 		m_network_config["snapshot"]["density_grid_size"] = NERF_GRIDSIZE();
-		m_network_config["snapshot"]["density_grid_binary"] = m_nerf.density_grid;
+
+		GPUMemory<__half> density_grid_fp16(m_nerf.density_grid.size());
+		parallel_for_gpu(density_grid_fp16.size(), [density_grid=m_nerf.density_grid.data(), density_grid_fp16=density_grid_fp16.data()] __device__ (size_t i) {
+			density_grid_fp16[i] = (__half)density_grid[i];
+		});
+
+		m_network_config["snapshot"]["density_grid_binary"] = density_grid_fp16;
+		m_network_config["snapshot"]["nerf"]["aabb_scale"] = m_nerf.training.dataset.aabb_scale;
 	}
 
 	m_network_config["snapshot"]["training_step"] = m_training_step;
@@ -2821,29 +2839,50 @@ void Testbed::load_snapshot(const std::string& filepath_string) {
 		throw std::runtime_error{std::string{"File '"} + filepath_string + "' does not contain a snapshot."};
 	}
 
+	if (config["snapshot"].value("version", 0) < SNAPSHOT_FORMAT_VERSION) {
+		throw std::runtime_error{"Snapshot uses an old format."};
+	}
+
 	if (m_testbed_mode == ETestbedMode::Nerf) {
 		if (config["snapshot"]["density_grid_size"] != NERF_GRIDSIZE()) {
-			throw std::runtime_error{"Incompatible grid size in snapshot."};
+			throw std::runtime_error{"Incompatible grid size."};
 		}
 
 		m_nerf.training.counters_rgb.rays_per_batch = config["snapshot"]["nerf"]["rgb"]["rays_per_batch"];
 		m_nerf.training.counters_rgb.measured_batch_size = config["snapshot"]["nerf"]["rgb"]["measured_batch_size"];
 		m_nerf.training.counters_rgb.measured_batch_size_before_compaction = config["snapshot"]["nerf"]["rgb"]["measured_batch_size_before_compaction"];
+
 		// If we haven't got a nerf dataset loaded, load dataset metadata from the snapshot
 		// and render using just that.
 		if (m_data_path.empty() && config["snapshot"]["nerf"].contains("dataset")) {
 			m_nerf.training.dataset = config["snapshot"]["nerf"]["dataset"];
 			load_nerf();
+		} else {
+			if (config["snapshot"]["nerf"].contains("aabb_scale")) {
+				m_nerf.training.dataset.aabb_scale = config["snapshot"]["nerf"]["aabb_scale"];
+			}
 		}
 
-		m_nerf.density_grid = config["snapshot"]["density_grid_binary"];
+		load_nerf_post();
+
+		GPUMemory<__half> density_grid_fp16 = config["snapshot"]["density_grid_binary"];
+		m_nerf.density_grid.resize(density_grid_fp16.size());
+
+		parallel_for_gpu(density_grid_fp16.size(), [density_grid=m_nerf.density_grid.data(), density_grid_fp16=density_grid_fp16.data()] __device__ (size_t i) {
+			density_grid[i] = (float)density_grid_fp16[i];
+		});
+
+		if (m_nerf.density_grid.size() != NERF_GRIDSIZE() * NERF_GRIDSIZE() * NERF_GRIDSIZE() * (m_nerf.max_cascade + 1)) {
+			throw std::runtime_error{"Incompatible number of grid cascades."};
+		}
+
 		update_density_grid_mean_and_bitfield(nullptr);
 	}
 
 	m_network_config_path = filepath_string;
 	m_network_config = config;
 
-	reset_network();
+	reset_network(false);
 
 	m_training_step = m_network_config["snapshot"]["training_step"];
 	m_loss_scalar.set(m_network_config["snapshot"]["loss"]);

@@ -288,9 +288,10 @@ public:
 	}
 	bool reprojection_available() { return m_dlss; }
 	static ELossType string_to_loss_type(const std::string& str);
-	void reset_network();
+	void reset_network(bool clear_density_grid = true);
 	void create_empty_nerf_dataset(size_t n_images, int aabb_scale = 1, bool is_hdr = false);
 	void load_nerf();
+	void load_nerf_post();
 	void load_mesh();
 	void set_exposure(float exposure) { m_exposure = exposure; }
 	void set_max_level(float maxlevel);
@@ -640,8 +641,8 @@ public:
 
 		float rendering_min_transmittance = 0.01f;
 
-		float m_glow_y_cutoff = 0.f;
-		int m_glow_mode = 0;
+		float glow_y_cutoff = 0.f;
+		int glow_mode = 0;
 	} m_nerf;
 
 	struct Sdf {
