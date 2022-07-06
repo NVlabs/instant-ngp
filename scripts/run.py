@@ -18,7 +18,7 @@ import shutil
 import time
 
 from common import *
-from scenes import scenes_nerf, scenes_image, scenes_sdf, scenes_volume, setup_colored_sdf
+from scenes import *
 
 from tqdm import tqdm
 
@@ -133,8 +133,11 @@ if __name__ == "__main__":
 
 
 	if args.load_snapshot:
-		print("Loading snapshot ", args.load_snapshot)
-		testbed.load_snapshot(args.load_snapshot)
+		snapshot = args.load_snapshot
+		if not os.path.exists(snapshot) and snapshot in scenes:
+			snapshot = default_snapshot_filename(scenes[snapshot])
+		print("Loading snapshot ", snapshot)
+		testbed.load_snapshot(snapshot)
 	else:
 		testbed.reload_network_from_file(network)
 
