@@ -786,11 +786,11 @@ void Testbed::imgui() {
 					first_training_view();
 				}
 				ImGui::SameLine();
-				if (ImGui::Button("<")) {
+				if (ImGui::Button("Previous")) {
 					previous_training_view();
 				}
 				ImGui::SameLine();
-				if (ImGui::Button(">")) {
+				if (ImGui::Button("Next")) {
 					next_training_view();
 				}
 				ImGui::SameLine();
@@ -1179,6 +1179,7 @@ void glfw_error_callback(int error, const char* description) {
 }
 
 bool Testbed::keyboard_event() {
+	ImGuiIO& io = ImGui::GetIO();
 	if (ImGui::GetIO().WantCaptureKeyboard) {
 		return false;
 	}
@@ -1265,9 +1266,9 @@ bool Testbed::keyboard_event() {
 		reset_accumulation();
 	}
 
-	if (ImGui::IsKeyPressed('{')) {
+	if (io.KeyShift && ImGui::IsKeyPressed('[')) {
 		first_training_view();
-	} else if (ImGui::IsKeyPressed('}')) {
+	} else if (io.KeyShift && ImGui::IsKeyPressed(']')) {
 		last_training_view();
 	} else if (ImGui::IsKeyPressed('[')) {
 		previous_training_view();

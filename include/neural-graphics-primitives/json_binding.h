@@ -157,6 +157,8 @@ inline void from_json(const nlohmann::json& j, NerfDataset& dataset) {
 	dataset.n_images = j.at("n_images");
 	dataset.metadata.resize(dataset.n_images);
 	dataset.xforms.resize(dataset.n_images);
+	dataset.paths.resize(dataset.n_images, "");
+	if (j.contains("paths")) dataset.paths = j["paths"].get<std::vector<std::string>>();
 
 	for (size_t i = 0; i < dataset.n_images; ++i) {
 		// read global defaults first
@@ -175,11 +177,6 @@ inline void from_json(const nlohmann::json& j, NerfDataset& dataset) {
 			from_json(ji.at("principal_point"), dataset.metadata[i].principal_point);
 			from_json(ji.at("rolling_shutter"), dataset.metadata[i].rolling_shutter);
 			from_json(ji.at("camera_distortion"), dataset.metadata[i].camera_distortion);
-		}
-		if (j.contains("paths")) {
-			dataset.paths.push_back(j["paths"].at(i));
-		} else {
-			dataset.paths.push_back(std::string(""));
 		}
 	}
 
