@@ -13,3 +13,7 @@
 __pycache__
 .DS_Store
 imgui.ini
+/data*
+/colmap*
+OpenEXR-1.3.8-cp39-cp39-win_amd64.whl
+dependencies/tiny-cuda*
