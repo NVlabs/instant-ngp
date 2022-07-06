@@ -641,8 +641,8 @@ public:
 
 		float rendering_min_transmittance = 0.01f;
 
-		float m_glow_y_cutoff = 0.f;
-		int m_glow_mode = 0;
+		float glow_y_cutoff = 0.f;
+		int glow_mode = 0;
 	} m_nerf;
 
 	struct Sdf {

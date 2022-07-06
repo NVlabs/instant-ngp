@@ -2290,8 +2290,8 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 			m_nerf.density_activation,
 			m_nerf.show_accel,
 			m_nerf.rendering_min_transmittance,
-			m_nerf.m_glow_y_cutoff,
-			m_nerf.m_glow_mode,
+			m_nerf.glow_y_cutoff,
+			m_nerf.glow_mode,
 			extra_dims_gpu,
 			stream
 		);
