@@ -2077,7 +2077,7 @@ Testbed::NetworkDims Testbed::network_dims() const {
 	}
 }
 
-void Testbed::reset_network() {
+void Testbed::reset_network(bool clear_density_grid) {
 	m_sdf.iou_decay = 0;
 
 	m_rng = default_rng_t{m_seed};
@@ -2291,6 +2291,11 @@ void Testbed::reset_network() {
 		if (m_nerf.training.dataset.envmap_data.data()) {
 			m_envmap.trainer->set_params_full_precision(m_nerf.training.dataset.envmap_data.data(), m_nerf.training.dataset.envmap_data.size());
 		}
+	}
+
+	if (clear_density_grid) {
+		m_nerf.density_grid.memset(0);
+		m_nerf.density_grid_bitfield.memset(0);
 	}
 }
 
@@ -2877,7 +2882,7 @@ void Testbed::load_snapshot(const std::string& filepath_string) {
 	m_network_config_path = filepath_string;
 	m_network_config = config;
 
-	reset_network();
+	reset_network(false);
 
 	m_training_step = m_network_config["snapshot"]["training_step"];
 	m_loss_scalar.set(m_network_config["snapshot"]["loss"]);

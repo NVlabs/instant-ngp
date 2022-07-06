@@ -288,7 +288,7 @@ public:
 	}
 	bool reprojection_available() { return m_dlss; }
 	static ELossType string_to_loss_type(const std::string& str);
-	void reset_network();
+	void reset_network(bool clear_density_grid = true);
 	void create_empty_nerf_dataset(size_t n_images, int aabb_scale = 1, bool is_hdr = false);
 	void load_nerf();
 	void load_nerf_post();
