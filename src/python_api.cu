@@ -289,7 +289,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.value("Reinhard", ETonemapCurve::Reinhard)
 		.export_values();
 
-	py::enum_<ECameraDistortionMode>(m, "ECameraDistortionMode")
+	py::enum_<ECameraDistortionMode>(m, "CameraDistortionMode")
 		.value("None", ECameraDistortionMode::None)
 		.value("Iterative", ECameraDistortionMode::Iterative)
 		.value("FTheta", ECameraDistortionMode::FTheta)
