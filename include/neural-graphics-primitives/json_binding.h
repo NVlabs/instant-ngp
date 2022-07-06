@@ -130,7 +130,7 @@ inline void to_json(nlohmann::json& j, const TrainingXForm& x) {
 
 inline void to_json(nlohmann::json& j, const NerfDataset& dataset) {
 	j["n_images"] = dataset.n_images;
-        j["paths"] = dataset.paths;
+	j["paths"] = dataset.paths;
 	for (size_t i = 0; i < dataset.n_images; ++i) {
 		j["metadata"].emplace_back();
 		j["xforms"].emplace_back();
@@ -179,8 +179,8 @@ inline void from_json(const nlohmann::json& j, NerfDataset& dataset) {
 		if (j.contains("paths")) {
 			dataset.paths.push_back(j["paths"].at(i));
 		} else {
- 			dataset.paths.push_back(std::string(""));
-                }
+			dataset.paths.push_back(std::string(""));
+		}
 	}
 
 	dataset.render_aabb = j.at("render_aabb");
