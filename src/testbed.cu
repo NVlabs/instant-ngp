@@ -798,10 +798,7 @@ void Testbed::imgui() {
 					last_training_view();
 				}
 				ImGui::SameLine();
-				try
-				{
-					ImGui::Text("%s", m_nerf.training.dataset.paths.at(m_nerf.training.view).c_str());
-				} catch (std::out_of_range const&) {}
+				ImGui::Text("%s", m_nerf.training.dataset.paths.at(m_nerf.training.view).c_str());
 				if (ImGui::SliderInt("Training view", &m_nerf.training.view, 0, (int)m_nerf.training.dataset.n_images-1)) {
 					set_camera_to_training_view(m_nerf.training.view);
 					accum_reset = true;
