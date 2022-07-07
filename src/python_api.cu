@@ -289,7 +289,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.value("Reinhard", ETonemapCurve::Reinhard)
 		.export_values();
 
-	py::enum_<ECameraDistortionMode>(m, "ECameraDistortionMode")
+	py::enum_<ECameraDistortionMode>(m, "CameraDistortionMode")
 		.value("None", ECameraDistortionMode::None)
 		.value("Iterative", ECameraDistortionMode::Iterative)
 		.value("FTheta", ECameraDistortionMode::FTheta)
@@ -334,12 +334,13 @@ PYBIND11_MODULE(pyngp, m) {
 			py::arg("second_window") = false
 		)
 		.def_readwrite("keyboard_event_callback", &Testbed::m_keyboard_event_callback)
-		.def("is_key_pressed", [](py::object& obj, char key) { return ImGui::IsKeyPressed(key); })
-		.def("is_key_down", [](py::object& obj, char key) { return ImGui::IsKeyDown(key); })
+		.def("is_key_pressed", [](py::object& obj, int key) { return ImGui::IsKeyPressed(key); })
+		.def("is_key_down", [](py::object& obj, int key) { return ImGui::IsKeyDown(key); })
 		.def("is_alt_down", [](py::object& obj) { return ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Alt; })
 		.def("is_ctrl_down", [](py::object& obj) { return ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Ctrl; })
 		.def("is_shift_down", [](py::object& obj) { return ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Shift; })
 		.def("is_super_down", [](py::object& obj) { return ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Super; })
+		.def("screenshot", &Testbed::screenshot, "Takes a screenshot of the current window contents.", py::arg("linear")=true)
 #endif
 		.def("want_repl", &Testbed::want_repl, "returns true if the user clicked the 'I want a repl' button")
 		.def("frame", &Testbed::frame, py::call_guard<py::gil_scoped_release>(), "Process a single frame. Renders if a window was previously created.")
@@ -362,10 +363,9 @@ PYBIND11_MODULE(pyngp, m) {
 			py::arg("spp") = 1,
 			py::arg("linear") = true
 		)
-		.def("screenshot", &Testbed::screenshot, "Takes a screenshot of the current window contents.", py::arg("linear")=true)
 		.def("destroy_window", &Testbed::destroy_window, "Destroy the window again.")
 		.def("train", &Testbed::train, py::call_guard<py::gil_scoped_release>(), "Perform a specified number of training steps.")
-		.def("reset", &Testbed::reset_network, "Reset training.")
+		.def("reset", &Testbed::reset_network, py::arg("reset_density_grid") = true, "Reset training.")
 		.def("reset_accumulation", &Testbed::reset_accumulation, "Reset rendering accumulation.")
 		.def("reload_network_from_file", &Testbed::reload_network_from_file, py::arg("path")="", "Reload the network from a config file.")
 		.def("reload_network_from_json", &Testbed::reload_network_from_json, "Reload the network from a json object.")
@@ -506,6 +506,8 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("rendering_min_transmittance", &Testbed::Nerf::rendering_min_transmittance)
 		.def_readwrite("cone_angle_constant", &Testbed::Nerf::cone_angle_constant)
 		.def_readwrite("visualize_cameras", &Testbed::Nerf::visualize_cameras)
+		.def_readwrite("glow_y_cutoff", &Testbed::Nerf::glow_y_cutoff)
+		.def_readwrite("glow_mode", &Testbed::Nerf::glow_mode)
 		;
 
 	py::class_<BRDFParams> brdfparams(m, "BRDFParams");

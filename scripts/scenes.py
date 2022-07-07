@@ -224,3 +224,9 @@ def setup_colored_sdf(testbed, scene, softshadow=True):
 	testbed.sdf.brdf.ambientcolor = np.multiply(col,col)[0:3]
 	testbed.sdf.shadow_sharpness = 16 if softshadow else 2048
 	testbed.scale = testbed.scale * 1.13
+
+def default_snapshot_filename(scene):
+	filename = "base.msgpack"
+	if scene["dataset"]:
+		filename = f"{os.path.splitext(scene['dataset'])[0]}_{filename}"
+	return os.path.join(scene["data_dir"], filename)
