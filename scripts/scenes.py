@@ -230,3 +230,15 @@ def default_snapshot_filename(scene):
 	if scene["dataset"]:
 		filename = f"{os.path.splitext(scene['dataset'])[0]}_{filename}"
 	return os.path.join(scene["data_dir"], filename)
+
+def mode_from_scene(scene):
+	if scene in scenes_sdf:
+		return "sdf"
+	elif scene in scenes_nerf:
+		return "nerf"
+	elif scene in scenes_image:
+		return "image"
+	elif scene in scenes_volume:
+		return "volume"
+	else:
+		return ""

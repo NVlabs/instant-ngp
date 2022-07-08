@@ -71,17 +71,9 @@ def parse_args():
 if __name__ == "__main__":
 	args = parse_args()
 
-	if args.mode == "":
-		if args.scene in scenes_sdf:
-			args.mode = "sdf"
-		elif args.scene in scenes_nerf:
-			args.mode = "nerf"
-		elif args.scene in scenes_image:
-			args.mode = "image"
-		elif args.scene in scenes_volume:
-			args.mode = "volume"
-		else:
-			raise ValueError("Must specify either a valid '--mode' or '--scene' argument.")
+	args.mode = args.mode or mode_from_scene(args.scene) or mode_from_scene(args.load_snapshot)
+	if not args.mode:
+		raise ValueError("Must specify either a valid '--mode' or '--scene' argument.")
 
 	if args.mode == "sdf":
 		mode = ngp.TestbedMode.Sdf
