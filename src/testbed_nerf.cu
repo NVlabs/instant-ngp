@@ -925,7 +925,9 @@ __global__ void composite_kernel_nerf(
 		} else if (render_mode == ERenderMode::EncodingVis) {
 			rgb = warped_pos.array();
 		} else if (render_mode == ERenderMode::Depth) {
-			rgb = Array3f::Constant(cam_fwd.dot(pos - origin) * depth_scale);
+			float depth_here = cam_fwd.dot(pos - origin) * depth_scale;
+			float depth_inv = (1/(depth_here+ 1e-9) -0.005)/9.995; // convert to inverse depth and limited to [0.1, 200]  
+			rgb = Array3f::Constant(depth_inv);
 		} else if (render_mode == ERenderMode::AO) {
 			rgb = Array3f::Constant(alpha);
 		}
