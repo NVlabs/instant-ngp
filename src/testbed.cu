@@ -2826,6 +2826,12 @@ void Testbed::save_snapshot(const std::string& filepath_string, bool include_opt
 		m_network_config["snapshot"]["nerf"]["rgb"]["measured_batch_size"] = m_nerf.training.counters_rgb.measured_batch_size;
 		m_network_config["snapshot"]["nerf"]["rgb"]["measured_batch_size_before_compaction"] = m_nerf.training.counters_rgb.measured_batch_size_before_compaction;
 		m_network_config["snapshot"]["nerf"]["dataset"] = m_nerf.training.dataset;
+
+		nlohmann::json::binary_t cam_exposure_json;
+		size_t cam_exposure_bytes = m_nerf.training.cam_exposure.size() * sizeof(AdamOptimizer<Eigen::Array3f>);
+		cam_exposure_json.resize(cam_exposure_bytes);
+		memcpy(cam_exposure_json.data(), m_nerf.training.cam_exposure.data(), cam_exposure_bytes);
+		m_network_config["snapshot"]["nerf"]["cam_exposure"] = cam_exposure_json;
 	}
 
 	m_network_config_path = filepath;
@@ -2888,6 +2894,14 @@ void Testbed::load_snapshot(const std::string& filepath_string) {
 	m_loss_scalar.set(m_network_config["snapshot"]["loss"]);
 
 	m_trainer->deserialize(m_network_config["snapshot"]);
+
+	if (m_testbed_mode == ETestbedMode::Nerf) {
+		nlohmann::json::binary_t cam_exposure_json;
+		size_t cam_exposure_bytes = m_nerf.training.cam_exposure.size() * sizeof(AdamOptimizer<Eigen::Array3f>);
+		cam_exposure_json.resize(cam_exposure_bytes);
+		memcpy(cam_exposure_json.data(), m_nerf.training.cam_exposure.data(), cam_exposure_bytes);
+		m_network_config["snapshot"]["nerf"]["cam_exposure"] = cam_exposure_json;
+	}
 }
 
 void Testbed::load_camera_path(const std::string& filepath_string) {
