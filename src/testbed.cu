@@ -2804,28 +2804,32 @@ static const size_t SNAPSHOT_FORMAT_VERSION = 1;
 void Testbed::save_snapshot(const std::string& filepath_string, bool include_optimizer_state) {
 	fs::path filepath = filepath_string;
 	m_network_config["snapshot"] = m_trainer->serialize(include_optimizer_state);
-	m_network_config["snapshot"]["version"] = SNAPSHOT_FORMAT_VERSION;
+
+	auto& snapshot = m_network_config["snapshot"];
+	snapshot["version"] = SNAPSHOT_FORMAT_VERSION;
 
 	if (m_testbed_mode == ETestbedMode::Nerf) {
-		m_network_config["snapshot"]["density_grid_size"] = NERF_GRIDSIZE();
+		snapshot["density_grid_size"] = NERF_GRIDSIZE();
 
 		GPUMemory<__half> density_grid_fp16(m_nerf.density_grid.size());
 		parallel_for_gpu(density_grid_fp16.size(), [density_grid=m_nerf.density_grid.data(), density_grid_fp16=density_grid_fp16.data()] __device__ (size_t i) {
 			density_grid_fp16[i] = (__half)density_grid[i];
 		});
 
-		m_network_config["snapshot"]["density_grid_binary"] = density_grid_fp16;
-		m_network_config["snapshot"]["nerf"]["aabb_scale"] = m_nerf.training.dataset.aabb_scale;
+		snapshot["density_grid_binary"] = density_grid_fp16;
+		snapshot["nerf"]["aabb_scale"] = m_nerf.training.dataset.aabb_scale;
 	}
 
-	m_network_config["snapshot"]["training_step"] = m_training_step;
-	m_network_config["snapshot"]["loss"] = m_loss_scalar.val();
+	snapshot["training_step"] = m_training_step;
+	snapshot["loss"] = m_loss_scalar.val();
+	snapshot["aabb"] = m_aabb;
+	snapshot["bounding_radius"] = m_bounding_radius;
 
 	if (m_testbed_mode == ETestbedMode::Nerf) {
-		m_network_config["snapshot"]["nerf"]["rgb"]["rays_per_batch"] = m_nerf.training.counters_rgb.rays_per_batch;
-		m_network_config["snapshot"]["nerf"]["rgb"]["measured_batch_size"] = m_nerf.training.counters_rgb.measured_batch_size;
-		m_network_config["snapshot"]["nerf"]["rgb"]["measured_batch_size_before_compaction"] = m_nerf.training.counters_rgb.measured_batch_size_before_compaction;
-		m_network_config["snapshot"]["nerf"]["dataset"] = m_nerf.training.dataset;
+		snapshot["nerf"]["rgb"]["rays_per_batch"] = m_nerf.training.counters_rgb.rays_per_batch;
+		snapshot["nerf"]["rgb"]["measured_batch_size"] = m_nerf.training.counters_rgb.measured_batch_size;
+		snapshot["nerf"]["rgb"]["measured_batch_size_before_compaction"] = m_nerf.training.counters_rgb.measured_batch_size_before_compaction;
+		snapshot["nerf"]["dataset"] = m_nerf.training.dataset;
 	}
 
 	m_network_config_path = filepath;
@@ -2839,33 +2843,40 @@ void Testbed::load_snapshot(const std::string& filepath_string) {
 		throw std::runtime_error{std::string{"File '"} + filepath_string + "' does not contain a snapshot."};
 	}
 
-	if (config["snapshot"].value("version", 0) < SNAPSHOT_FORMAT_VERSION) {
+	const auto& snapshot = config["snapshot"];
+
+	if (snapshot.value("version", 0) < SNAPSHOT_FORMAT_VERSION) {
 		throw std::runtime_error{"Snapshot uses an old format."};
 	}
 
-	if (m_testbed_mode == ETestbedMode::Nerf) {
-		if (config["snapshot"]["density_grid_size"] != NERF_GRIDSIZE()) {
+	m_aabb = snapshot.value("aabb", m_aabb);
+	m_bounding_radius = snapshot.value("bounding_radius", m_bounding_radius);
+
+	if (m_testbed_mode == ETestbedMode::Sdf) {
+		set_scale(m_bounding_radius * 1.5f);
+	} else if (m_testbed_mode == ETestbedMode::Nerf) {
+		if (snapshot["density_grid_size"] != NERF_GRIDSIZE()) {
 			throw std::runtime_error{"Incompatible grid size."};
 		}
 
-		m_nerf.training.counters_rgb.rays_per_batch = config["snapshot"]["nerf"]["rgb"]["rays_per_batch"];
-		m_nerf.training.counters_rgb.measured_batch_size = config["snapshot"]["nerf"]["rgb"]["measured_batch_size"];
-		m_nerf.training.counters_rgb.measured_batch_size_before_compaction = config["snapshot"]["nerf"]["rgb"]["measured_batch_size_before_compaction"];
+		m_nerf.training.counters_rgb.rays_per_batch = snapshot["nerf"]["rgb"]["rays_per_batch"];
+		m_nerf.training.counters_rgb.measured_batch_size = snapshot["nerf"]["rgb"]["measured_batch_size"];
+		m_nerf.training.counters_rgb.measured_batch_size_before_compaction = snapshot["nerf"]["rgb"]["measured_batch_size_before_compaction"];
 
 		// If we haven't got a nerf dataset loaded, load dataset metadata from the snapshot
 		// and render using just that.
-		if (m_data_path.empty() && config["snapshot"]["nerf"].contains("dataset")) {
-			m_nerf.training.dataset = config["snapshot"]["nerf"]["dataset"];
+		if (m_data_path.empty() && snapshot["nerf"].contains("dataset")) {
+			m_nerf.training.dataset = snapshot["nerf"]["dataset"];
 			load_nerf();
 		} else {
-			if (config["snapshot"]["nerf"].contains("aabb_scale")) {
-				m_nerf.training.dataset.aabb_scale = config["snapshot"]["nerf"]["aabb_scale"];
+			if (snapshot["nerf"].contains("aabb_scale")) {
+				m_nerf.training.dataset.aabb_scale = snapshot["nerf"]["aabb_scale"];
 			}
 		}
 
 		load_nerf_post();
 
-		GPUMemory<__half> density_grid_fp16 = config["snapshot"]["density_grid_binary"];
+		GPUMemory<__half> density_grid_fp16 = snapshot["density_grid_binary"];
 		m_nerf.density_grid.resize(density_grid_fp16.size());
 
 		parallel_for_gpu(density_grid_fp16.size(), [density_grid=m_nerf.density_grid.data(), density_grid_fp16=density_grid_fp16.data()] __device__ (size_t i) {
