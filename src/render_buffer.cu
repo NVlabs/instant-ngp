@@ -19,6 +19,8 @@
 
 #include <tiny-cuda-nn/gpu_memory.h>
 
+#include <filesystem/path.h>
+
 #ifdef NGP_GUI
 #  ifdef _WIN32
 #    include <GL/gl3w.h>
@@ -34,6 +36,7 @@
 
 using namespace Eigen;
 using namespace tcnn;
+namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
@@ -75,8 +78,9 @@ void CudaSurface2D::resize(const Vector2i& size) {
 #ifdef NGP_GUI
 GLTexture::~GLTexture() {
 	m_cuda_mapping.reset();
-	if (m_texture_id)
+	if (m_texture_id) {
 		glDeleteTextures(1, &m_texture_id);
+	}
 }
 
 GLuint GLTexture::texture() {
@@ -171,8 +175,23 @@ void GLTexture::resize(const Vector2i& new_size, int n_channels, bool is_8bit) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 }
 
+static bool is_wsl() {
+#ifdef _WIN32
+	return false;
+#else
+	fs::path path = "/proc/sys/kernel/osrelease";
+	if (!path.exists()) {
+		return false;
+	}
+
+	std::ifstream f{path.str()};
+	std::string content((std::istreambuf_iterator<char>(f)), (std::istreambuf_iterator<char>()));
+	return content.find("microsoft") != std::string::npos;
+#endif
+}
+
 GLTexture::CUDAMapping::CUDAMapping(GLuint texture_id, const Vector2i& size) : m_size{size} {
-	static bool s_is_cuda_interop_supported = true;
+	static bool s_is_cuda_interop_supported = !is_wsl();
 	if (s_is_cuda_interop_supported) {
 		cudaError_t err = cudaGraphicsGLRegisterImage(&m_graphics_resource, texture_id, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore);
 		if (err != cudaSuccess) {
