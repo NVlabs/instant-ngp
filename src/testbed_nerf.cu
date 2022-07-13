@@ -416,7 +416,7 @@ __global__ void generate_grid_samples_nerf_uniform(Eigen::Vector3i res_3d, const
 	if (x>=res_3d.x() || y>=res_3d.y() || z>=res_3d.z())
 		return;
 	uint32_t i = x+ y*res_3d.x() + z*res_3d.x()*res_3d.y();
-	Vector3f pos = Array3f{(float)x, (float)y, (float)z} * Array3f{1.f/res_3d.x(),1.f/res_3d.y(),1.f/res_3d.z()};
+	Vector3f pos = Vector3f{(float)x, (float)y, (float)z}.cwiseQuotient((res_3d-Vector3i::Ones()).cast<float>());
 	pos = render_aabb_to_local.transpose() * (pos.cwiseProduct(render_aabb.max - render_aabb.min) + render_aabb.min);
 	out[i] = { warp_position(pos, train_aabb), warp_dt(MIN_CONE_STEPSIZE()) };
 }
@@ -430,7 +430,7 @@ __global__ void generate_grid_samples_nerf_uniform_dir(Eigen::Vector3i res_3d, c
 	if (x>=res_3d.x() || y>=res_3d.y() || z>=res_3d.z())
 		return;
 	uint32_t i = x+ y*res_3d.x() + z*res_3d.x()*res_3d.y();
-	Vector3f pos = Array3f{(float)x, (float)y, (float)z} * Array3f{1.f/res_3d.x(),1.f/res_3d.y(),1.f/res_3d.z()};
+	Vector3f pos = Vector3f{(float)x, (float)y, (float)z}.cwiseQuotient((res_3d-Vector3i::Ones()).cast<float>());
 	pos = render_aabb_to_local.transpose() * (pos.cwiseProduct(render_aabb.max - render_aabb.min) + render_aabb.min);
 	network_input[i] = { warp_position(pos, train_aabb), warp_direction(ray_dir), warp_dt(MIN_CONE_STEPSIZE()) };
 }
