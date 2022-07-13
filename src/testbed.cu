@@ -800,6 +800,7 @@ void Testbed::imgui() {
 				}
 				ImGui::SameLine();
 				ImGui::Text("%s", m_nerf.training.dataset.paths.at(m_nerf.training.view).c_str());
+
 				if (ImGui::SliderInt("Training view", &m_nerf.training.view, 0, (int)m_nerf.training.dataset.n_images-1)) {
 					set_camera_to_training_view(m_nerf.training.view);
 					accum_reset = true;
@@ -1266,19 +1267,27 @@ bool Testbed::keyboard_event() {
 		reset_accumulation();
 	}
 
-	if (shift && ImGui::IsKeyPressed('[')) {
-		first_training_view();
-	} else if (shift && ImGui::IsKeyPressed(']')) {
-		last_training_view();
-	} else if (ImGui::IsKeyPressed('[')) {
-		previous_training_view();
-	} else if (ImGui::IsKeyPressed(']')) {
-		next_training_view();
+	if (ImGui::IsKeyPressed('[')) {
+		if (shift) {
+			first_training_view();
+		} else {
+			previous_training_view();
+		}
+	}
+
+	if (ImGui::IsKeyPressed(']')) {
+		if (shift) {
+			last_training_view();
+		} else {
+			next_training_view();
+		}
 	}
 
 	if (ImGui::IsKeyPressed('=') || ImGui::IsKeyPressed('+')) {
 		m_camera_velocity *= 1.5f;
-	} else if (ImGui::IsKeyPressed('-') || ImGui::IsKeyPressed('_')) {
+	}
+
+	if (ImGui::IsKeyPressed('-') || ImGui::IsKeyPressed('_')) {
 		m_camera_velocity /= 1.5f;
 	}
 
