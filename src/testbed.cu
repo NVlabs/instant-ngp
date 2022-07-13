@@ -239,6 +239,34 @@ void Testbed::set_view_dir(const Vector3f& dir) {
 	set_look_at(old_look_at);
 }
 
+void Testbed::first_training_view() {
+	m_nerf.training.view = 0;
+	set_camera_to_training_view(m_nerf.training.view);
+	reset_accumulation();
+}
+
+void Testbed::last_training_view() {
+	m_nerf.training.view = m_nerf.training.dataset.n_images-1;
+	set_camera_to_training_view(m_nerf.training.view);
+	reset_accumulation();
+}
+
+void Testbed::previous_training_view() {
+	if (m_nerf.training.view != 0) {
+		m_nerf.training.view -= 1;
+	}
+	set_camera_to_training_view(m_nerf.training.view);
+	reset_accumulation();
+}
+
+void Testbed::next_training_view() {
+	if (m_nerf.training.view != m_nerf.training.dataset.n_images-1) {
+		m_nerf.training.view += 1;
+	}
+	set_camera_to_training_view(m_nerf.training.view);
+	reset_accumulation();
+}
+
 void Testbed::set_camera_to_training_view(int trainview) {
 	auto old_look_at = look_at();
 	m_camera = m_smoothed_camera = get_xform_given_rolling_shutter(m_nerf.training.transforms[trainview], m_nerf.training.dataset.metadata[trainview].rolling_shutter, Vector2f{0.5f, 0.5f}, 0.0f);
@@ -755,6 +783,23 @@ void Testbed::imgui() {
 			}
 
 			if (m_testbed_mode == ETestbedMode::Nerf) {
+				if (ImGui::Button("First")) {
+					first_training_view();
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Previous")) {
+					previous_training_view();
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Next")) {
+					next_training_view();
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Last")) {
+					last_training_view();
+				}
+				ImGui::SameLine();
+				ImGui::Text("%s", m_nerf.training.dataset.paths.at(m_nerf.training.view).c_str());
 				if (ImGui::SliderInt("Training view", &m_nerf.training.view, 0, (int)m_nerf.training.dataset.n_images-1)) {
 					set_camera_to_training_view(m_nerf.training.view);
 					accum_reset = true;
@@ -1219,6 +1264,16 @@ bool Testbed::keyboard_event() {
 	if (ImGui::IsKeyPressed('N')) {
 		m_sdf.analytic_normals = !m_sdf.analytic_normals;
 		reset_accumulation();
+	}
+
+	if (shift && ImGui::IsKeyPressed('[')) {
+		first_training_view();
+	} else if (shift && ImGui::IsKeyPressed(']')) {
+		last_training_view();
+	} else if (ImGui::IsKeyPressed('[')) {
+		previous_training_view();
+	} else if (ImGui::IsKeyPressed(']')) {
+		next_training_view();
 	}
 
 	if (ImGui::IsKeyPressed('=') || ImGui::IsKeyPressed('+')) {

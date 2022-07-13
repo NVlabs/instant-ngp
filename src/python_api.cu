@@ -442,6 +442,10 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("screen_center", &Testbed::m_screen_center)
 		.def("set_nerf_camera_matrix", &Testbed::set_nerf_camera_matrix)
 		.def("set_camera_to_training_view", &Testbed::set_camera_to_training_view)
+		.def("first_training_view", &Testbed::first_training_view)
+		.def("last_training_view", &Testbed::last_training_view)
+		.def("previous_training_view", &Testbed::previous_training_view)
+		.def("next_training_view", &Testbed::next_training_view)
 		.def("compute_image_mse", &Testbed::compute_image_mse,
 			py::arg("quantize") = false
 		)
@@ -532,6 +536,7 @@ PYBIND11_MODULE(pyngp, m) {
 	nerfdataset
 		.def_readonly("metadata", &NerfDataset::metadata)
 		.def_readonly("transforms", &NerfDataset::xforms)
+		.def_readonly("paths", &NerfDataset::paths)
 		.def_readonly("render_aabb", &NerfDataset::render_aabb)
 		.def_readonly("render_aabb_to_local", &NerfDataset::render_aabb_to_local)
 		.def_readonly("up", &NerfDataset::up)

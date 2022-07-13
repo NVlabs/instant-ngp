@@ -186,6 +186,7 @@ NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale, bool is_h
 	result.offset = {0.5f, 0.5f, 0.5f};
 	result.aabb_scale = aabb_scale;
 	result.is_hdr = is_hdr;
+	result.paths = std::vector<std::string>(n_images, std::string());
 	for (size_t i = 0; i < n_images; ++i) {
 		result.xforms[i].start = Eigen::Matrix<float, 3, 4>::Identity();
 		result.xforms[i].end = Eigen::Matrix<float, 3, 4>::Identity();
@@ -375,6 +376,10 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 					// fs::remove(basepath / fs::path(std::string(frames_copy[i]["file_path"])));
 				}
 			}
+		}
+
+		for (int i = 0; i < (int)frames.size(); ++i) {
+			result.paths.push_back(frames[i]["file_path"]);
 		}
 
 		result.n_images += frames.size();

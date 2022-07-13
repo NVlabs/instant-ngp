@@ -130,6 +130,7 @@ inline void to_json(nlohmann::json& j, const TrainingXForm& x) {
 
 inline void to_json(nlohmann::json& j, const NerfDataset& dataset) {
 	j["n_images"] = dataset.n_images;
+	j["paths"] = dataset.paths;
 	for (size_t i = 0; i < dataset.n_images; ++i) {
 		j["metadata"].emplace_back();
 		j["xforms"].emplace_back();
@@ -156,6 +157,8 @@ inline void from_json(const nlohmann::json& j, NerfDataset& dataset) {
 	dataset.n_images = j.at("n_images");
 	dataset.metadata.resize(dataset.n_images);
 	dataset.xforms.resize(dataset.n_images);
+	dataset.paths.resize(dataset.n_images, "");
+	if (j.contains("paths")) dataset.paths = j["paths"].get<std::vector<std::string>>();
 
 	for (size_t i = 0; i < dataset.n_images; ++i) {
 		// read global defaults first
