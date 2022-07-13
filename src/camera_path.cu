@@ -114,7 +114,7 @@ void CameraPath::save(const std::string& filepath_string) {
 void CameraPath::load(const std::string& filepath_string, const Eigen::Matrix<float, 3, 4> &first_xform) {
 	std::ifstream f(filepath_string);
 	if (!f) {
-		throw std::runtime_error{std::string{"Camera path \""} + filepath_string + "\" does not exist."};
+		throw std::runtime_error{fmt::format("Camera path {} does not exist.", filepath_string)};
 	}
 
 	json j;

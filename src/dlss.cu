@@ -405,7 +405,7 @@ void vulkan_and_ngx_init() {
 	NVSDK_NGX_Result result_min_driver_version_minor = ngx_parameters->Get(NVSDK_NGX_Parameter_SuperSampling_MinDriverVersionMinor, &min_driver_version_minor);
 	if (result_updated_driver == NVSDK_NGX_Result_Success && result_min_driver_version_major == NVSDK_NGX_Result_Success && result_min_driver_version_minor == NVSDK_NGX_Result_Success) {
 		if (needs_updated_driver) {
-			throw std::runtime_error{std::string{"Driver too old. Minimum version required: "} + std::to_string(min_driver_version_major) + "." + std::to_string(min_driver_version_minor)};
+			throw std::runtime_error{fmt::format("Driver too old. Minimum version required is {}.{}", min_driver_version_major, min_driver_version_minor)};
 		}
 	}
 
@@ -414,7 +414,7 @@ void vulkan_and_ngx_init() {
 	if (ngx_result != NVSDK_NGX_Result_Success || !dlss_available) {
 		ngx_result = NVSDK_NGX_Result_Fail;
 		NVSDK_NGX_Parameter_GetI(ngx_parameters, NVSDK_NGX_Parameter_SuperSampling_FeatureInitResult, (int*)&ngx_result);
-		throw std::runtime_error{std::string{"DLSS not available. ("} + ngx_error_string(ngx_result) + ")"};
+		throw std::runtime_error{fmt::format("DLSS not available: {}", ngx_error_string(ngx_result))};
 	}
 
 	tlog::success() << "Initialized Vulkan and NGX on device #" << device_id << ": " << physical_device_properties.deviceName;

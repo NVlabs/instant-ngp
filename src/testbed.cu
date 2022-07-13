@@ -97,7 +97,7 @@ void Testbed::load_training_data(const std::string& data_path) {
 	m_data_path = data_path;
 
 	if (!m_data_path.exists()) {
-		throw std::runtime_error{std::string{"Data path '"} + m_data_path.str() + "' does not exist."};
+		throw std::runtime_error{fmt::format("Data path {} does not exist.", m_data_path.str())};
 	}
 
 	switch (m_testbed_mode) {
@@ -124,7 +124,7 @@ json Testbed::load_network_config(const fs::path& network_config_path) {
 	tlog::info() << "Loading network config from: " << network_config_path;
 
 	if (network_config_path.empty() || !network_config_path.exists()) {
-		throw std::runtime_error{std::string{"Network config \""} + network_config_path.str() + "\" does not exist."};
+		throw std::runtime_error{fmt::format("Network config {} does not exist.", network_config_path.str())};
 	}
 
 	json result;
@@ -369,8 +369,7 @@ void Testbed::dump_parameters_as_images() {
 	size_t offset = 0;
 	size_t layer_id = 0;
 	for (auto size : m_network->layer_sizes()) {
-		std::string filename = std::string{"layer-"} + std::to_string(layer_id) + ".exr";
-		save_exr(params_cpu.data() + offset, size.second, size.first, 1, 1, filename.c_str());
+		save_exr(params_cpu.data() + offset, size.second, size.first, 1, 1, fmt::format("layer-{}.exr", layer_id).c_str());
 		offset += size.first * size.second;
 		++layer_id;
 	}
@@ -472,20 +471,14 @@ void Testbed::imgui() {
 		m_training_batch_size = next_multiple(m_training_batch_size, batch_size_granularity);
 
 		if (m_train) {
-			auto to_string = [](const std::string& name, float val) {
-				char buffer[128];
-				sprintf(buffer, "%s: %.01fms", name.c_str(), val);
-				return std::string{buffer};
-			};
-
 			std::vector<std::string> timings;
 			if (m_testbed_mode == ETestbedMode::Nerf) {
-				timings.emplace_back(to_string("Grid", m_training_prep_ms.ema_val()));
+				timings.emplace_back(fmt::format("Grid: {:.01f}ms", m_training_prep_ms.ema_val()));
 			} else {
-				timings.emplace_back(to_string("Datagen", m_training_prep_ms.ema_val()));
+				timings.emplace_back(fmt::format("Datagen: {:.01f}ms", m_training_prep_ms.ema_val()));
 			}
 
-			timings.emplace_back(to_string("Training", m_training_ms.ema_val()));
+			timings.emplace_back(fmt::format("Training: {:.01f}ms", m_training_ms.ema_val()));
 			ImGui::Text("%s", join(timings, ", ").c_str());
 		} else {
 			ImGui::Text("Training paused");
@@ -564,7 +557,7 @@ void Testbed::imgui() {
 		ImGui::SameLine();
 
 		const auto& render_tex = m_render_surfaces.front();
-		std::string spp_string = m_dlss ? std::string{""} : (std::string{"("} + std::to_string(std::max(render_tex.spp(), 1u)) + " spp)");
+		std::string spp_string = m_dlss ? std::string{""} : fmt::format("({} spp)", std::max(render_tex.spp(), 1u));
 		ImGui::Text(": %.01fms for %dx%d %s", m_render_ms.ema_val(), render_tex.in_resolution().x(), render_tex.in_resolution().y(), spp_string.c_str());
 
 		if (m_dlss_supported) {
@@ -2904,7 +2897,7 @@ void Testbed::save_snapshot(const std::string& filepath_string, bool include_opt
 void Testbed::load_snapshot(const std::string& filepath_string) {
 	auto config = load_network_config(filepath_string);
 	if (!config.contains("snapshot")) {
-		throw std::runtime_error{std::string{"File '"} + filepath_string + "' does not contain a snapshot."};
+		throw std::runtime_error{fmt::format("File {} does not contain a snapshot.", filepath_string)};
 	}
 
 	const auto& snapshot = config["snapshot"];
