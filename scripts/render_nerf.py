@@ -33,9 +33,6 @@ def nerf2ngp(
 def parse_args():
     parser = argparse.ArgumentParser(description="Render script")
 
-    # parser.add_argument("--gpus", type=str, default="all", help="Which GPUs to use for rendering.  Example: \"0,1,2,3\" (Default: \"all\" = use all available GPUs)")
-    parser.add_argument("--batch", type=str, default=None, help="For multi-GPU rendering. It is not recommended to use this feature directly.")
-
     parser.add_argument("--snapshot", required=True, type=str, help="Snapshot file (.msgpack) to use for rendering.")
 
     parser.add_argument("--frames_json", required=True, type=str, help="Path to a nerf-style transforms.json containing frames to render.")
@@ -46,6 +43,10 @@ def parse_args():
 
     parser.add_argument("--video_out", type=str, help="Path to a video to be exported. Uses ffmpeg to combine frames in order.")
     parser.add_argument("--video_fps", type=str, default="30", help="Use in combination with `--video_out`. Sets the fps of the output video.")
+
+    # TODO: enable filtering gpus
+    # parser.add_argument("--gpus", type=str, default="all", help="Which GPUs to use for rendering.  Example: \"0,1,2,3\" (Default: \"all\" = use all available GPUs)")
+    parser.add_argument("--batch", type=str, default=None, help="This is set automatically by the script.  It is for multi-GPU rendering. It is not recommended to use this feature directly.")
 
     return parser.parse_args()
 
