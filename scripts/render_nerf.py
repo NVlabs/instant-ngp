@@ -62,38 +62,43 @@ def get_frame_output_path(args: dict, frame: dict) -> Path:
     return Path(args.frames_path) / frame_path
 
 # convenience method to output a video from an image sequence, using ffmpeg
-def export_video_sequence(args: dict, frame_paths: list[dict]):
+def export_video_sequence(args: dict, render_data: dict):
+    if args.video_out == None:
+        return
+    
     # combine frames into a video via ffmpeg
-    if args.video_out != None:
-        video_path = Path(args.video_out)
-        video_path.unlink(missing_ok=True)
-        fps = args.video_fps
+    print("Rendering output via ffmpeg...") 
 
-        # fetch all images and save to a playlist
-        playlist_path = video_path.parent / f"{video_path.stem}-playlist.txt"
-        playlist_path.unlink(missing_ok=True)
-        print(playlist_path)
+    frame_paths = [get_frame_output_path(args, frame) for frame in render_data["frames"]]
+    video_path = Path(args.video_out)
+    video_path.unlink(missing_ok=True)
+    fps = args.video_fps
 
-        # prepare ffmpeg playlist.txt, each line is `file 'path/to/image'`
-        ffmpeg_files = [f"file '{safe_str(p.absolute())}'" for p in frame_paths]
-        playlist_str = "\n".join(ffmpeg_files)
+    # fetch all images and save to a playlist
+    playlist_path = video_path.parent / f"{video_path.stem}-playlist.txt"
+    playlist_path.unlink(missing_ok=True)
+    print(playlist_path)
 
-        with open(playlist_path, "w+") as f:
-            f.write(playlist_str)
-        
-        os.system(f"\
-            ffmpeg \
-                -f concat \
-                -safe 0 \
-                -r {fps} \
-                -i \"{playlist_path}\" \
-                -c:v libx264 \
-                -pix_fmt yuv420p \
-                -vf fps={fps} \
-                \"{video_path}\" \
-            ")
-        
-        playlist_path.unlink(missing_ok=True)
+    # prepare ffmpeg playlist.txt, each line is `file 'path/to/image'`
+    ffmpeg_files = [f"file '{safe_str(p.absolute())}'" for p in frame_paths]
+    playlist_str = "\n".join(ffmpeg_files)
+
+    with open(playlist_path, "w+") as f:
+        f.write(playlist_str)
+    
+    os.system(f"\
+        ffmpeg \
+            -f concat \
+            -safe 0 \
+            -r {fps} \
+            -i \"{playlist_path}\" \
+            -c:v libx264 \
+            -pix_fmt yuv420p \
+            -vf fps={fps} \
+            \"{video_path}\" \
+        ")
+    
+    playlist_path.unlink(missing_ok=True)
 
 # render images
 def render_images(args: dict, render_data: dict):
@@ -128,7 +133,7 @@ def render_images(args: dict, render_data: dict):
             print(f"Frame already exists! Skipping...")
             continue
         
-        # save some convenience properties from the frame json
+        # get properties from the frame json
         cam_matrix = frame["transform_matrix"]
 
         # prepare testbed to render this frame
@@ -141,6 +146,9 @@ def render_images(args: dict, render_data: dict):
 
             testbed.render_aabb = ngp.BoundingBox(nerf2ngp(aabb_min), nerf2ngp(aabb_max))
         
+        if "camera_angle_x" in frame:
+            testbed.fov = math.degrees(frame["camera_angle_x"])
+
         # render the frame
         image = testbed.render(frame_width, frame_height, render_spp, True)
 
@@ -179,11 +187,17 @@ if __name__ == "__main__":
         # split into subprocesses, one for each gpu
         procs = []
         gpus = get_gpus()
-        n = len(gpus)
-        i = 0
+        n_gpus = len(gpus)
 
-        print(f"Found {n} GPUs.  Rendering images...")
+        # In case there are less images to render than the number of gpus available...
+        n_frames = len(render_data["frames"])
+        if n_frames < n_gpus:
+            gpus = gpus[0:n_frames]
+            n_gpus = n_frames
+
+        print(f"Using {n_gpus} GPU(s).  Rendering images...")
         
+        i = 0
         for gpu in gpus:
             env = os.environ.copy()
             env["CUDA_VISIBLE_DEVICES"] = gpu
@@ -191,7 +205,7 @@ if __name__ == "__main__":
             # rerun this command, but with a batch arg
             cmd = sys.argv.copy()
             cmd.insert(0, 'python')
-            cmd.extend(["--batch", f"{i}/{n}"])
+            cmd.extend(["--batch", f"{i}/{n_gpus}"])
             print(cmd)
             proc = sp.Popen(cmd, env=env, shell=True, stderr=sys.stderr, stdout=sys.stdout)
             procs.append(proc)
@@ -201,8 +215,5 @@ if __name__ == "__main__":
         
         for p in procs:
             p.wait()
-        
-        print("Rendering output via ffmpeg...")
 
-        frame_paths = [get_frame_output_path(args, frame) for frame in render_data["frames"]]
-        export_video_sequence(args, frame_paths)
+        export_video_sequence(args, render_data)
