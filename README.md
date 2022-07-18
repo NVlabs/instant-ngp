@@ -186,7 +186,7 @@ The "Camera path" GUI lets you set frames along a path. "Add from cam" is the ma
 To conduct controlled experiments in an automated fashion, all features from the interactive testbed (and more!) have Python bindings that can be easily instrumented.
 For an example of how the `./build/testbed` application can be implemented and extended from within Python, see `./scripts/run.py`, which supports a superset of the command line arguments that `./build/testbed` does.
 
-Here is a typical command line using `scripts/run.py` to generate a 5-second flythrough of the fox dataset to the (default) file `movie.mp4`, after using the testbed to save a NeRF solution file and a set of camera key frames:
+Here is a typical command line using `scripts/run.py` to generate a 5-second flythrough of the fox dataset to the (default) file `movie.mp4`, after using the testbed to save a (default) NeRF snapshot `base.msgpack` and a set of camera key frames:
 
 ```sh
 instant-ngp$ python scripts/run.py --mode nerf --scene data/nerf/fox --load_snapshot data/nerf/fox/base.msgpack --video_camera_path data/nerf/fox/base_cam.json --video_n_seconds 5 --video_fps 60 --width 1920 --height 1080
