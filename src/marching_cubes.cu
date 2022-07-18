@@ -12,9 +12,9 @@
  *  @author Alex Evans, NVIDIA
  */
 
-#include <neural-graphics-primitives/common.h>
-#include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/bounding_box.cuh>
+#include <neural-graphics-primitives/common_device.cuh>
+#include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/random_val.cuh> // helpers to generate random values, directions
 #include <neural-graphics-primitives/thread_pool.h>
 
