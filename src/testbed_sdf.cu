@@ -1026,7 +1026,9 @@ void Testbed::load_mesh() {
 	}
 
 	// Inflate AABB by 1% to give the network a little wiggle room.
-	m_raw_aabb.inflate(m_raw_aabb.diag().norm() * 0.005f);
+	const float inflation = 0.005f;
+
+	m_raw_aabb.inflate(m_raw_aabb.diag().norm() * inflation);
 	m_sdf.mesh_scale = m_raw_aabb.diag().maxCoeff();
 
 	// Normalize vertex coordinates to lie within [0,1]^3.
@@ -1040,6 +1042,7 @@ void Testbed::load_mesh() {
 	for (size_t i = 0; i < n_vertices; ++i) {
 		m_aabb.enlarge(vertices[i]);
 	}
+	m_aabb.inflate(m_aabb.diag().norm() * inflation);
 	m_aabb = m_aabb.intersection(BoundingBox{Vector3f::Zero(), Vector3f::Ones()});
 	m_render_aabb = m_aabb;
 	m_render_aabb_to_local = Matrix3f::Identity();
