@@ -44,7 +44,7 @@ def parse_args():
 	parser.add_argument("--screenshot_dir", default="", help="Which directory to output screenshots to.")
 	parser.add_argument("--screenshot_spp", type=int, default=16, help="Number of samples per pixel in screenshots.")
 
-	parser.add_argument("--video_camera_path", default="", help="The camera path to render.")
+	parser.add_argument("--video_camera_path", default="", help="The camera path to render, e.g., base_cam.json.")
 	parser.add_argument("--video_camera_smoothing", action="store_true", help="Applies additional smoothing to the camera trajectory with the caveat that the endpoint of the camera path may not be reached.")
 	parser.add_argument("--video_fps", type=int, default=60, help="Number of frames per second.")
 	parser.add_argument("--video_n_seconds", type=int, default=1, help="Number of seconds the rendered video should be long.")
@@ -62,7 +62,7 @@ def parse_args():
 	parser.add_argument("--n_steps", type=int, default=-1, help="Number of steps to train for before quitting.")
 	parser.add_argument("--second_window", action="store_true", help="Open a second window containing a copy of the main output.")
 
-	parser.add_argument("--sharpen", default=0, help="Set amount of sharpening applied to NeRF training images.")
+	parser.add_argument("--sharpen", default=0, help="Set amount of sharpening applied to NeRF training images. Range 0.0 to 1.0.")
 
 
 	args = parser.parse_args()
