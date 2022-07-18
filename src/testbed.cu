@@ -952,9 +952,13 @@ void Testbed::imgui() {
 		if (ImGui::CollapsingHeader("Marching Cubes Mesh Output")) {
 			static bool flip_y_and_z_axes = false;
 			static float density_range = 4.f;
-			BoundingBox aabb = (m_testbed_mode==ETestbedMode::Nerf) ? m_render_aabb : m_aabb;
+			BoundingBox aabb = (m_testbed_mode == ETestbedMode::Nerf) ? m_render_aabb : m_aabb;
 
 			auto res3d = get_marching_cubes_res(m_mesh.res, aabb);
+
+			// If we use an octree to fit the SDF only close to the surface, then marching cubes will not work (SDF not defined everywhere)
+			bool disable_marching_cubes = m_testbed_mode == ETestbedMode::Sdf && (m_sdf.uses_takikawa_encoding || m_sdf.use_triangle_octree);
+			if (disable_marching_cubes) { ImGui::BeginDisabled(); }
 
 			if (imgui_colored_button("Mesh it!", 0.4f)) {
 				marching_cubes(res3d, aabb, m_render_aabb_to_local, m_mesh.thresh);
@@ -966,6 +970,9 @@ void Testbed::imgui() {
 					m_mesh.clear();
 				}
 			}
+
+			if (disable_marching_cubes) { ImGui::EndDisabled(); }
+
 			ImGui::SameLine();
 
 			if (imgui_colored_button("Save density PNG",-0.4f)) {
