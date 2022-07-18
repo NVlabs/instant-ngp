@@ -37,7 +37,7 @@ def parse_args():
 
     parser.add_argument("--frames_json", required=True, type=str, help="Path to a nerf-style transforms.json containing frames to render.")
     parser.add_argument("--frames_path", required=True, type=str, help="Path to a folder to save the rendered frames.")
-    parser.add_argument("--overwrite_frames", action="store_true", help="If enabled, images in the `--images_path` will be overwritten.  If not enabled, frames that already exist will not be re-rendered.")
+    parser.add_argument("--overwrite_frames", action="store_true", help="If enabled, images in the `--frames_path` will be overwritten.  If not enabled, frames that already exist will not be re-rendered.")
     
     parser.add_argument("--samples_per_pixel", type=int, default=16, help="Number of samples per pixel.")
 
