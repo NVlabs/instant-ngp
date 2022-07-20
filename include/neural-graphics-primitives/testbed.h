@@ -431,6 +431,8 @@ public:
 
 	bool m_include_optimizer_state_in_snapshot = false;
 	bool m_render_ground_truth = false;
+	EGroundTruthRenderMode m_ground_truth_render_mode = EGroundTruthRenderMode::Shade;
+
 	bool m_train = false;
 	bool m_training_data_available = false;
 	bool m_render = true;

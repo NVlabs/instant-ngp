@@ -67,6 +67,13 @@ enum class EMeshRenderMode : int {
 	FaceIDs,
 };
 
+enum class EGroundTruthRenderMode : int {
+	Shade,
+	Depth,
+	NumRenderModes,
+};
+static constexpr const char* GroundTruthRenderModeStr = "Shade\0Depth\0\0";
+
 enum class ERenderMode : int {
 	AO,
 	Shade,

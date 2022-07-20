@@ -218,6 +218,17 @@ public:
 		cudaStream_t stream
 	);
 
+	void overlay_depth(
+		float alpha,
+		const float* __restrict__ depth,
+		float depth_scale,
+		const Eigen::Vector2i& resolution,
+		int fov_axis,
+		float zoom,
+		const Eigen::Vector2f& screen_center,
+		cudaStream_t stream
+	);
+
 	void overlay_false_color(Eigen::Vector2i training_resolution, bool to_srgb, int fov_axis, cudaStream_t stream, const float *error_map, Eigen::Vector2i error_map_resolution, const float *average, float brightness, bool viridis);
 
 	SurfaceProvider& surface_provider() {
