@@ -1594,17 +1594,17 @@ void Testbed::train_and_render(bool skip_rendering) {
 	}
 
 	if (m_single_view) {
-		if (m_dlss) {
-			m_render_surfaces.front().enable_dlss(m_window_res);
-			m_dof = 0.0f;
-		} else {
-			m_render_surfaces.front().disable_dlss();
-		}
-
 		// Should have been created when the window was created.
 		assert(!m_render_surfaces.empty());
 
 		auto& render_buffer = m_render_surfaces.front();
+
+		if (m_dlss) {
+			render_buffer.enable_dlss(m_window_res);
+			m_dof = 0.0f;
+		} else {
+			render_buffer.disable_dlss();
+		}
 
 		auto render_res = render_buffer.in_resolution();
 		if (render_res.isZero() || (m_train && m_training_step == 0)) {
@@ -1633,9 +1633,7 @@ void Testbed::train_and_render(bool skip_rendering) {
 		}
 
 		render_buffer.resize(render_res);
-		if (m_dlss || m_max_spp <= 0 || render_buffer.spp() < m_max_spp) {
-			render_frame(m_smoothed_camera, m_smoothed_camera, Eigen::Vector4f::Zero(), render_buffer);
-		}
+		render_frame(m_smoothed_camera, m_smoothed_camera, Eigen::Vector4f::Zero(), render_buffer);
 
 #ifdef NGP_GUI
 		m_render_textures.front()->blit_from_cuda_mapping();
@@ -1962,6 +1960,14 @@ bool Testbed::frame() {
 		m_render_skip_due_to_lack_of_camera_movement_counter = 0;
 	}
 	bool skip_rendering = m_render_skip_due_to_lack_of_camera_movement_counter++ != 0;
+
+	if (!m_dlss && m_max_spp > 0 && !m_render_surfaces.empty() && m_render_surfaces.front().spp() >= m_max_spp) {
+		skip_rendering = true;
+		if (!m_train) {
+			std::this_thread::sleep_for(1ms);
+		}
+	}
+
 	if (!skip_rendering || (std::chrono::steady_clock::now() - m_last_gui_draw_time_point) > 25ms) {
 		redraw_gui_next_frame();
 	}
