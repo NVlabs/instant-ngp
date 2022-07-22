@@ -81,6 +81,14 @@ enum class ERenderMode : int {
 };
 static constexpr const char* RenderModeStr = "AO\0Shade\0Normals\0Positions\0Depth\0Distortion\0Cost\0Slice\0\0";
 
+enum class ECameraMode : int {
+	Perspective,
+	Orthographic,
+	Environment
+};
+
+static constexpr const char* CameraModeStr = "Perspective\0Orthographic\0Environment\0\0";
+
 enum class ERandomMode : int {
 	Random,
 	Halton,

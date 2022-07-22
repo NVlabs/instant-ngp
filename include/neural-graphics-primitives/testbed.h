@@ -156,7 +156,9 @@ public:
 			int show_accel,
 			float cone_angle_constant,
 			ERenderMode render_mode,
-			cudaStream_t stream
+			ECameraMode camera_mode,
+			cudaStream_t stream,
+			float dataset_scale
 		);
 
 		uint32_t trace(
@@ -469,6 +471,7 @@ public:
 	float m_bounding_radius = 1;
 	float m_exposure = 0.f;
 
+	ECameraMode m_camera_mode = ECameraMode::Perspective;
 	ERenderMode m_render_mode = ERenderMode::Shade;
 	EMeshRenderMode m_mesh_render_mode = EMeshRenderMode::VertexNormals;
 

@@ -270,40 +270,75 @@ inline __host__ __device__ Ray pixel_to_ray(
 	bool snap_to_pixel_centers = false,
 	float focus_z = 1.0f,
 	float dof = 0.0f,
+	const ECameraMode camera_mode = ECameraMode::Perspective,
 	const CameraDistortion& camera_distortion = {},
 	const float* __restrict__ distortion_data = nullptr,
-	const Eigen::Vector2i distortion_resolution = Eigen::Vector2i::Zero()
+	const Eigen::Vector2i distortion_resolution = Eigen::Vector2i::Zero(),
+	const float dataset_scale = 1.f
 ) {
 	Eigen::Vector2f offset = ld_random_pixel_offset(snap_to_pixel_centers ? 0 : spp);
 	Eigen::Vector2f uv = (pixel.cast<float>() + offset).cwiseQuotient(resolution.cast<float>());
 
+	const Eigen::Vector3f shift = {parallax_shift.x(), parallax_shift.y(), 0.f};
 	Eigen::Vector3f dir;
-	if (camera_distortion.mode == ECameraDistortionMode::FTheta) {
-		dir = f_theta_undistortion(uv - screen_center, camera_distortion.params, {1000.f, 0.f, 0.f});
-		if (dir.x() == 1000.f) {
-			return {{1000.f, 0.f, 0.f}, {0.f, 0.f, 1.f}}; // return a point outside the aabb so the pixel is not rendered
-		}
-	} else if (camera_distortion.mode == ECameraDistortionMode::LatLong) {
-		dir = latlong_to_dir(uv);
-	} else {
-		dir = {
+
+	Eigen::Vector3f head_pos;
+	if(camera_mode == ECameraMode::Orthographic){
+		// 'dataset_scale' argument is only required by the orthographic camera.
+		// The focal length of Environment and Perspective cameras isn't affected by the change of dataset_scale,
+		// because all rays originate from the same point
+		dir = {0.f, 0.f, 1.f}; // Camera forward
+		head_pos = {
 			(uv.x() - screen_center.x()) * (float)resolution.x() / focal_length.x(),
 			(uv.y() - screen_center.y()) * (float)resolution.y() / focal_length.y(),
-			1.0f
+			0.0f
 		};
-		if (camera_distortion.mode == ECameraDistortionMode::Iterative) {
-			iterative_camera_undistortion(camera_distortion.params, &dir.x(), &dir.y());
+		head_pos *= dataset_scale;
+		head_pos += shift;
+		dir -= shift / parallax_shift.z(); // we could use focus_z here in the denominator. for now, we pack m_scale in here.
+	}
+	else if(camera_mode == ECameraMode::Environment){
+		// Camera convention: XYZ <-> Right Down Front
+		head_pos = {0.f, 0.f, 0.f};
+		const float phi = (uv.y()-0.5) * M_PI;
+		const float theta = (uv.x()-0.5) * 2.0 * M_PI;
+		const float cos_phi = std::cos(phi);
+		dir = {
+			cos_phi*std::sin(theta),
+			std::sin(phi),
+			cos_phi*std::cos(theta)
+		};
+		// Parallax isn't handled
+	}
+	else { // Perspective
+		head_pos = {0.f, 0.f, 0.f};
+		if (camera_distortion.mode == ECameraDistortionMode::FTheta) {
+			dir = f_theta_undistortion(uv - screen_center, camera_distortion.params, {1000.f, 0.f, 0.f});
+			if (dir.x() == 1000.f) {
+				return {{1000.f, 0.f, 0.f}, {0.f, 0.f, 1.f}}; // return a point outside the aabb so the pixel is not rendered
+			}
+		} else if (camera_distortion.mode == ECameraDistortionMode::LatLong) {
+			dir = latlong_to_dir(uv);
+		} else {
+			dir = {
+				(uv.x() - screen_center.x()) * (float)resolution.x() / focal_length.x(),
+				(uv.y() - screen_center.y()) * (float)resolution.y() / focal_length.y(),
+				1.0f
+			};
+			if (camera_distortion.mode == ECameraDistortionMode::Iterative) {
+				iterative_camera_undistortion(camera_distortion.params, &dir.x(), &dir.y());
+			}
 		}
-	}
-	if (distortion_data) {
-		dir.head<2>() += read_image<2>(distortion_data, distortion_resolution, uv);
+		if (distortion_data) {
+			dir.head<2>() += read_image<2>(distortion_data, distortion_resolution, uv);
+		}
+		head_pos += shift;
+		dir -= shift / parallax_shift.z(); // we could use focus_z here in the denominator. for now, we pack m_scale in here.
 	}
 
-	Eigen::Vector3f head_pos = {parallax_shift.x(), parallax_shift.y(), 0.f};
-	dir -= head_pos / parallax_shift.z(); // we could use focus_z here in the denominator. for now, we pack m_scale in here.
 	dir = camera_matrix.block<3, 3>(0, 0) * dir;
-
 	Eigen::Vector3f origin = camera_matrix.block<3, 3>(0, 0) * head_pos + camera_matrix.col(3);
+
 	if (dof == 0.0f) {
 		return {origin, dir};
 	}
@@ -323,16 +358,51 @@ inline __host__ __device__ Eigen::Vector2f pos_to_pixel(
 	const Eigen::Matrix<float, 3, 4>& camera_matrix,
 	const Eigen::Vector2f& screen_center,
 	const Eigen::Vector3f& parallax_shift,
-	const CameraDistortion& camera_distortion = {}
+	const ECameraMode camera_mode,
+	const CameraDistortion& camera_distortion = {},
+	const float dataset_scale = 1.f
 ) {
-	// Express ray in terms of camera frame
-	Eigen::Vector3f head_pos = {parallax_shift.x(), parallax_shift.y(), 0.f};
-	Eigen::Vector3f origin = camera_matrix.block<3, 3>(0, 0) * head_pos + camera_matrix.col(3);
+	// We get 'pos' as an input. We have pos = origin + alpha*dir, with unknown alpha
+	// tmp_dir = R^-1*(pos-t)
+	Eigen::Vector3f tmp_dir = camera_matrix.block<3, 3>(0, 0).inverse() * (pos - camera_matrix.col(3));
+	const Eigen::Vector3f shift = {parallax_shift.x(), parallax_shift.y(), 0.f};
 
-	Eigen::Vector3f dir = pos - origin;
-	dir = camera_matrix.block<3, 3>(0, 0).inverse() * dir;
-	dir /= dir.z();
-	dir += head_pos / parallax_shift.z();
+	if(camera_mode == ECameraMode::Orthographic){
+		// head_pos = {..., ..., 0}
+		// head_dir = {0,0,1}
+		// dir = R*(head_dir-shift/z)
+		// origin = R*(head_pos+shift) + t
+		tmp_dir -= shift;
+		const Eigen::Vector3f head_dir_minus_shift = Eigen::Vector3f(0.f, 0.f, 1.f) - shift/parallax_shift.z();
+		Eigen::Vector3f head_pos = tmp_dir - tmp_dir.z() * head_dir_minus_shift; // Gives head_pos.z=0 since head_dir_minus_shift.z=1
+		head_pos /= dataset_scale;
+		return {
+			head_pos.x() * focal_length.x() + screen_center.x() * resolution.x(),
+			head_pos.y() * focal_length.y() + screen_center.y() * resolution.y(),
+		};
+	}
+
+	if(camera_mode == ECameraMode::Environment){
+		// Parallax isn't handled
+		// head_dir = {..., ..., ...} with ||head_dir|| = 1
+		// dir = R*head_dir
+		// origin = t
+		tmp_dir = tmp_dir.normalized();
+		const float phi = std::asin(tmp_dir.y());
+		const float theta = std::atan2(tmp_dir.x(), tmp_dir.z());
+		return {
+			(0.5f + theta / (2.0*M_PI)) * resolution.x(),
+			(0.5f + phi / M_PI) * resolution.x(),
+		};
+	}
+
+	// Perspective
+	// head_dir = {..., ..., 1}
+	// dir = R*(head_dir-shift/z)
+	// origin = R*shift + t
+	tmp_dir -= shift;
+	tmp_dir /= tmp_dir.z();
+	Eigen::Vector3f dir = tmp_dir + shift / parallax_shift.z(); // Maintains dir.z=1 because shift.z=0
 
 	if (camera_distortion.mode == ECameraDistortionMode::Iterative) {
 		float du, dv;
@@ -362,7 +432,9 @@ inline __host__ __device__ Eigen::Vector2f motion_vector_3d(
 	const Eigen::Vector3f& parallax_shift,
 	const bool snap_to_pixel_centers,
 	const float depth,
-	const CameraDistortion& camera_distortion = {}
+	const ECameraMode camera_mode,
+	const CameraDistortion& camera_distortion = {},
+	const float dataset_scale = 1.f
 ) {
 	Ray ray = pixel_to_ray(
 		sample_index,
@@ -375,9 +447,11 @@ inline __host__ __device__ Eigen::Vector2f motion_vector_3d(
 		snap_to_pixel_centers,
 		1.0f,
 		0.0f,
+		camera_mode,
 		camera_distortion,
 		nullptr,
-		Eigen::Vector2i::Zero()
+		Eigen::Vector2i::Zero(),
+		dataset_scale
 	);
 
 	Eigen::Vector2f prev_pixel = pos_to_pixel(
@@ -387,7 +461,9 @@ inline __host__ __device__ Eigen::Vector2f motion_vector_3d(
 		prev_camera,
 		screen_center,
 		parallax_shift,
-		camera_distortion
+		camera_mode,
+		camera_distortion,
+		dataset_scale
 	);
 
 	return prev_pixel - (pixel.cast<float>() + ld_random_pixel_offset(sample_index));

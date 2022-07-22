@@ -238,6 +238,13 @@ PYBIND11_MODULE(pyngp, m) {
 		.value("Slice", ERenderMode::Slice)
 		.export_values();
 
+	py::enum_<ECameraMode>(m, "CameraMode")
+		.value("Perspective", ECameraMode::Perspective)
+		.value("Orthographic", ECameraMode::Orthographic)
+		.value("Environment", ECameraMode::Environment)
+		.export_values();
+
+
 	py::enum_<ERandomMode>(m, "RandomMode")
 		.value("Random", ERandomMode::Random)
 		.value("Halton", ERandomMode::Halton)
@@ -423,6 +430,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("shall_train_network", &Testbed::m_train_network)
 		.def_readwrite("render_groundtruth", &Testbed::m_render_ground_truth)
 		.def_readwrite("render_mode", &Testbed::m_render_mode)
+		.def_readwrite("camera_mode", &Testbed::m_camera_mode)
 		.def_readwrite("slice_plane_z", &Testbed::m_slice_plane_z)
 		.def_readwrite("dof", &Testbed::m_dof)
 		.def_readwrite("autofocus", &Testbed::m_autofocus)
