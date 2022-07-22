@@ -89,9 +89,9 @@ void Testbed::override_sdf_training_data(py::array_t<float> points, py::array_t<
 		distances_cpu[i] = dist;
 	}
 
-	CUDA_CHECK_THROW(cudaMemcpyAsync(m_sdf.training.positions.data(), points_cpu.data(), points_buf.shape[0] * points_buf.shape[1] * sizeof(float), cudaMemcpyHostToDevice, m_training_stream));
-	CUDA_CHECK_THROW(cudaMemcpyAsync(m_sdf.training.distances.data(), distances_cpu.data(), distances_buf.shape[0] * sizeof(float), cudaMemcpyHostToDevice, m_training_stream));
-	CUDA_CHECK_THROW(cudaStreamSynchronize(m_training_stream));
+	CUDA_CHECK_THROW(cudaMemcpyAsync(m_sdf.training.positions.data(), points_cpu.data(), points_buf.shape[0] * points_buf.shape[1] * sizeof(float), cudaMemcpyHostToDevice, m_stream.get()));
+	CUDA_CHECK_THROW(cudaMemcpyAsync(m_sdf.training.distances.data(), distances_cpu.data(), distances_buf.shape[0] * sizeof(float), cudaMemcpyHostToDevice, m_stream.get()));
+	CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
 	m_sdf.training.size = points_buf.shape[0];
 	m_sdf.training.idx = 0;
 	m_sdf.training.max_size = m_sdf.training.size;

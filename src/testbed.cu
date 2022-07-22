@@ -2415,9 +2415,6 @@ Testbed::Testbed(ETestbedMode mode)
 	set_exposure(0);
 	set_min_level(0.f);
 	set_max_level(1.f);
-
-	CUDA_CHECK_THROW(cudaStreamCreate(&m_inference_stream));
-	m_training_stream = m_inference_stream;
 }
 
 Testbed::~Testbed() {
@@ -2446,14 +2443,14 @@ void Testbed::train(uint32_t batch_size) {
 		}};
 
 		switch (m_testbed_mode) {
-			case ETestbedMode::Nerf:   training_prep_nerf(batch_size, m_training_stream);  break;
-			case ETestbedMode::Sdf:    training_prep_sdf(batch_size, m_training_stream);   break;
-			case ETestbedMode::Image:  training_prep_image(batch_size, m_training_stream); break;
-			case ETestbedMode::Volume: training_prep_volume(batch_size, m_training_stream); break;
+			case ETestbedMode::Nerf: training_prep_nerf(batch_size, m_stream.get()); break;
+			case ETestbedMode::Sdf: training_prep_sdf(batch_size, m_stream.get()); break;
+			case ETestbedMode::Image: training_prep_image(batch_size, m_stream.get()); break;
+			case ETestbedMode::Volume: training_prep_volume(batch_size, m_stream.get()); break;
 			default: throw std::runtime_error{"Invalid training mode."};
 		}
 
-		CUDA_CHECK_THROW(cudaStreamSynchronize(m_training_stream));
+		CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
 	}
 
 	// Find leaf optimizer and update its settings
@@ -2474,14 +2471,14 @@ void Testbed::train(uint32_t batch_size) {
 		}};
 
 		switch (m_testbed_mode) {
-			case ETestbedMode::Nerf:   train_nerf(batch_size, get_loss_scalar, m_training_stream); break;
-			case ETestbedMode::Sdf:    train_sdf(batch_size, get_loss_scalar, m_training_stream); break;
-			case ETestbedMode::Image:  train_image(batch_size, get_loss_scalar, m_training_stream); break;
-			case ETestbedMode::Volume: train_volume(batch_size, get_loss_scalar, m_training_stream); break;
+			case ETestbedMode::Nerf:   train_nerf(batch_size, get_loss_scalar, m_stream.get()); break;
+			case ETestbedMode::Sdf:    train_sdf(batch_size, get_loss_scalar, m_stream.get()); break;
+			case ETestbedMode::Image:  train_image(batch_size, get_loss_scalar, m_stream.get()); break;
+			case ETestbedMode::Volume: train_volume(batch_size, get_loss_scalar, m_stream.get()); break;
 			default: throw std::runtime_error{"Invalid training mode."};
 		}
 
-		CUDA_CHECK_THROW(cudaStreamSynchronize(m_training_stream));
+		CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
 	}
 
 	if (get_loss_scalar) {
@@ -2574,7 +2571,7 @@ __global__ void dlss_prep_kernel(
 void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matrix<float, 3, 4>& camera_matrix1, const Vector4f& nerf_rolling_shutter, CudaRenderBuffer& render_buffer, bool to_srgb) {
 	Vector2i max_res = m_window_res.cwiseMax(render_buffer.in_resolution());
 
-	render_buffer.clear_frame(m_inference_stream);
+	render_buffer.clear_frame(m_stream.get());
 
 	Vector2f focal_length = calc_focal_length(render_buffer.in_resolution(), m_fov_axis, m_zoom);
 	Vector2f screen_center = render_screen_center();
@@ -2582,7 +2579,7 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 	switch (m_testbed_mode) {
 		case ETestbedMode::Nerf:
 			if (!m_render_ground_truth) {
-				render_nerf(render_buffer, max_res, focal_length, camera_matrix0, camera_matrix1, nerf_rolling_shutter, screen_center, m_inference_stream);
+				render_nerf(render_buffer, max_res, focal_length, camera_matrix0, camera_matrix1, nerf_rolling_shutter, screen_center, m_stream.get());
 			}
 			break;
 		case ETestbedMode::Sdf:
@@ -2603,7 +2600,7 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 							m_sdf.brick_data.data(),
 							m_sdf.triangles_gpu.data(),
 							false,
-							m_inference_stream
+							m_stream.get()
 						);
 					}
 				}
@@ -2632,7 +2629,7 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 								distances.data(),
 								m_sdf.triangles_gpu.data(),
 								false,
-								m_training_stream
+								m_stream.get()
 							);
 						}
 					} : (distance_fun_t)[&](uint32_t n_elements, const GPUMemory<Vector3f>& positions, GPUMemory<float>& distances, cudaStream_t stream) {
@@ -2668,15 +2665,15 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 					focal_length,
 					camera_matrix0,
 					screen_center,
-					m_inference_stream
+					m_stream.get()
 				);
 			}
 			break;
 		case ETestbedMode::Image:
-			render_image(render_buffer, m_inference_stream);
+			render_image(render_buffer, m_stream.get());
 			break;
 		case ETestbedMode::Volume:
-			render_volume(render_buffer, focal_length, camera_matrix0, screen_center, m_inference_stream);
+			render_volume(render_buffer, focal_length, camera_matrix0, screen_center, m_stream.get());
 			break;
 		default:
 			throw std::runtime_error{"Invalid render mode."};
@@ -2699,7 +2696,7 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 			throw std::runtime_error{"Motion vectors don't support parallax shift."};
 		}
 
-		dlss_prep_kernel<<<blocks, threads, 0, m_inference_stream>>>(
+		dlss_prep_kernel<<<blocks, threads, 0, m_stream.get()>>>(
 			m_testbed_mode,
 			res,
 			render_buffer.spp(),
@@ -2728,8 +2725,8 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 	m_prev_scale = m_scale;
 	m_image.prev_pos = m_image.pos;
 
-	render_buffer.accumulate(m_exposure, m_inference_stream);
-	render_buffer.tonemap(m_exposure, m_background_color, to_srgb ? EColorSpace::SRGB : EColorSpace::Linear, m_inference_stream);
+	render_buffer.accumulate(m_exposure, m_stream.get());
+	render_buffer.tonemap(m_exposure, m_background_color, to_srgb ? EColorSpace::SRGB : EColorSpace::Linear, m_stream.get());
 
 	if (m_testbed_mode == ETestbedMode::Nerf) {
 		// Overlay the ground truth image if requested
@@ -2747,7 +2744,7 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 				m_fov_axis,
 				m_zoom,
 				Vector2f::Constant(0.5f),
-				m_inference_stream
+				m_stream.get()
 			);
 		}
 
@@ -2767,13 +2764,13 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 			const float* aligned_err_data_s = (const float*)(((size_t)err_data)&~15);
 			const float* aligned_err_data_e = (const float*)(((size_t)(err_data+emap_size))&~15);
 			size_t reduce_size = aligned_err_data_e - aligned_err_data_s;
-			reduce_sum(aligned_err_data_s, [reduce_size] __device__ (float val) { return max(val,0.f) / (reduce_size); }, average_error.data(), reduce_size, m_inference_stream);
+			reduce_sum(aligned_err_data_s, [reduce_size] __device__ (float val) { return max(val,0.f) / (reduce_size); }, average_error.data(), reduce_size, m_stream.get());
 			auto const &metadata = m_nerf.training.dataset.metadata[m_nerf.training.view];
-			render_buffer.overlay_false_color(metadata.resolution, to_srgb, m_fov_axis, m_inference_stream, err_data, error_map_res, average_error.data(), m_nerf.training.error_overlay_brightness, m_render_ground_truth);
+			render_buffer.overlay_false_color(metadata.resolution, to_srgb, m_fov_axis, m_stream.get(), err_data, error_map_res, average_error.data(), m_nerf.training.error_overlay_brightness, m_render_ground_truth);
 		}
 	}
 
-	CUDA_CHECK_THROW(cudaStreamSynchronize(m_inference_stream));
+	CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
 }
 
 void Testbed::determine_autofocus_target_from_pixel(const Vector2i& focus_pixel) {
@@ -2838,9 +2835,9 @@ void Testbed::gather_histograms() {
 		uint32_t n = m_network->layer_sizes().front().second;
 		std::vector<float> first_layer_rm(m * n);
 
-		CUDA_CHECK_THROW(cudaMemcpyAsync(grid.data(), m_trainer->params() + first_encoder, grid.size() * sizeof(float), cudaMemcpyDeviceToHost, m_training_stream));
-		CUDA_CHECK_THROW(cudaMemcpyAsync(first_layer_rm.data(), m_trainer->params(), first_layer_rm.size() * sizeof(float), cudaMemcpyDeviceToHost, m_training_stream));
-		CUDA_CHECK_THROW(cudaStreamSynchronize(m_training_stream));
+		CUDA_CHECK_THROW(cudaMemcpyAsync(grid.data(), m_trainer->params() + first_encoder, grid.size() * sizeof(float), cudaMemcpyDeviceToHost, m_stream.get()));
+		CUDA_CHECK_THROW(cudaMemcpyAsync(first_layer_rm.data(), m_trainer->params(), first_layer_rm.size() * sizeof(float), cudaMemcpyDeviceToHost, m_stream.get()));
+		CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
 
 
 		for (int l = 0; l < m_num_levels; ++l) {

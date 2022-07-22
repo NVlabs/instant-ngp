@@ -2805,7 +2805,7 @@ void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaS
 		m_nerf.training.counters_rgb.numsteps_counter.data(),
 		m_nerf.training.counters_rgb.numsteps_counter_compacted.data(),
 		m_nerf.training.counters_rgb.loss.data(),
-		m_training_stream
+		m_stream.get()
 	);
 
 	m_trainer->optimizer_step(stream, LOSS_SCALE);
@@ -3276,10 +3276,10 @@ void Testbed::optimise_mesh_step(uint32_t n_steps) {
 	GPUMatrix<float> positions_matrix((float*)coords.data(), floats_per_coord, n_verts);
 	GPUMatrix<network_precision_t, RM> density_matrix(mlp_out.data(), padded_output_width, n_verts);
 
-	const float* extra_dims_gpu = get_inference_extra_dims(m_inference_stream);
+	const float* extra_dims_gpu = get_inference_extra_dims(m_stream.get());
 
 	for (uint32_t i = 0; i < n_steps; ++i) {
-		linear_kernel(generate_nerf_network_inputs_from_positions, 0, m_inference_stream,
+		linear_kernel(generate_nerf_network_inputs_from_positions, 0, m_stream.get(),
 			n_verts,
 			m_aabb,
 			m_mesh.verts.data(),
@@ -3288,9 +3288,9 @@ void Testbed::optimise_mesh_step(uint32_t n_steps) {
 		);
 
 		// For each optimizer step, we need the density at the given pos...
-		m_nerf_network->density(m_inference_stream, positions_matrix, density_matrix);
+		m_nerf_network->density(m_stream.get(), positions_matrix, density_matrix);
 		// ...as well as the input gradient w.r.t. density, which we will store in the nerf coords.
-		m_nerf_network->input_gradient(m_inference_stream, 3, positions_matrix, positions_matrix);
+		m_nerf_network->input_gradient(m_stream.get(), 3, positions_matrix, positions_matrix);
 		// and the 1ring centroid for laplacian smoothing
 		compute_mesh_1ring(m_mesh.verts, m_mesh.indices, m_mesh.verts_smoothed, m_mesh.vert_normals);
 
@@ -3310,7 +3310,7 @@ void Testbed::optimise_mesh_step(uint32_t n_steps) {
 		);
 
 		// ...that we can pass to the optimizer.
-		m_mesh.verts_optimizer->step(m_inference_stream, 1.0f, (float*)m_mesh.verts.data(), (float*)m_mesh.verts.data(), (float*)m_mesh.verts_gradient.data());
+		m_mesh.verts_optimizer->step(m_stream.get(), 1.0f, (float*)m_mesh.verts.data(), (float*)m_mesh.verts.data(), (float*)m_mesh.verts_gradient.data());
 	}
 }
 
@@ -3324,7 +3324,7 @@ void Testbed::compute_mesh_vertex_colors() {
 	m_mesh.vert_colors.memset(0);
 
 	if (m_testbed_mode == ETestbedMode::Nerf) {
-		const float* extra_dims_gpu = get_inference_extra_dims(m_inference_stream);
+		const float* extra_dims_gpu = get_inference_extra_dims(m_stream.get());
 
 		const uint32_t floats_per_coord = sizeof(NerfCoordinate) / sizeof(float) + m_nerf_network->n_extra_dims();
 		const uint32_t extra_stride = m_nerf_network->n_extra_dims() * sizeof(float);
@@ -3333,9 +3333,9 @@ void Testbed::compute_mesh_vertex_colors() {
 
 		GPUMatrix<float> positions_matrix((float*)coords.data(), floats_per_coord, n_verts);
 		GPUMatrix<float> color_matrix(mlp_out.data(), 4, n_verts);
-		linear_kernel(generate_nerf_network_inputs_from_positions, 0, m_inference_stream, n_verts, m_aabb, m_mesh.verts.data(), PitchedPtr<NerfCoordinate>((NerfCoordinate*)coords.data(), 1, 0, extra_stride), extra_dims_gpu);
-		m_network->inference(m_inference_stream, positions_matrix, color_matrix);
-		linear_kernel(extract_srgb_with_activation, 0, m_inference_stream, n_verts * 3, 3, mlp_out.data(), (float*)m_mesh.vert_colors.data(), m_nerf.rgb_activation, m_nerf.training.linear_colors);
+		linear_kernel(generate_nerf_network_inputs_from_positions, 0, m_stream.get(), n_verts, m_aabb, m_mesh.verts.data(), PitchedPtr<NerfCoordinate>((NerfCoordinate*)coords.data(), 1, 0, extra_stride), extra_dims_gpu);
+		m_network->inference(m_stream.get(), positions_matrix, color_matrix);
+		linear_kernel(extract_srgb_with_activation, 0, m_stream.get(), n_verts * 3, 3, mlp_out.data(), (float*)m_mesh.vert_colors.data(), m_nerf.rgb_activation, m_nerf.training.linear_colors);
 	}
 }
 
@@ -3352,7 +3352,7 @@ GPUMemory<float> Testbed::get_density_on_grid(Vector3i res3d, const BoundingBox&
 	auto scratch = allocate_workspace_and_distribute<
 		NerfPosition,
 		network_precision_t
-	>(m_inference_stream, &alloc, n_elements, batch_size * padded_output_width);
+	>(m_stream.get(), &alloc, n_elements, batch_size * padded_output_width);
 
 	NerfPosition* positions = std::get<0>(scratch);
 	network_precision_t* mlp_out = std::get<1>(scratch);
@@ -3361,7 +3361,7 @@ GPUMemory<float> Testbed::get_density_on_grid(Vector3i res3d, const BoundingBox&
 	const dim3 blocks = { div_round_up((uint32_t)res3d.x(), threads.x), div_round_up((uint32_t)res3d.y(), threads.y), div_round_up((uint32_t)res3d.z(), threads.z) };
 
 	BoundingBox unit_cube = BoundingBox{Vector3f::Zero(), Vector3f::Ones()};
-	generate_grid_samples_nerf_uniform<<<blocks, threads, 0, m_inference_stream>>>(res3d, m_nerf.density_grid_ema_step, aabb, render_aabb_to_local, nerf_mode ? m_aabb : unit_cube , positions);
+	generate_grid_samples_nerf_uniform<<<blocks, threads, 0, m_stream.get()>>>(res3d, m_nerf.density_grid_ema_step, aabb, render_aabb_to_local, nerf_mode ? m_aabb : unit_cube , positions);
 
 	// Only process 1m elements at a time
 	for (uint32_t offset = 0; offset < n_elements; offset += batch_size) {
@@ -3371,11 +3371,11 @@ GPUMemory<float> Testbed::get_density_on_grid(Vector3i res3d, const BoundingBox&
 
 		GPUMatrix<float> positions_matrix((float*)(positions + offset), sizeof(NerfPosition)/sizeof(float), local_batch_size);
 		if (nerf_mode) {
-			m_nerf_network->density(m_inference_stream, positions_matrix, density_matrix);
+			m_nerf_network->density(m_stream.get(), positions_matrix, density_matrix);
 		} else {
-			m_network->inference_mixed_precision(m_inference_stream, positions_matrix, density_matrix);
+			m_network->inference_mixed_precision(m_stream.get(), positions_matrix, density_matrix);
 		}
-		linear_kernel(grid_samples_half_to_float, 0, m_inference_stream,
+		linear_kernel(grid_samples_half_to_float, 0, m_stream.get(),
 			local_batch_size,
 			m_aabb,
 			density.data() + offset , //+ axis_step * n_elements,
@@ -3399,7 +3399,7 @@ GPUMemory<Eigen::Array4f> Testbed::get_rgba_on_grid(Vector3i res3d, Eigen::Vecto
 	// generate inputs
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)res3d.x(), threads.x), div_round_up((uint32_t)res3d.y(), threads.y), div_round_up((uint32_t)res3d.z(), threads.z) };
-	generate_grid_samples_nerf_uniform_dir<<<blocks, threads, 0, m_inference_stream>>>(res3d, m_nerf.density_grid_ema_step, m_render_aabb, m_render_aabb_to_local, m_aabb, ray_dir, positions.data());
+	generate_grid_samples_nerf_uniform_dir<<<blocks, threads, 0, m_stream.get()>>>(res3d, m_nerf.density_grid_ema_step, m_render_aabb, m_render_aabb_to_local, m_aabb, ray_dir, positions.data());
 
 	// Only process 1m elements at a time
 	for (uint32_t offset = 0; offset < n_elements; offset += batch_size) {
@@ -3408,10 +3408,10 @@ GPUMemory<Eigen::Array4f> Testbed::get_rgba_on_grid(Vector3i res3d, Eigen::Vecto
 		// run network
 		GPUMatrix<float> positions_matrix((float*) (positions.data() + offset), sizeof(NerfCoordinate)/sizeof(float), local_batch_size);
 		GPUMatrix<float> rgbsigma_matrix((float*) (rgba.data() + offset), 4, local_batch_size);
-		m_network->inference(m_inference_stream, positions_matrix, rgbsigma_matrix);
+		m_network->inference(m_stream.get(), positions_matrix, rgbsigma_matrix);
 
 		// convert network output to RGBA (in place)
-		linear_kernel(compute_nerf_density, 0, m_inference_stream, local_batch_size, rgba.data() + offset, m_nerf.rgb_activation, m_nerf.density_activation);
+		linear_kernel(compute_nerf_density, 0, m_stream.get(), local_batch_size, rgba.data() + offset, m_nerf.rgb_activation, m_nerf.density_activation);
 	}
 	return rgba;
 }
@@ -3426,7 +3426,7 @@ int Testbed::marching_cubes(Vector3i res3d, const BoundingBox& aabb, const Matri
 	}
 
 	GPUMemory<float> density = get_density_on_grid(res3d, aabb, render_aabb_to_local);
-	marching_cubes_gpu(m_inference_stream, aabb, render_aabb_to_local, res3d, thresh, density, m_mesh.verts, m_mesh.indices);
+	marching_cubes_gpu(m_stream.get(), aabb, render_aabb_to_local, res3d, thresh, density, m_mesh.verts, m_mesh.indices);
 
 	uint32_t n_verts = (uint32_t)m_mesh.verts.size();
 	m_mesh.verts_gradient.resize(n_verts);

@@ -1057,7 +1057,7 @@ void Testbed::load_mesh() {
 		m_sdf.triangle_bvh = TriangleBvh::make();
 	m_sdf.triangle_bvh->build(m_sdf.triangles_cpu, 8);
 	m_sdf.triangles_gpu.resize_and_copy_from_host(m_sdf.triangles_cpu);
-	m_sdf.triangle_bvh->build_optix(m_sdf.triangles_gpu, m_inference_stream);
+	m_sdf.triangle_bvh->build_optix(m_sdf.triangles_gpu, m_stream.get());
 
 	m_sdf.triangle_octree.reset(new TriangleOctree{});
 	m_sdf.triangle_octree->build(*m_sdf.triangle_bvh, m_sdf.triangles_cpu, 10);
@@ -1193,13 +1193,13 @@ GPUMemory<float> Testbed::get_sdf_gt_on_grid(Vector3i res3d, const BoundingBox& 
 	GPUMemoryArena::Allocation alloc;
 	auto scratch = allocate_workspace_and_distribute<
 		Vector3f
-	>(m_inference_stream, &alloc, n_elements);
+	>(m_stream.get(), &alloc, n_elements);
 	Vector3f* positions = std::get<0>(scratch);
 	float* sdf_out = density.data();
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)res3d.x(), threads.x), div_round_up((uint32_t)res3d.y(), threads.y), div_round_up((uint32_t)res3d.z(), threads.z) };
-	generate_grid_samples_sdf_uniform<<<blocks, threads, 0, m_inference_stream>>>(res3d, aabb, render_aabb_to_local, positions);
-	CUDA_CHECK_THROW(cudaStreamSynchronize(m_inference_stream));
+	generate_grid_samples_sdf_uniform<<<blocks, threads, 0, m_stream.get()>>>(res3d, aabb, render_aabb_to_local, positions);
+	CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
 	m_sdf.triangle_bvh->signed_distance_gpu(
 			n_elements,
 			m_sdf.mesh_sdf_mode,
@@ -1207,9 +1207,9 @@ GPUMemory<float> Testbed::get_sdf_gt_on_grid(Vector3i res3d, const BoundingBox& 
 			sdf_out,
 			m_sdf.triangles_gpu.data(),
 			false,
-			m_inference_stream
+			m_stream.get()
 		);
-	CUDA_CHECK_THROW(cudaStreamSynchronize(m_inference_stream));
+	CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
 	/*
 	std::vector<float> cpudensity(density.size());
 	std::vector<Vector3f> cpupositions(n_elements);
@@ -1263,7 +1263,7 @@ void Testbed::training_prep_sdf(uint32_t batch_size, cudaStream_t stream) {
 // set it to a fraction near 1 to use a sliding EMA
 // if blocking is false, then this returns the iou from the *last* call
 double Testbed::calculate_iou(uint32_t n_samples, float scale_existing_results_factor, bool blocking, bool force_use_octree) {
-	cudaStream_t stream = m_training_stream;
+	cudaStream_t stream = m_stream.get();
 	uint32_t countercpu[8];
 	m_sdf.iou_counter.enlarge(8);
 	if (!blocking) // when not blocking, returns data from the *last* run, then kicks off work to accumulate some more samples
