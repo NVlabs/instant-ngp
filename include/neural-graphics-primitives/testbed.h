@@ -86,7 +86,7 @@ public:
 			const BoundingBox& aabb,
 			float floor_y,
 			float plane_z,
-			float dof,
+			float aperture_size,
 			const float* envmap_data,
 			const Eigen::Vector2i& envmap_resolution,
 			Eigen::Array4f* frame_buffer,
@@ -144,7 +144,7 @@ public:
 			const BoundingBox& render_aabb,
 			const Eigen::Matrix3f& render_aabb_to_local,
 			float plane_z,
-			float dof,
+			float aperture_size,
 			const CameraDistortion& camera_distortion,
 			const float* envmap_data,
 			const Eigen::Vector2i& envmap_resolution,
@@ -446,7 +446,7 @@ public:
 	float m_last_render_res_factor = 1.0f;
 	float m_scale = 1.0;
 	float m_prev_scale = 1.0;
-	float m_dof = 0.0f;
+	float m_aperture_size = 0.0f;
 	Eigen::Vector2f m_relative_focal_length = Eigen::Vector2f::Ones();
 	uint32_t m_fov_axis = 1;
 	float m_zoom = 1.f; // 2d zoom factor (for insets?)

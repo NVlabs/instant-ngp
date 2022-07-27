@@ -1783,7 +1783,7 @@ __global__ void init_rays_with_payload_kernel_nerf(
 	BoundingBox render_aabb,
 	Matrix3f render_aabb_to_local,
 	float plane_z,
-	float dof,
+	float aperture_size,
 	CameraDistortion camera_distortion,
 	const float* __restrict__ envmap_data,
 	const Vector2i envmap_resolution,
@@ -1803,7 +1803,7 @@ __global__ void init_rays_with_payload_kernel_nerf(
 	uint32_t idx = x + resolution.x() * y;
 
 	if (plane_z < 0) {
-		dof = 0.0;
+		aperture_size = 0.0;
 	}
 
 
@@ -1821,7 +1821,7 @@ __global__ void init_rays_with_payload_kernel_nerf(
 		parallax_shift,
 		snap_to_pixel_centers,
 		plane_z,
-		dof,
+		aperture_size,
 		camera_distortion,
 		distortion_data,
 		distortion_resolution
@@ -1959,7 +1959,7 @@ void Testbed::NerfTracer::init_rays_from_camera(
 	const BoundingBox& render_aabb,
 	const Matrix3f& render_aabb_to_local,
 	float plane_z,
-	float dof,
+	float aperture_size,
 	const CameraDistortion& camera_distortion,
 	const float* envmap_data,
 	const Vector2i& envmap_resolution,
@@ -1993,7 +1993,7 @@ void Testbed::NerfTracer::init_rays_from_camera(
 		render_aabb,
 		render_aabb_to_local,
 		plane_z,
-		dof,
+		aperture_size,
 		camera_distortion,
 		envmap_data,
 		envmap_resolution,
@@ -2252,7 +2252,7 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 		m_render_aabb,
 		m_render_aabb_to_local,
 		plane_z,
-		m_dof,
+		m_aperture_size,
 		camera_distortion,
 		m_envmap.envmap->params_inference(),
 		m_envmap.resolution,

@@ -396,7 +396,7 @@ void Testbed::imgui() {
 			snprintf(path_filename_buf, sizeof(path_filename_buf), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, "_cam.json").c_str());
 		}
 
-		if (m_camera_path.imgui(path_filename_buf, m_render_ms.val(), m_camera, m_slice_plane_z, m_scale, fov(), m_dof, m_bounding_radius, !m_nerf.training.dataset.xforms.empty() ? m_nerf.training.dataset.xforms[0].start : Matrix<float, 3, 4>::Identity())) {
+		if (m_camera_path.imgui(path_filename_buf, m_render_ms.val(), m_camera, m_slice_plane_z, m_scale, fov(), m_aperture_size, m_bounding_radius, !m_nerf.training.dataset.xforms.empty() ? m_nerf.training.dataset.xforms[0].start : Matrix<float, 3, 4>::Identity())) {
 			if (m_camera_path.m_update_cam_from_path) {
 				set_camera_from_time(m_camera_path.m_playtime);
 				if (read > 1) {
@@ -823,7 +823,7 @@ void Testbed::imgui() {
 	}
 
 	if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
-		if (ImGui::SliderFloat("Depth of field", &m_dof, 0.0f, 0.1f)) {
+		if (ImGui::SliderFloat("Aperture size", &m_aperture_size, 0.0f, 0.1f)) {
 			m_dlss = false;
 			accum_reset = true;
 		}
@@ -862,7 +862,7 @@ void Testbed::imgui() {
 				"testbed.view_dir = [%0.3f,%0.3f,%0.3f]\n"
 				"testbed.look_at = [%0.3f,%0.3f,%0.3f]\n"
 				"testbed.scale = %0.3f\n"
-				"testbed.fov,testbed.dof,testbed.slice_plane_z = %0.3f,%0.3f,%0.3f\n"
+				"testbed.fov,testbed.aperture_size,testbed.slice_plane_z = %0.3f,%0.3f,%0.3f\n"
 				"testbed.autofocus_target = [%0.3f,%0.3f,%0.3f]\n"
 				"testbed.autofocus = %s\n\n"
 				, b.x(), b.y(), b.z(), b.w()
@@ -872,7 +872,7 @@ void Testbed::imgui() {
 				, v.x(), v.y(), v.z()
 				, p.x(), p.y(), p.z()
 				, scale()
-				, fov(), m_dof, m_slice_plane_z
+				, fov(), m_aperture_size, m_slice_plane_z
 				, m_autofocus_target.x(), m_autofocus_target.y(), m_autofocus_target.z()
 				, m_autofocus ? "True" : "False"
 			);
@@ -1601,7 +1601,7 @@ void Testbed::train_and_render(bool skip_rendering) {
 
 		if (m_dlss) {
 			render_buffer.enable_dlss(m_window_res);
-			m_dof = 0.0f;
+			m_aperture_size = 0.0f;
 		} else {
 			render_buffer.disable_dlss();
 		}
@@ -2026,7 +2026,7 @@ void Testbed::apply_camera_smoothing(float elapsed_ms) {
 }
 
 CameraKeyframe Testbed::copy_camera_to_keyframe() const {
-	return CameraKeyframe(m_camera, m_slice_plane_z, m_scale, fov(), m_dof );
+	return CameraKeyframe(m_camera, m_slice_plane_z, m_scale, fov(), m_aperture_size);
 }
 
 void Testbed::set_camera_from_keyframe(const CameraKeyframe& k) {
@@ -2034,7 +2034,7 @@ void Testbed::set_camera_from_keyframe(const CameraKeyframe& k) {
 	m_slice_plane_z = k.slice;
 	m_scale = k.scale;
 	set_fov(k.fov);
-	m_dof = k.dof;
+	m_aperture_size = k.aperture_size;
 }
 
 void Testbed::set_camera_from_time(float t) {
@@ -2797,7 +2797,7 @@ void Testbed::autofocus() {
 	float new_slice_plane_z = std::max(view_dir().dot(m_autofocus_target - view_pos()), 0.1f) - m_scale;
 	if (new_slice_plane_z != m_slice_plane_z) {
 		m_slice_plane_z = new_slice_plane_z;
-		if (m_dof != 0.0f) {
+		if (m_aperture_size != 0.0f) {
 			reset_accumulation();
 		}
 	}
