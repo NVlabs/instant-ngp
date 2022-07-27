@@ -983,12 +983,30 @@ void Testbed::imgui() {
 				ImGui::SameLine();
 				if (imgui_colored_button("Save RGBA PNG sequence", 0.2f)) {
 					auto effective_view_dir = flip_y_and_z_axes ? Vector3f{0.0f, 1.0f, 0.0f} : Vector3f{0.0f, 0.0f, 1.0f};
-					GPUMemory<Array4f> rgba = get_rgba_on_grid(res3d, effective_view_dir);
+					GPUMemory<Array4f> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, true);
 					auto dir = m_data_path / "rgba_slices";
 					if (!dir.exists()) {
 						fs::create_directory(dir);
 					}
 					save_rgba_grid_to_png_sequence(rgba, dir.str().c_str(), res3d, flip_y_and_z_axes);
+				}
+				if (imgui_colored_button("Save raw volumes", 0.4f)) {
+					auto effective_view_dir = flip_y_and_z_axes ? Vector3f{0.0f, 1.0f, 0.0f} : Vector3f{0.0f, 0.0f, 1.0f};
+					auto old_local = m_render_aabb_to_local;
+					auto old_aabb = m_render_aabb;
+					m_render_aabb_to_local = Eigen::Matrix3f::Identity();
+					auto dir = m_data_path / "volume_raw";
+					if (!dir.exists()) {
+						fs::create_directory(dir);
+					}
+					for (int cascade = 0; (1<<cascade)<= m_aabb.diag().x()+0.5f; ++cascade) {
+						float radius = (1<<cascade) * 0.5f;
+						m_render_aabb = BoundingBox(Eigen::Vector3f::Constant(0.5f-radius), Eigen::Vector3f::Constant(0.5f+radius));
+						GPUMemory<Array4f> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, false);
+						save_rgba_grid_to_raw_file(rgba, dir.str().c_str(), res3d, flip_y_and_z_axes, cascade);
+					}
+					m_render_aabb_to_local = old_local;
+					m_render_aabb = old_aabb;
 				}
 			}
 

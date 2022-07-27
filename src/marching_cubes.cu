@@ -1071,4 +1071,41 @@ void save_rgba_grid_to_png_sequence(const GPUMemory<Array4f>& rgba, const char* 
 	tlog::success() << "Wrote RGBA PNG sequence to " << path;
 }
 
+void save_rgba_grid_to_raw_file(const GPUMemory<Array4f>& rgba, const char* path, Vector3i res3d, bool swap_y_z, int cascade) {
+	std::vector<Array4f> rgba_cpu;
+	rgba_cpu.resize(rgba.size());
+	rgba.copy_to_host(rgba_cpu);
+
+	if (swap_y_z) {
+		res3d = {res3d.x(), res3d.z(), res3d.y()};
+	}
+
+	uint32_t w = res3d.x();
+	uint32_t h = res3d.y();
+	uint32_t d = res3d.z();
+	char filename[256];
+	snprintf(filename, sizeof(filename), "%s/%dx%dx%d_%d.bin", path, w, h, d, cascade);
+	FILE *f=fopen(filename,"wb");
+	if (!f)
+		return ;
+	const static float zero[4]={0.f,0.f,0.f,0.f};
+	int border = 1; // extra ring of voxels to make the donut hole smaller
+	for (int z = 0; z < d; ++z) {
+		for (int y = 0; y < h; ++y) {
+			for (int x = 0; x < w; ++x) {
+				size_t i = swap_y_z ? (x + z*res3d.x() + y*res3d.x()*res3d.z()) : (x + (res3d.y()-1-y)*res3d.x() + z*res3d.x()*res3d.y());
+				float* rgba = (float*)&rgba_cpu[i];
+				// the intention is that if cascade > 0, we have set up the render aabb such that we are outputing exactly one cascade of the nerf
+				// we then punch a transparent hole in the middle of each cascade, so that they fit together when placed on top of each other.
+				if (cascade && x>=res3d.x()/4+border && y>=res3d.y()/4+border && z>=res3d.z()/4+border && x<res3d.x()-res3d.x()/4-border && y<res3d.y()-res3d.y()/4-border && z<res3d.z()-res3d.z()/4-border)
+					fwrite(zero, sizeof(float), 4, f);
+				else
+					fwrite(rgba, sizeof(float), 4, f);
+			}
+		}
+	}
+	fclose(f);
+	tlog::success() << "Wrote RGBA raw file to " << filename;
+}
+
 NGP_NAMESPACE_END
