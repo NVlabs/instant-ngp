@@ -402,11 +402,10 @@ void Testbed::imgui() {
 				if (read > 1) {
 					m_smoothed_camera = m_camera;
 				}
-
-				reset_accumulation(true);
-			} else {
-				m_pip_render_surface->reset_accumulation();
 			}
+
+			m_pip_render_surface->reset_accumulation();
+			reset_accumulation(true);
 		}
 		if (!m_camera_path.m_keyframes.empty()) {
 			float w = ImGui::GetContentRegionAvail().x;
