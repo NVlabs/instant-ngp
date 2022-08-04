@@ -2052,8 +2052,8 @@ void Testbed::set_camera_from_keyframe(const CameraKeyframe& k) {
 	m_scale = k.scale;
 	set_fov(k.fov);
 	m_aperture_size = k.aperture_size;
-	m_nerf.glow_mode = k.glowmode;
-	m_nerf.glow_y_cutoff = k.glowpos;
+	m_nerf.glow_mode = k.glow_mode;
+	m_nerf.glow_y_cutoff = k.glow_y_cutoff;
 }
 
 void Testbed::set_camera_from_time(float t) {
