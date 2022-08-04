@@ -44,6 +44,9 @@ CameraKeyframe lerp(const CameraKeyframe& p0, const CameraKeyframe& p1, float t,
 		p0.scale + (p1.scale - p0.scale) * t,
 		p0.fov + (p1.fov - p0.fov) * t,
 		p0.aperture_size + (p1.aperture_size - p0.aperture_size) * t,
+		// Note, the glow mode from the previous frame is used, since the modes cannot be interpolated
+		p0.glowmode,
+		p0.glowpos + (p1.glowpos - p0.glowpos) * t
 	};
 }
 
@@ -69,7 +72,7 @@ CameraKeyframe spline(float t, const CameraKeyframe& p0, const CameraKeyframe& p
 }
 
 void to_json(json& j, const CameraKeyframe& p) {
-	j = json{{"R", p.R}, {"T", p.T}, {"slice", p.slice}, {"scale", p.scale}, {"fov", p.fov}, {"aperture_size", p.aperture_size}};
+	j = json{{"R", p.R}, {"T", p.T}, {"slice", p.slice}, {"scale", p.scale}, {"fov", p.fov}, {"aperture_size", p.aperture_size}, {"glowmode", p.glowmode}, {"glowpos", p.glowpos}};
 }
 
 bool load_relative_to_first=false; // set to true when using a camera path that is aligned with the first training image, such that it is invariant to changes in the space of the training data
@@ -99,6 +102,8 @@ void from_json(bool is_first, const json& j, CameraKeyframe& p, const CameraKeyf
 	j.at("scale").get_to(p.scale);
 	j.at("fov").get_to(p.fov);
 	if (j.contains("dof")) j.at("dof").get_to(p.aperture_size); else j.at("aperture_size").get_to(p.aperture_size);
+	if (j.contains("glowmode")) j.at("glowmode").get_to(p.glowmode); else return;
+	if (j.contains("glowpos")) j.at("glowpos").get_to(p.glowpos); else return;
 }
 
 
@@ -136,7 +141,7 @@ void CameraPath::load(const std::string& filepath_string, const Eigen::Matrix<fl
 }
 
 #ifdef NGP_GUI
-int CameraPath::imgui(char path_filename_buf[128], float frame_milliseconds, Matrix<float, 3, 4> &camera, float slice_plane_z, float scale, float fov, float aperture_size, float bounding_radius, const Eigen::Matrix<float, 3, 4> &first_xform) {
+int CameraPath::imgui(char path_filename_buf[128], float frame_milliseconds, Matrix<float, 3, 4> &camera, float slice_plane_z, float scale, float fov, float aperture_size, float bounding_radius, const Eigen::Matrix<float, 3, 4> &first_xform, int glowmode, float glowpos) {
 	int n=std::max(0,int(m_keyframes.size())-1);
 	int read= 0;					// 1=smooth, 2=hard
 	if (!m_keyframes.empty()) {
@@ -152,7 +157,7 @@ int CameraPath::imgui(char path_filename_buf[128], float frame_milliseconds, Mat
 		int i=(int)ceil(m_playtime*(float)n+0.001f);
 		if (i>m_keyframes.size()) i=m_keyframes.size();
 		if (i<0) i=0;
-		m_keyframes.insert(m_keyframes.begin()+i, CameraKeyframe(camera, slice_plane_z, scale, fov, aperture_size));
+		m_keyframes.insert(m_keyframes.begin()+i, CameraKeyframe(camera, slice_plane_z, scale, fov, aperture_size, glowmode, glowpos));
 		m_update_cam_from_path = false;
 		int n=std::max(0,int(m_keyframes.size())-1);
 		m_playtime = n ? float(i)/float(n) : 1.f;
@@ -178,7 +183,7 @@ int CameraPath::imgui(char path_filename_buf[128], float frame_milliseconds, Mat
 		if (ImGui::Button(">|")) { m_playtime=1.f; read=2;}						ImGui::SameLine();
 		if (ImGui::Button("Dup")) { m_update_cam_from_path=false; m_keyframes.insert(m_keyframes.begin()+i, m_keyframes[i]); m_playtime=i/float(n+1); read=2;} ImGui::SameLine();
 		if (ImGui::Button("Del")) { m_update_cam_from_path=false; m_keyframes.erase(m_keyframes.begin()+i); read=2;} ImGui::SameLine();
-		if (ImGui::Button("Set")) { m_keyframes[i]=CameraKeyframe(camera, slice_plane_z, scale, fov, aperture_size); read=2; if (n) m_playtime=i/float(n); }
+		if (ImGui::Button("Set")) { m_keyframes[i]=CameraKeyframe(camera, slice_plane_z, scale, fov, aperture_size, glowmode, glowpos); read=2; if (n) m_playtime=i/float(n); }
 
 		if (ImGui::RadioButton("Translate", m_gizmo_op == ImGuizmo::TRANSLATE))
 			m_gizmo_op = ImGuizmo::TRANSLATE;
@@ -223,6 +228,8 @@ int CameraPath::imgui(char path_filename_buf[128], float frame_milliseconds, Mat
 		if (ImGui::SliderFloat("Aperture size", &m_keyframes[i].aperture_size, 0.0f, 0.1f)) read=2;
 		if (ImGui::SliderFloat("Slice Z", &m_keyframes[i].slice, -bounding_radius, bounding_radius)) read=2;
 		if (ImGui::SliderFloat("Scale", &m_keyframes[i].scale, 0.f,10.f)) read=2;
+		if (ImGui::SliderInt("Glow Mode", &m_keyframes[i].glowmode, 0,16)) read=2;
+		if (ImGui::SliderFloat("Glow Y Cutoff", &m_keyframes[i].glowpos, -2.f,3.f)) read=2;
 	}
 	return m_keyframes.empty() ? 0 : read;
 }
