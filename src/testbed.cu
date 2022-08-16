@@ -615,6 +615,9 @@ void Testbed::imgui() {
 			accum_reset |= ImGui::SliderInt("training image latent code for inference", (int*)&m_nerf.extra_dim_idx_for_inference, 0, m_nerf.training.dataset.n_images-1);
 		}
 		accum_reset |= ImGui::Combo("Render mode", (int*)&m_render_mode, RenderModeStr);
+		if (m_testbed_mode == ETestbedMode::Nerf)  {
+			accum_reset |= ImGui::Combo("Groundtruth Render mode", (int*)&m_ground_truth_render_mode, GroundTruthRenderModeStr);
+		}
 		accum_reset |= ImGui::Combo("Color space", (int*)&m_color_space, ColorSpaceStr);
 		accum_reset |= ImGui::Combo("Tonemap curve", (int*)&m_tonemap_curve, TonemapCurveStr);
 		accum_reset |= ImGui::ColorEdit4("Background", &m_background_color[0]);
@@ -2748,19 +2751,33 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 		if (m_render_ground_truth) {
 			float alpha=1.f;
 			auto const& metadata = m_nerf.training.dataset.metadata[m_nerf.training.view];
-			render_buffer.overlay_image(
-				alpha,
-				Array3f::Constant(m_exposure) + m_nerf.training.cam_exposure[m_nerf.training.view].variable(),
-				m_background_color,
-				to_srgb ? EColorSpace::SRGB : EColorSpace::Linear,
-				metadata.pixels,
-				metadata.image_data_type,
-				metadata.resolution,
-				m_fov_axis,
-				m_zoom,
-				Vector2f::Constant(0.5f),
-				m_stream.get()
-			);
+			if(m_ground_truth_render_mode == EGroundTruthRenderMode::Shade) {
+				render_buffer.overlay_image(
+					alpha,
+					Array3f::Constant(m_exposure) + m_nerf.training.cam_exposure[m_nerf.training.view].variable(),
+					m_background_color,
+					to_srgb ? EColorSpace::SRGB : EColorSpace::Linear,
+					metadata.pixels,
+					metadata.image_data_type,
+					metadata.resolution,
+					m_fov_axis,
+					m_zoom,
+					Vector2f::Constant(0.5f),
+					m_stream.get()
+				);
+			}
+			else if(m_ground_truth_render_mode == EGroundTruthRenderMode::Depth && metadata.depth) {
+                render_buffer.overlay_depth(
+                    alpha,
+                    metadata.depth,
+					1.0f/m_nerf.training.dataset.scale,
+                    metadata.resolution,
+                    m_fov_axis,
+                    m_zoom,
+					Vector2f::Constant(0.5f),
+                    m_stream.get()
+                ); 
+			}
 		}
 
 		// Visualize the accumulated error map if requested
