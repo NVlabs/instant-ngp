@@ -768,9 +768,7 @@ void Testbed::imgui() {
 				set_visualized_layer(m_visualized_layer);
 			}
 			if (ImGui::Checkbox("Single view", &m_single_view)) {
-				if (!m_single_view) {
-					set_visualized_dim(-1);
-				}
+				set_visualized_dim(-1);
 				accum_reset = true;
 			}
 
