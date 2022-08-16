@@ -12,15 +12,15 @@
  *  @author Thomas Müller & Alex Evans, NVIDIA
  */
 
-#include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/common_device.cuh>
-#include <neural-graphics-primitives/render_buffer.h>
+#include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/random_val.cuh>
+#include <neural-graphics-primitives/render_buffer.h>
 #include <neural-graphics-primitives/testbed.h>
 
 #include <tiny-cuda-nn/gpu_matrix.h>
-#include <tiny-cuda-nn/network.h>
 #include <tiny-cuda-nn/network_with_input_encoding.h>
+#include <tiny-cuda-nn/network.h>
 #include <tiny-cuda-nn/trainer.h>
 
 #include <fstream>
@@ -417,43 +417,6 @@ void Testbed::load_binary_image() {
 
 	size_t n_pixels = (size_t)m_image.resolution.x() * m_image.resolution.y();
 	m_image.data.resize(n_pixels * 4 * sizeof(__half));
-
-	// Can directly copy to GPU memory!
-	// TODO: uncomment once GDS works everywhere
-	// {
-	// 	int fd = open(m_data_path.string().c_str(), O_DIRECT);
-
-	// 	CUfileError_t status;
-	// 	CUfileDescr_t cf_descr;
-	// 	CUfileHandle_t cf_handle;
-	// 	memset((void *)&cf_descr, 0, sizeof(CUfileDescr_t));
-	// 	cf_descr.handle.fd = fd;
-	// 	cf_descr.type = CU_FILE_HANDLE_TYPE_OPAQUE_FD;
-	// 	status = cuFileHandleRegister(&cf_handle, &cf_descr);
-	// 	if (status.err != CU_FILE_SUCCESS) {
-	// 		close(fd);
-	// 		throw std::runtime_error{std::string{"cuFileHandleRegister fd "} + std::to_string(fd) + " status " + status.err};
-	// 	}
-
-	// 	status = cuFileBufRegister(m_image.data.data(), m_image.data.get_bytes(), 0);
-	// 	if (status.err != CU_FILE_SUCCESS) {
-	// 		cuFileHandleDeregister(cf_handle);
-	// 		close(fd);
-	// 		throw std::runtime_error{std::string{"buffer registration failed "} + status.err};
-	// 	}
-
-	// 	cuFileRead(cf_handle, m_image.data.data(), m_image.data.get_bytes(), 2 * sizeof(int), 0);
-
-	// 	status = cuFileBufDeregister(devPtr_base);
-	// 	if (status.err != CU_FILE_SUCCESS) {
-	// 		cuFileHandleDeregister(cf_handle);
-	// 		close(fd);
-	// 		throw std::runtime_error{std::string{"buffer deregistration failed "} + status.err};
-	// 	}
-
-	// 	cuFileHandleDeregister(cf_handle);
-	// 	close(fd);
-	// }
 
 	std::vector<__half> image(n_pixels * 4);
 	f.read(reinterpret_cast<char*>(image.data()), sizeof(__half) * image.size());

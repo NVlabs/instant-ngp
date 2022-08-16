@@ -25,7 +25,7 @@
 #include <neural-graphics-primitives/shared_queue.h>
 #include <neural-graphics-primitives/trainable_buffer.cuh>
 
-#include <tiny-cuda-nn/cuda_graph.h>
+#include <tiny-cuda-nn/multi_stream.h>
 #include <tiny-cuda-nn/random.h>
 
 #include <json/json.hpp>
@@ -86,7 +86,7 @@ public:
 			const BoundingBox& aabb,
 			float floor_y,
 			float plane_z,
-			float dof,
+			float aperture_size,
 			const float* envmap_data,
 			const Eigen::Vector2i& envmap_resolution,
 			Eigen::Array4f* frame_buffer,
@@ -144,7 +144,7 @@ public:
 			const BoundingBox& render_aabb,
 			const Eigen::Matrix3f& render_aabb_to_local,
 			float plane_z,
-			float dof,
+			float aperture_size,
 			const CameraDistortion& camera_distortion,
 			const float* envmap_data,
 			const Eigen::Vector2i& envmap_resolution,
@@ -288,9 +288,10 @@ public:
 	}
 	bool reprojection_available() { return m_dlss; }
 	static ELossType string_to_loss_type(const std::string& str);
-	void reset_network();
+	void reset_network(bool clear_density_grid = true);
 	void create_empty_nerf_dataset(size_t n_images, int aabb_scale = 1, bool is_hdr = false);
 	void load_nerf();
+	void load_nerf_post();
 	void load_mesh();
 	void set_exposure(float exposure) { m_exposure = exposure; }
 	void set_max_level(float maxlevel);
@@ -311,6 +312,10 @@ public:
 	Eigen::Vector3f view_up() const { return m_camera.col(1); }
 	Eigen::Vector3f view_side() const { return m_camera.col(0); }
 	void set_view_dir(const Eigen::Vector3f& dir);
+	void first_training_view();
+	void last_training_view();
+	void previous_training_view();
+	void next_training_view();
 	void set_camera_to_training_view(int trainview);
 	void reset_camera();
 	bool keyboard_event();
@@ -334,7 +339,7 @@ public:
 	void compute_mesh_vertex_colors();
 	tcnn::GPUMemory<float> get_density_on_grid(Eigen::Vector3i res3d, const BoundingBox& aabb, const Eigen::Matrix3f& render_aabb_to_local); // network version (nerf or sdf)
 	tcnn::GPUMemory<float> get_sdf_gt_on_grid(Eigen::Vector3i res3d, const BoundingBox& aabb, const Eigen::Matrix3f& render_aabb_to_local); // sdf gt version (sdf only)
-	tcnn::GPUMemory<Eigen::Array4f> get_rgba_on_grid(Eigen::Vector3i res3d, Eigen::Vector3f ray_dir);
+	tcnn::GPUMemory<Eigen::Array4f> get_rgba_on_grid(Eigen::Vector3i res3d, Eigen::Vector3f ray_dir, bool voxel_centers, bool density_to_alpha);
 	int marching_cubes(Eigen::Vector3i res3d, const BoundingBox& render_aabb, const Eigen::Matrix3f& render_aabb_to_local, float thresh);
 
 	// Determines the 3d focus point by rendering a little 16x16 depth image around
@@ -443,7 +448,7 @@ public:
 	float m_last_render_res_factor = 1.0f;
 	float m_scale = 1.0;
 	float m_prev_scale = 1.0;
-	float m_dof = 0.0f;
+	float m_aperture_size = 0.0f;
 	Eigen::Vector2f m_relative_focal_length = Eigen::Vector2f::Ones();
 	uint32_t m_fov_axis = 1;
 	float m_zoom = 1.f; // 2d zoom factor (for insets?)
@@ -642,8 +647,8 @@ public:
 
 		float rendering_min_transmittance = 0.01f;
 
-		float m_glow_y_cutoff = 0.f;
-		int m_glow_mode = 0;
+		float glow_y_cutoff = 0.f;
+		int glow_mode = 0;
 	} m_nerf;
 
 	struct Sdf {
@@ -804,8 +809,7 @@ public:
 	Eigen::Vector3f get_scaled_parallax_shift() const { return {m_parallax_shift.x(), m_parallax_shift.y(), m_scale}; } // pack m_scale into the parallax parameter so we know where the screen plane is.
 
 	// CUDA stuff
-	cudaStream_t m_training_stream;
-	cudaStream_t m_inference_stream;
+	tcnn::StreamAndEvent m_stream;
 
 	// Hashgrid encoding analysis
 	float m_quant_percent = 0.f;

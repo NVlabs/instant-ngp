@@ -422,7 +422,7 @@ public:
 
 	void set_alignment(uint32_t alignment) override {
 		if (m_n_output_dims != tcnn::next_multiple(m_n_output_dims, alignment)) {
-			throw std::runtime_error{std::string{"TakikawaEncoding only supports number of output dims that divide into "} + std::to_string(alignment) + "; n_n_output_dims is " + std::to_string(m_n_output_dims)};
+			throw std::runtime_error{fmt::format("TakikawaEncoding only supports number of output dims that divide into {}; n_n_output_dims={}.", alignment, m_n_output_dims)};
 		}
 	}
 

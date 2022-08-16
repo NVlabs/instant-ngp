@@ -23,8 +23,7 @@
 NGP_NAMESPACE_BEGIN
 
 struct PathEscape {
-	struct Params
-	{
+	struct Params {
 		const Eigen::Vector3f* ray_origins;
 		const Triangle* triangles;
 		float* distances;

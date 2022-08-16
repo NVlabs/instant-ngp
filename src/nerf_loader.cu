@@ -13,8 +13,8 @@
  *  @brief  Loads a NeRF data set from NeRF's original format
  */
 
-#include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/common_device.cuh>
+#include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/nerf_loader.h>
 #include <neural-graphics-primitives/thread_pool.h>
 #include <neural-graphics-primitives/tinyexr_wrapper.h>
@@ -186,6 +186,7 @@ NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale, bool is_h
 	result.offset = {0.5f, 0.5f, 0.5f};
 	result.aabb_scale = aabb_scale;
 	result.is_hdr = is_hdr;
+	result.paths = std::vector<std::string>(n_images, "");
 	for (size_t i = 0; i < n_images; ++i) {
 		result.xforms[i].start = Eigen::Matrix<float, 3, 4>::Identity();
 		result.xforms[i].end = Eigen::Matrix<float, 3, 4>::Identity();
@@ -231,11 +232,11 @@ void read_camera_distortion(const nlohmann::json &json, CameraDistortion &camera
 	}
 
 	if (json.contains("rolling_shutter")) {
-		// the rolling shutter is a float3 of [A,B,C] where the time
-		// for each pixel is t= A + B * u + C * v
-		// where u and v are the pixel coordinates (0-1),
-		// and the resulting t is used to interpolate between the start
-		// and end transforms for each training xform
+		// the rolling shutter is a float4 of [A,B,C,D] where the time
+		// for each pixel is t= A + B * u + C * v + D * motionblur_time,
+		// where u and v are the pixel coordinates within (0-1).
+		// The resulting t is used to interpolate between the start
+		// and end transforms for each training xform.
 		float motionblur_amount = 0.f;
 		if (json["rolling_shutter"].size() >= 4) {
 			motionblur_amount = float(json["rolling_shutter"][3]);
@@ -375,6 +376,10 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 					// fs::remove(basepath / fs::path(std::string(frames_copy[i]["file_path"])));
 				}
 			}
+		}
+
+		for (size_t i = 0; i < frames.size(); ++i) {
+			result.paths.emplace_back(frames[i]["file_path"]);
 		}
 
 		result.n_images += frames.size();
@@ -518,7 +523,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 			std::string json_provided_path = json["envmap"];
 			fs::path envmap_path = basepath / json_provided_path;
 			if (!envmap_path.exists()) {
-				throw std::runtime_error{std::string{"Environment map path "} + envmap_path.str() + " does not exist."};
+				throw std::runtime_error{fmt::format("Environment map {} does not exist.", envmap_path.str())};
 			}
 
 			if (equals_case_insensitive(envmap_path.extension(), "exr")) {
@@ -564,7 +569,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 				uint8_t* img = stbi_load(path.str().c_str(), &dst.res.x(), &dst.res.y(), &comp, 4);
 
 
-				fs::path alphapath = basepath / (std::string{frame["file_path"]} + ".alpha."s + path.extension());
+				fs::path alphapath = basepath / fmt::format("{}.alpha.{}", frame["file_path"], path.extension());
 				if (alphapath.exists()) {
 					int wa=0,ha=0;
 					uint8_t* alpha_img = stbi_load(alphapath.str().c_str(), &wa, &ha, &comp, 4);
@@ -573,7 +578,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 					}
 					ScopeGuard mem_guard{[&]() { stbi_image_free(alpha_img); }};
 					if (wa != dst.res.x() || ha != dst.res.y()) {
-						throw std::runtime_error{std::string{"Alpha image has wrong resolution: "} + alphapath.str()};
+						throw std::runtime_error{fmt::format("Alpha image {} has wrong resolution.", alphapath.str())};
 					}
 					tlog::success() << "Alpha loaded from " << alphapath;
 					for (int i=0;i<dst.res.prod();++i) {
@@ -581,16 +586,16 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 					}
 				}
 
-				fs::path maskpath = path.parent_path()/(std::string{"dynamic_mask_"} + path.basename() + ".png");
+				fs::path maskpath = path.parent_path()/(fmt::format("dynamic_mask_{}.png", path.basename()));
 				if (maskpath.exists()) {
 					int wa=0,ha=0;
 					uint8_t* mask_img = stbi_load(maskpath.str().c_str(), &wa, &ha, &comp, 4);
 					if (!mask_img) {
-						throw std::runtime_error{std::string{"Could not load mask image "} + maskpath.str()};
+						throw std::runtime_error{fmt::format("Dynamic mask {} could not be loaded.", maskpath.str())};
 					}
 					ScopeGuard mem_guard{[&]() { stbi_image_free(mask_img); }};
 					if (wa != dst.res.x() || ha != dst.res.y()) {
-						throw std::runtime_error{std::string{"Mask image has wrong resolution: "} + maskpath.str()};
+						throw std::runtime_error{fmt::format("Dynamic mask {} has wrong resolution.", maskpath.str())};
 					}
 					dst.mask_color = 0x00FF00FF; // HOT PINK
 					for (int i = 0; i < dst.res.prod(); ++i) {
@@ -617,13 +622,13 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 						throw std::runtime_error{"Could not load depth image "s + depthpath.str()};
 					}
 					if (wa != dst.res.x() || ha != dst.res.y()) {
-						throw std::runtime_error{std::string{"Depth image has wrong resolution: "} + depthpath.str()};
+						throw std::runtime_error{fmt::format("Depth image {} has wrong resolution.", depthpath.str())};
 					}
 					// tlog::success() << "Depth loaded from " << depthpath;
 				}
 			}
 
-			fs::path rayspath = path.parent_path()/(std::string{"rays_"} + path.basename() + ".dat");
+			fs::path rayspath = path.parent_path()/(fmt::format("rays_{}.dat", path.basename()));
 			if (enable_ray_loading && rayspath.exists()) {
 				uint32_t n_pixels = dst.res.prod();
 				dst.rays = (Ray*)malloc(n_pixels * sizeof(Ray));

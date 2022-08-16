@@ -17,6 +17,8 @@
 #include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/tinyobj_loader_wrapper.h>
 
+#include <fmt/core.h>
+
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tinyobjloader/tiny_obj_loader.h>
 
@@ -42,7 +44,7 @@ std::vector<Vector3f> load_obj(const std::string& filename) {
 	}
 
 	if (!err.empty()) {
-		throw std::runtime_error{std::string{"Error loading obj: "} + err};
+		throw std::runtime_error{fmt::format("Error loading obj: {}", err)};
 	}
 
 	std::vector<Vector3f> result;

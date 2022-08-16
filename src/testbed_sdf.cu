@@ -12,8 +12,8 @@
  *  @author Thomas Müller & Alex Evans, NVIDIA
  */
 
-#include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/common_device.cuh>
+#include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/discrete_distribution.h>
 #include <neural-graphics-primitives/envmap.cuh>
 #include <neural-graphics-primitives/random_val.cuh> // helpers to generate random values, directions
@@ -504,7 +504,7 @@ __global__ void init_rays_with_payload_kernel_sdf(
 	BoundingBox aabb,
 	float floor_y,
 	float plane_z,
-	float dof,
+	float aperture_size,
 	const float* __restrict__ envmap_data,
 	const Vector2i envmap_resolution,
 	Array4f* __restrict__ framebuffer,
@@ -522,10 +522,10 @@ __global__ void init_rays_with_payload_kernel_sdf(
 	uint32_t idx = x + resolution.x() * y;
 
 	if (plane_z < 0) {
-		dof = 0.0;
+		aperture_size = 0.0;
 	}
 
-	Ray ray = pixel_to_ray(sample_index, {x, y}, resolution, focal_length, camera_matrix, screen_center, parallax_shift, snap_to_pixel_centers, plane_z, dof);
+	Ray ray = pixel_to_ray(sample_index, {x, y}, resolution, focal_length, camera_matrix, screen_center, parallax_shift, snap_to_pixel_centers, plane_z, aperture_size);
 
 	distances[idx] = 10000.0f;
 
@@ -600,7 +600,7 @@ void Testbed::SphereTracer::init_rays_from_camera(uint32_t sample_index,
 	const BoundingBox& aabb,
 	float floor_y,
 	float plane_z,
-	float dof,
+	float aperture_size,
 	const float* envmap_data,
 	const Vector2i& envmap_resolution,
 	Array4f* frame_buffer,
@@ -629,7 +629,7 @@ void Testbed::SphereTracer::init_rays_from_camera(uint32_t sample_index,
 		aabb,
 		floor_y,
 		plane_z,
-		dof,
+		aperture_size,
 		envmap_data,
 		envmap_resolution,
 		frame_buffer,
@@ -845,7 +845,7 @@ void Testbed::render_sdf(
 		sdf_bounding_box,
 		get_floor_y(),
 		plane_z,
-		m_dof,
+		m_aperture_size,
 		m_envmap.envmap->params_inference(),
 		m_envmap.resolution,
 		render_buffer.frame_buffer(),
@@ -1026,7 +1026,9 @@ void Testbed::load_mesh() {
 	}
 
 	// Inflate AABB by 1% to give the network a little wiggle room.
-	m_raw_aabb.inflate(m_raw_aabb.diag().norm() * 0.005f);
+	const float inflation = 0.005f;
+
+	m_raw_aabb.inflate(m_raw_aabb.diag().norm() * inflation);
 	m_sdf.mesh_scale = m_raw_aabb.diag().maxCoeff();
 
 	// Normalize vertex coordinates to lie within [0,1]^3.
@@ -1040,6 +1042,7 @@ void Testbed::load_mesh() {
 	for (size_t i = 0; i < n_vertices; ++i) {
 		m_aabb.enlarge(vertices[i]);
 	}
+	m_aabb.inflate(m_aabb.diag().norm() * inflation);
 	m_aabb = m_aabb.intersection(BoundingBox{Vector3f::Zero(), Vector3f::Ones()});
 	m_render_aabb = m_aabb;
 	m_render_aabb_to_local = Matrix3f::Identity();
@@ -1054,7 +1057,7 @@ void Testbed::load_mesh() {
 		m_sdf.triangle_bvh = TriangleBvh::make();
 	m_sdf.triangle_bvh->build(m_sdf.triangles_cpu, 8);
 	m_sdf.triangles_gpu.resize_and_copy_from_host(m_sdf.triangles_cpu);
-	m_sdf.triangle_bvh->build_optix(m_sdf.triangles_gpu, m_inference_stream);
+	m_sdf.triangle_bvh->build_optix(m_sdf.triangles_gpu, m_stream.get());
 
 	m_sdf.triangle_octree.reset(new TriangleOctree{});
 	m_sdf.triangle_octree->build(*m_sdf.triangle_bvh, m_sdf.triangles_cpu, 10);
@@ -1190,13 +1193,13 @@ GPUMemory<float> Testbed::get_sdf_gt_on_grid(Vector3i res3d, const BoundingBox& 
 	GPUMemoryArena::Allocation alloc;
 	auto scratch = allocate_workspace_and_distribute<
 		Vector3f
-	>(m_inference_stream, &alloc, n_elements);
+	>(m_stream.get(), &alloc, n_elements);
 	Vector3f* positions = std::get<0>(scratch);
 	float* sdf_out = density.data();
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)res3d.x(), threads.x), div_round_up((uint32_t)res3d.y(), threads.y), div_round_up((uint32_t)res3d.z(), threads.z) };
-	generate_grid_samples_sdf_uniform<<<blocks, threads, 0, m_inference_stream>>>(res3d, aabb, render_aabb_to_local, positions);
-	CUDA_CHECK_THROW(cudaStreamSynchronize(m_inference_stream));
+	generate_grid_samples_sdf_uniform<<<blocks, threads, 0, m_stream.get()>>>(res3d, aabb, render_aabb_to_local, positions);
+	CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
 	m_sdf.triangle_bvh->signed_distance_gpu(
 			n_elements,
 			m_sdf.mesh_sdf_mode,
@@ -1204,9 +1207,9 @@ GPUMemory<float> Testbed::get_sdf_gt_on_grid(Vector3i res3d, const BoundingBox& 
 			sdf_out,
 			m_sdf.triangles_gpu.data(),
 			false,
-			m_inference_stream
+			m_stream.get()
 		);
-	CUDA_CHECK_THROW(cudaStreamSynchronize(m_inference_stream));
+	CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
 	/*
 	std::vector<float> cpudensity(density.size());
 	std::vector<Vector3f> cpupositions(n_elements);
@@ -1260,7 +1263,7 @@ void Testbed::training_prep_sdf(uint32_t batch_size, cudaStream_t stream) {
 // set it to a fraction near 1 to use a sliding EMA
 // if blocking is false, then this returns the iou from the *last* call
 double Testbed::calculate_iou(uint32_t n_samples, float scale_existing_results_factor, bool blocking, bool force_use_octree) {
-	cudaStream_t stream = m_training_stream;
+	cudaStream_t stream = m_stream.get();
 	uint32_t countercpu[8];
 	m_sdf.iou_counter.enlarge(8);
 	if (!blocking) // when not blocking, returns data from the *last* run, then kicks off work to accumulate some more samples

@@ -37,6 +37,7 @@ def parse_args():
 	parser.add_argument("--skip_early", default=0, help="skip this many images from the start")
 	parser.add_argument("--keep_colmap_coords", action="store_true", help="keep transforms.json in COLMAP's original frame of reference (this will avoid reorienting and repositioning the scene for preview and rendering)")
 	parser.add_argument("--out", default="transforms.json", help="output path")
+	parser.add_argument("--vocab_path", default="", help="vocabulary tree path")
 	args = parser.parse_args()
 	return args
 
@@ -85,7 +86,10 @@ def run_colmap(args):
 	if os.path.exists(db):
 		os.remove(db)
 	do_system(f"colmap feature_extractor --ImageReader.camera_model {args.colmap_camera_model} --ImageReader.camera_params \"{args.colmap_camera_params}\" --SiftExtraction.estimate_affine_shape=true --SiftExtraction.domain_size_pooling=true --ImageReader.single_camera 1 --database_path {db} --image_path {images}")
-	do_system(f"colmap {args.colmap_matcher}_matcher --SiftMatching.guided_matching=true --database_path {db}")
+	match_cmd = f"colmap {args.colmap_matcher}_matcher --SiftMatching.guided_matching=true --database_path {db}"
+	if args.vocab_path:
+		match_cmd += f" --VocabTreeMatching.vocab_tree_path {args.vocab_path}"
+	do_system(match_cmd)
 	try:
 		shutil.rmtree(sparse)
 	except:
@@ -302,10 +306,11 @@ if __name__ == "__main__":
 			for g in out["frames"]:
 				mg = g["transform_matrix"][0:3,:]
 				p, w = closest_point_2_lines(mf[:,3], mf[:,2], mg[:,3], mg[:,2])
-				if w > 0.01:
+				if w > 0.00001:
 					totp += p*w
 					totw += w
-		totp /= totw
+		if totw > 0.0:
+			totp /= totw
 		print(totp) # the cameras are looking at totp
 		for f in out["frames"]:
 			f["transform_matrix"][0:3,3] -= totp
