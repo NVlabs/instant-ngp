@@ -306,10 +306,11 @@ if __name__ == "__main__":
 			for g in out["frames"]:
 				mg = g["transform_matrix"][0:3,:]
 				p, w = closest_point_2_lines(mf[:,3], mf[:,2], mg[:,3], mg[:,2])
-				if w > 0.01:
+				if w > 0.00001:
 					totp += p*w
 					totw += w
-		totp /= totw
+		if totw > 0.0:
+			totp /= totw
 		print(totp) # the cameras are looking at totp
 		for f in out["frames"]:
 			f["transform_matrix"][0:3,3] -= totp
