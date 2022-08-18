@@ -444,7 +444,7 @@ inline __device__ int mip_from_pos(const Vector3f& pos, uint32_t max_cascade = N
 	int exponent;
 	float maxval = (pos - Vector3f::Constant(0.5f)).cwiseAbs().maxCoeff();
 	frexpf(maxval, &exponent);
-	return min(max_cascade-1, max(0, exponent+1));
+	return min(max_cascade, max(0, exponent+1));
 }
 
 inline __device__ int mip_from_dt(float dt, const Vector3f& pos, uint32_t max_cascade = NERF_CASCADES()-1) {
@@ -453,7 +453,7 @@ inline __device__ int mip_from_dt(float dt, const Vector3f& pos, uint32_t max_ca
 	if (dt<1.f) return mip;
 	int exponent;
 	frexpf(dt, &exponent);
-	return min(max_cascade-1, max(exponent, mip));
+	return min(max_cascade, max(exponent, mip));
 }
 
 __global__ void generate_grid_samples_nerf_nonuniform(const uint32_t n_elements, default_rng_t rng, const uint32_t step, BoundingBox aabb, const float* __restrict__ grid_in, NerfPosition* __restrict__ out, uint32_t* __restrict__ indices, uint32_t n_cascades, float thresh) {
@@ -3392,7 +3392,7 @@ GPUMemory<float> Testbed::get_density_on_grid(Vector3i res3d, const BoundingBox&
 			m_nerf.density_activation,
 			positions + offset,
 			nerf_mode ? m_nerf.density_grid.data() : nullptr,
-			m_nerf.max_cascade + 1
+			m_nerf.max_cascade
 		);
 	}
 
