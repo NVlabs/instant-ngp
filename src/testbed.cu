@@ -396,7 +396,7 @@ void Testbed::imgui() {
 			snprintf(path_filename_buf, sizeof(path_filename_buf), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, "_cam.json").c_str());
 		}
 
-		if (m_camera_path.imgui(path_filename_buf, m_render_ms.val(), m_camera, m_slice_plane_z, m_scale, fov(), m_aperture_size, m_bounding_radius, !m_nerf.training.dataset.xforms.empty() ? m_nerf.training.dataset.xforms[0].start : Matrix<float, 3, 4>::Identity())) {
+		if (m_camera_path.imgui(path_filename_buf, m_render_ms.val(), m_camera, m_slice_plane_z, m_scale, fov(), m_aperture_size, m_bounding_radius, !m_nerf.training.dataset.xforms.empty() ? m_nerf.training.dataset.xforms[0].start : Matrix<float, 3, 4>::Identity(), m_nerf.glow_mode, m_nerf.glow_y_cutoff)) {
 			if (m_camera_path.m_update_cam_from_path) {
 				set_camera_from_time(m_camera_path.m_playtime);
 				if (read > 1) {
@@ -2044,7 +2044,7 @@ void Testbed::apply_camera_smoothing(float elapsed_ms) {
 }
 
 CameraKeyframe Testbed::copy_camera_to_keyframe() const {
-	return CameraKeyframe(m_camera, m_slice_plane_z, m_scale, fov(), m_aperture_size);
+	return CameraKeyframe(m_camera, m_slice_plane_z, m_scale, fov(), m_aperture_size, m_nerf.glow_mode, m_nerf.glow_y_cutoff);
 }
 
 void Testbed::set_camera_from_keyframe(const CameraKeyframe& k) {
@@ -2053,6 +2053,8 @@ void Testbed::set_camera_from_keyframe(const CameraKeyframe& k) {
 	m_scale = k.scale;
 	set_fov(k.fov);
 	m_aperture_size = k.aperture_size;
+	m_nerf.glow_mode = k.glow_mode;
+	m_nerf.glow_y_cutoff = k.glow_y_cutoff;
 }
 
 void Testbed::set_camera_from_time(float t) {
