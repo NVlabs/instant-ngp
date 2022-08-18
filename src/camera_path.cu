@@ -102,8 +102,8 @@ void from_json(bool is_first, const json& j, CameraKeyframe& p, const CameraKeyf
 	j.at("scale").get_to(p.scale);
 	j.at("fov").get_to(p.fov);
 	if (j.contains("dof")) j.at("dof").get_to(p.aperture_size); else j.at("aperture_size").get_to(p.aperture_size);
-	if (j.contains("glow_mode")) j.at("glow_mode").get_to(p.glow_mode); else return;
-	if (j.contains("glow_y_cutoff")) j.at("glow_y_cutoff").get_to(p.glow_y_cutoff); else return;
+	if (j.contains("glow_mode")) j.at("glow_mode").get_to(p.glow_mode); else p.glow_mode = 0;
+	if (j.contains("glow_y_cutoff")) j.at("glow_y_cutoff").get_to(p.glow_y_cutoff); else p.glow_y_cutoff = 0.f;
 }
 
 
