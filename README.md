@@ -206,7 +206,7 @@ __A:__ Use `./build/testbed --no-gui` or `python scripts/run.py`. You can also c
 ##
 __Q:__ Does this codebase run on [Google Colab](https://colab.research.google.com/)?
 
-__A:__ Yes. See [this example](https://colab.research.google.com/drive/10TgQ4gyVejlHiinrmm5XOvQQmgVziK3i?usp=sharing) by user [@myagues](https://github.com/NVlabs/instant-ngp/issues/6#issuecomment-1016397579). Caveat: this codebase requires large amounts of GPU RAM and might not fit on your assigned GPU. It will also run slower on older GPUs.
+__A:__ Yes. See [this example](./notebooks/instant_ngp.ipynb) inspired on the notebook created by user [@myagues](https://github.com/NVlabs/instant-ngp/issues/6#issuecomment-1016397579). Caveat: this codebase requires large amounts of GPU RAM and might not fit on your assigned GPU. It will also run slower on older GPUs.
 
 ##
 __Q:__ Is there a [Docker container](https://www.docker.com/)?

@@ -227,6 +227,11 @@ PYBIND11_MODULE(pyngp, m) {
 		.value("Volume", ETestbedMode::Volume)
 		.export_values();
 
+	py::enum_<EGroundTruthRenderMode>(m, "GroundTruthRenderMode")
+		.value("Shade", EGroundTruthRenderMode::Shade)
+		.value("Depth", EGroundTruthRenderMode::Depth)
+		.export_values();
+
 	py::enum_<ERenderMode>(m, "RenderMode")
 		.value("AO", ERenderMode::AO)
 		.value("Shade", ERenderMode::Shade)
@@ -422,6 +427,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("shall_train_encoding", &Testbed::m_train_encoding)
 		.def_readwrite("shall_train_network", &Testbed::m_train_network)
 		.def_readwrite("render_groundtruth", &Testbed::m_render_ground_truth)
+		.def_readwrite("groundtruth_render_mode", &Testbed::m_ground_truth_render_mode)
 		.def_readwrite("render_mode", &Testbed::m_render_mode)
 		.def_readwrite("slice_plane_z", &Testbed::m_slice_plane_z)
 		.def_readwrite("dof", &Testbed::m_aperture_size)

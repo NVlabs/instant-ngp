@@ -232,11 +232,11 @@ void read_camera_distortion(const nlohmann::json &json, CameraDistortion &camera
 	}
 
 	if (json.contains("rolling_shutter")) {
-		// the rolling shutter is a float3 of [A,B,C] where the time
-		// for each pixel is t= A + B * u + C * v
-		// where u and v are the pixel coordinates (0-1),
-		// and the resulting t is used to interpolate between the start
-		// and end transforms for each training xform
+		// the rolling shutter is a float4 of [A,B,C,D] where the time
+		// for each pixel is t= A + B * u + C * v + D * motionblur_time,
+		// where u and v are the pixel coordinates within (0-1).
+		// The resulting t is used to interpolate between the start
+		// and end transforms for each training xform.
 		float motionblur_amount = 0.f;
 		if (json["rolling_shutter"].size() >= 4) {
 			motionblur_amount = float(json["rolling_shutter"][3]);
@@ -624,7 +624,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 					if (wa != dst.res.x() || ha != dst.res.y()) {
 						throw std::runtime_error{fmt::format("Depth image {} has wrong resolution.", depthpath.str())};
 					}
-					//tlog::success() << "Depth loaded from " << depthpath;
+					// tlog::success() << "Depth loaded from " << depthpath;
 				}
 			}
 

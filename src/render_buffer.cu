@@ -452,6 +452,55 @@ __device__ Array3f colormap_viridis(float x) {
 	return (c0+x*(c1+x*(c2+x*(c3+x*(c4+x*(c5+x*c6))))));
 }
 
+__global__ void overlay_depth_kernel(
+	Vector2i resolution,
+	float alpha,
+	const float* __restrict__ depth,
+	float depth_scale,
+	Vector2i image_resolution,
+	int fov_axis,
+	float zoom, Eigen::Vector2f screen_center,
+	cudaSurfaceObject_t surface
+) {
+	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
+	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
+
+	if (x >= resolution.x() || y >= resolution.y()) {
+		return;
+	}
+
+	float scale = image_resolution[fov_axis] / float(resolution[fov_axis]);
+
+	float fx = x+0.5f;
+	float fy = y+0.5f;
+
+	fx-=resolution.x()*0.5f; fx/=zoom; fx+=screen_center.x() * resolution.x();
+	fy-=resolution.y()*0.5f; fy/=zoom; fy+=screen_center.y() * resolution.y();
+
+	float u = (fx-resolution.x()*0.5f) * scale  + image_resolution.x()*0.5f;
+	float v = (fy-resolution.y()*0.5f) * scale  + image_resolution.y()*0.5f;
+
+	int srcx = floorf(u);
+	int srcy = floorf(v);
+	uint32_t idx = x + resolution.x() * y;
+	uint32_t srcidx = srcx + image_resolution.x() * srcy;
+
+    Array4f color;
+	if (srcx >= image_resolution.x() || srcy >= image_resolution.y() || srcx < 0 || srcy < 0) {
+        color = {0.0f, 0.0f, 0.0f, 0.0f};
+	} else {
+        float depth_value = depth[srcidx] * depth_scale;
+        Array3f c = colormap_turbo(depth_value);
+        color = {c[0], c[1], c[2], 1.0f};
+	}
+
+
+	Array4f prev_color;
+	surf2Dread((float4*)&prev_color, surface, x * sizeof(float4), y);
+	color = color * alpha + prev_color * (1.f-alpha);
+	surf2Dwrite(to_float4(color), surface, x * sizeof(float4), y);
+}
+
 __global__ void overlay_false_color_kernel(Vector2i resolution, Vector2i training_resolution, bool to_srgb, int fov_axis, cudaSurfaceObject_t surface, const float *error_map, Vector2i error_map_resolution, const float *average, float brightness, bool viridis) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
@@ -643,6 +692,32 @@ void CudaRenderBuffer::overlay_image(
 		m_tonemap_curve,
 		m_color_space,
 		output_color_space,
+		fov_axis,
+		zoom,
+		screen_center,
+		surface()
+	);
+}
+
+void CudaRenderBuffer::overlay_depth(
+	float alpha,
+	const float* __restrict__ depth,
+	float depth_scale,
+	const Vector2i& image_resolution,
+	int fov_axis,
+	float zoom,
+	const Eigen::Vector2f& screen_center,
+	cudaStream_t stream
+) {
+	auto res = out_resolution();
+	const dim3 threads = { 16, 8, 1 };
+	const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
+	overlay_depth_kernel<<<blocks, threads, 0, stream>>>(
+		res,
+		alpha,
+		depth,
+		depth_scale,
+		image_resolution,
 		fov_axis,
 		zoom,
 		screen_center,
