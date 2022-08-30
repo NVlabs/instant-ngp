@@ -617,6 +617,7 @@ void Testbed::imgui() {
 		accum_reset |= ImGui::Combo("Render mode", (int*)&m_render_mode, RenderModeStr);
 		if (m_testbed_mode == ETestbedMode::Nerf)  {
 			accum_reset |= ImGui::Combo("Groundtruth Render mode", (int*)&m_ground_truth_render_mode, GroundTruthRenderModeStr);
+			accum_reset |= ImGui::SliderFloat("Groundtruth Alpha", &m_ground_truth_alpha, 0.0f, 1.0f, "%.02f", ImGuiSliderFlags_AlwaysClamp);
 		}
 		accum_reset |= ImGui::Combo("Color space", (int*)&m_color_space, ColorSpaceStr);
 		accum_reset |= ImGui::Combo("Tonemap curve", (int*)&m_tonemap_curve, TonemapCurveStr);
@@ -2598,7 +2599,7 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 
 	switch (m_testbed_mode) {
 		case ETestbedMode::Nerf:
-			if (!m_render_ground_truth) {
+			if (!m_render_ground_truth || m_ground_truth_alpha < 1.0f) {
 				render_nerf(render_buffer, max_res, focal_length, camera_matrix0, camera_matrix1, nerf_rolling_shutter, screen_center, m_stream.get());
 			}
 			break;
@@ -2751,11 +2752,10 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 	if (m_testbed_mode == ETestbedMode::Nerf) {
 		// Overlay the ground truth image if requested
 		if (m_render_ground_truth) {
-			float alpha=1.f;
 			auto const& metadata = m_nerf.training.dataset.metadata[m_nerf.training.view];
 			if(m_ground_truth_render_mode == EGroundTruthRenderMode::Shade) {
 				render_buffer.overlay_image(
-					alpha,
+					m_ground_truth_alpha,
 					Array3f::Constant(m_exposure) + m_nerf.training.cam_exposure[m_nerf.training.view].variable(),
 					m_background_color,
 					to_srgb ? EColorSpace::SRGB : EColorSpace::Linear,
@@ -2770,7 +2770,7 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 			}
 			else if(m_ground_truth_render_mode == EGroundTruthRenderMode::Depth && metadata.depth) {
                 render_buffer.overlay_depth(
-                    alpha,
+                    m_ground_truth_alpha,
                     metadata.depth,
 					1.0f/m_nerf.training.dataset.scale,
                     metadata.resolution,
