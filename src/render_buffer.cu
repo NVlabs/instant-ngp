@@ -440,18 +440,6 @@ __device__ Array3f colormap_turbo(float x) {
 	};
 }
 
-__device__ Array3f colormap_viridis(float x) {
-	const Array3f c0 = Array3f{0.2777273272234177f, 0.005407344544966578f, 0.3340998053353061f};
-	const Array3f c1 = Array3f{0.1050930431085774f, 1.404613529898575f, 1.384590162594685f};
-	const Array3f c2 = Array3f{-0.3308618287255563f, 0.214847559468213f, 0.09509516302823659f};
-	const Array3f c3 = Array3f{-4.634230498983486f, -5.799100973351585f, -19.33244095627987f};
-	const Array3f c4 = Array3f{6.228269936347081f, 14.17993336680509f, 56.69055260068105f};
-	const Array3f c5 = Array3f{4.776384997670288f, -13.74514537774601f, -65.35303263337234f};
-	const Array3f c6 = Array3f{-5.435455855934631f, 4.645852612178535f, 26.3124352495832f};
-	x = __saturatef(x);
-	return (c0+x*(c1+x*(c2+x*(c3+x*(c4+x*(c5+x*c6))))));
-}
-
 __global__ void overlay_depth_kernel(
 	Vector2i resolution,
 	float alpha,
@@ -485,20 +473,31 @@ __global__ void overlay_depth_kernel(
 	uint32_t idx = x + resolution.x() * y;
 	uint32_t srcidx = srcx + image_resolution.x() * srcy;
 
-    Array4f color;
+	Array4f color;
 	if (srcx >= image_resolution.x() || srcy >= image_resolution.y() || srcx < 0 || srcy < 0) {
-        color = {0.0f, 0.0f, 0.0f, 0.0f};
+		color = {0.0f, 0.0f, 0.0f, 0.0f};
 	} else {
-        float depth_value = depth[srcidx] * depth_scale;
-        Array3f c = colormap_turbo(depth_value);
-        color = {c[0], c[1], c[2], 1.0f};
+		float depth_value = depth[srcidx] * depth_scale;
+		Array3f c = colormap_turbo(depth_value);
+		color = {c[0], c[1], c[2], 1.0f};
 	}
-
 
 	Array4f prev_color;
 	surf2Dread((float4*)&prev_color, surface, x * sizeof(float4), y);
 	color = color * alpha + prev_color * (1.f-alpha);
 	surf2Dwrite(to_float4(color), surface, x * sizeof(float4), y);
+}
+
+__device__ Array3f colormap_viridis(float x) {
+	const Array3f c0 = Array3f{0.2777273272234177f, 0.005407344544966578f, 0.3340998053353061f};
+	const Array3f c1 = Array3f{0.1050930431085774f, 1.404613529898575f, 1.384590162594685f};
+	const Array3f c2 = Array3f{-0.3308618287255563f, 0.214847559468213f, 0.09509516302823659f};
+	const Array3f c3 = Array3f{-4.634230498983486f, -5.799100973351585f, -19.33244095627987f};
+	const Array3f c4 = Array3f{6.228269936347081f, 14.17993336680509f, 56.69055260068105f};
+	const Array3f c5 = Array3f{4.776384997670288f, -13.74514537774601f, -65.35303263337234f};
+	const Array3f c6 = Array3f{-5.435455855934631f, 4.645852612178535f, 26.3124352495832f};
+	x = __saturatef(x);
+	return (c0+x*(c1+x*(c2+x*(c3+x*(c4+x*(c5+x*c6))))));
 }
 
 __global__ void overlay_false_color_kernel(Vector2i resolution, Vector2i training_resolution, bool to_srgb, int fov_axis, cudaSurfaceObject_t surface, const float *error_map, Vector2i error_map_resolution, const float *average, float brightness, bool viridis) {

@@ -572,7 +572,7 @@ __global__ void grid_to_bitfield(
 
 	float thresh = std::min(NERF_MIN_OPTICAL_THICKNESS(), *mean_density_ptr);
 
-	#pragma unroll
+	NGP_PRAGMA_UNROLL
 	for (uint8_t j = 0; j < 8; ++j) {
 		bits |= grid[i*8+j] > thresh ? ((uint8_t)1 << j) : 0;
 	}
@@ -589,7 +589,7 @@ __global__ void bitfield_max_pool(const uint32_t n_elements,
 
 	uint8_t bits = 0;
 
-	#pragma unroll
+	NGP_PRAGMA_UNROLL
 	for (uint8_t j = 0; j < 8; ++j) {
 		// If any bit is set in the previous level, set this
 		// level's bit. (Max pooling.)
@@ -1659,7 +1659,7 @@ __global__ void compute_cam_gradient_train_nerf(
 
 	if (cam_pos_gradient) {
 		// Atomically reduce the ray gradient into the xform gradient
-		#pragma unroll
+		NGP_PRAGMA_UNROLL
 		for (uint32_t j = 0; j < 3; ++j) {
 			atomicAdd(&cam_pos_gradient[img][j], ray_gradient.o[j] / xy_pdf);
 		}
@@ -1673,7 +1673,7 @@ __global__ void compute_cam_gradient_train_nerf(
 		Vector3f angle_axis = ray.d.cross(ray_gradient.d);
 
 		// Atomically reduce the ray gradient into the xform gradient
-		#pragma unroll
+		NGP_PRAGMA_UNROLL
 		for (uint32_t j = 0; j < 3; ++j) {
 			atomicAdd(&cam_rot_gradient[img][j], angle_axis[j] / xy_pdf);
 		}

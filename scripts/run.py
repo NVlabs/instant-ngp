@@ -65,8 +65,7 @@ def parse_args():
 	parser.add_argument("--sharpen", default=0, help="Set amount of sharpening applied to NeRF training images. Range 0.0 to 1.0.")
 
 
-	args = parser.parse_args()
-	return args
+	return parser.parse_args()
 
 if __name__ == "__main__":
 	args = parse_args()

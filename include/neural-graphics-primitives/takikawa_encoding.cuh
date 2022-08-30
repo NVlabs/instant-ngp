@@ -62,12 +62,12 @@ __global__ void kernel_takikawa(
 			Eigen::Vector3f pos_derivative;
 
 			if (interpolation_type == tcnn::InterpolationType::Linear) {
-				#pragma unroll
+				NGP_PRAGMA_UNROLL
 				for (uint32_t dim = 0; dim < 3; ++dim) {
 					pos_derivative[dim] = 1.0f;
 				}
 			} else {
-				#pragma unroll
+				NGP_PRAGMA_UNROLL
 				for (uint32_t dim = 0; dim < 3; ++dim) {
 					pos_derivative[dim] = tcnn::smoothstep_derivative(pos[dim]);
 					pos[dim] = tcnn::smoothstep(pos[dim]);
@@ -78,11 +78,11 @@ __global__ void kernel_takikawa(
 				// Tri-linear interpolation
 				tcnn::vector_t<T, N_FEATURES_PER_LEVEL> result = {0};
 
-				#pragma unroll
+				NGP_PRAGMA_UNROLL
 				for (uint32_t idx = 0; idx < 8; ++idx) {
 					float weight = 1;
 
-					#pragma unroll
+					NGP_PRAGMA_UNROLL
 					for (uint32_t dim = 0; dim < 3; ++dim) {
 						if ((idx & (1<<dim)) == 0) {
 							weight *= 1 - pos[dim];
@@ -95,13 +95,13 @@ __global__ void kernel_takikawa(
 					auto val = *(tcnn::vector_t<T, N_FEATURES_PER_LEVEL>*)&grid[param_idx];
 
 					// Read params
-					#pragma unroll
+					NGP_PRAGMA_UNROLL
 					for (uint32_t feature = 0; feature < N_FEATURES_PER_LEVEL; ++feature) {
 						result[feature] += (T)(weight * (float)val[feature]);
 					}
 				}
 
-				#pragma unroll
+				NGP_PRAGMA_UNROLL
 				for (uint32_t feature = 0; feature < N_FEATURES_PER_LEVEL; ++feature) {
 					data_out(level * N_FEATURES_PER_LEVEL + feature, i) = result[feature];
 				}
@@ -111,16 +111,16 @@ __global__ void kernel_takikawa(
 			if (dy_dx) {
 				const float scale = scalbnf(1.0f, level + starting_level);
 
-				#pragma unroll
+				NGP_PRAGMA_UNROLL
 				for (uint32_t grad_dim = 0; grad_dim < 3; ++grad_dim) {
 					tcnn::vector_fullp_t<N_FEATURES_PER_LEVEL> grad = {0};
 
-					#pragma unroll
+					NGP_PRAGMA_UNROLL
 					for (uint32_t idx = 0; idx < 4; ++idx) {
 						float weight = scale;
 						uint32_t child_idx = 0;
 
-						#pragma unroll
+						NGP_PRAGMA_UNROLL
 						for (uint32_t non_grad_dim = 0; non_grad_dim < 2; ++non_grad_dim) {
 							const uint32_t dim = non_grad_dim >= grad_dim ? (non_grad_dim+1) : non_grad_dim;
 
@@ -139,7 +139,7 @@ __global__ void kernel_takikawa(
 						param_idx = node.vertices[child_idx] * N_FEATURES_PER_LEVEL;
 						auto val_right = *(tcnn::vector_t<T, N_FEATURES_PER_LEVEL>*)&grid[param_idx];
 
-						#pragma unroll
+						NGP_PRAGMA_UNROLL
 						for (uint32_t feature = 0; feature < N_FEATURES_PER_LEVEL; ++feature) {
 							((float*)&grad)[feature] += weight * ((float)((T*)&val_right)[feature] - (float)((T*)&val_left)[feature]) * pos_derivative[grad_dim];
 						}
@@ -156,7 +156,7 @@ __global__ void kernel_takikawa(
 		// Set output to zero for levels that were not reached
 		level = max(0, level-(int)starting_level);
 		for (; level < n_levels; ++level) {
-			#pragma unroll
+			NGP_PRAGMA_UNROLL
 			for (uint32_t f = 0; f < N_FEATURES_PER_LEVEL; ++f) {
 				data_out(level * N_FEATURES_PER_LEVEL + f, i) = (T)0.0f;
 			}
@@ -219,7 +219,7 @@ __global__ void kernel_takikawa_backward(
 			level -= starting_level;
 
 			if (interpolation_type == tcnn::InterpolationType::Smoothstep) {
-				#pragma unroll
+				NGP_PRAGMA_UNROLL
 				for (uint32_t dim = 0; dim < 3; ++dim) {
 					pos[dim] = tcnn::smoothstep(pos[dim]);
 				}
@@ -227,18 +227,18 @@ __global__ void kernel_takikawa_backward(
 
 			tcnn::vector_t<T, N_FEATURES_PER_LEVEL> grad;
 
-			#pragma unroll
+			NGP_PRAGMA_UNROLL
 			for (uint32_t f = 0; f < N_FEATURES_PER_LEVEL; ++f) {
 				grad[f] = dL_dy(N_FEATURES_PER_LEVEL * level + f, i);
 			}
 
 			// Tri-linear interpolation
 
-			#pragma unroll
+			NGP_PRAGMA_UNROLL
 			for (uint32_t idx = 0; idx < 8; ++idx) {
 				float weight = 1;
 
-				#pragma unroll
+				NGP_PRAGMA_UNROLL
 				for (uint32_t dim = 0; dim < 3; ++dim) {
 					if ((idx & (1<<dim)) == 0) {
 						weight *= 1 - pos[dim];
@@ -251,7 +251,7 @@ __global__ void kernel_takikawa_backward(
 
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600 // atomicAdd(__half2) is only supported with compute capability 60 and above
 				if (N_FEATURES_PER_LEVEL > 1 && std::is_same<GRAD_T, __half>::value) {
-					#pragma unroll
+					NGP_PRAGMA_UNROLL
 					for (uint32_t feature = 0; feature < N_FEATURES_PER_LEVEL; feature += 2) {
 						__half2 v = {(__half)((float)grad[feature] * weight), (__half)((float)grad[feature+1] * weight)};
 						atomicAdd((__half2*)&params_gradient[param_idx + feature], v);
@@ -263,7 +263,7 @@ __global__ void kernel_takikawa_backward(
 						// Should never happen
 						//printf("Attempted to use atomicAdd(__half)\n")
 					} else {
-						#pragma unroll
+						NGP_PRAGMA_UNROLL
 						for (uint32_t f = 0; f < N_FEATURES_PER_LEVEL; ++f) {
 							atomicAdd((float*)&params_gradient[param_idx], (float)grad[f] * weight);
 						}

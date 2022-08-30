@@ -237,7 +237,7 @@ public:
 
 			uint8_t child_in_node = 0;
 
-			#pragma unroll
+			NGP_PRAGMA_UNROLL
 			for (uint8_t i = 0; i < 3; ++i) {
 				if (pos[i] >= 0.5f) {
 					child_in_node |= (1 << i);
@@ -262,7 +262,7 @@ public:
 		for (uint8_t depth = 0; depth < max_depth-1; ++depth) {
 			uint8_t child_in_node = 0;
 
-			#pragma unroll
+			NGP_PRAGMA_UNROLL
 			for (uint8_t i = 0; i < 3; ++i) {
 				if (pos[i] >= 0.5f) {
 					child_in_node |= (1 << i);

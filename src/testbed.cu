@@ -1273,9 +1273,7 @@ bool Testbed::keyboard_event() {
 	}
 	if (ImGui::IsKeyPressed('M')) {
 		m_single_view = !m_single_view;
-		if (m_single_view) {
-			set_visualized_dim(-1);
-		}
+		set_visualized_dim(-1);
 		reset_accumulation();
 	}
 	if (ImGui::IsKeyPressed('T')) {
@@ -2753,7 +2751,7 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 		// Overlay the ground truth image if requested
 		if (m_render_ground_truth) {
 			auto const& metadata = m_nerf.training.dataset.metadata[m_nerf.training.view];
-			if(m_ground_truth_render_mode == EGroundTruthRenderMode::Shade) {
+			if (m_ground_truth_render_mode == EGroundTruthRenderMode::Shade) {
 				render_buffer.overlay_image(
 					m_ground_truth_alpha,
 					Array3f::Constant(m_exposure) + m_nerf.training.cam_exposure[m_nerf.training.view].variable(),
@@ -2767,18 +2765,17 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 					Vector2f::Constant(0.5f),
 					m_stream.get()
 				);
-			}
-			else if(m_ground_truth_render_mode == EGroundTruthRenderMode::Depth && metadata.depth) {
-                render_buffer.overlay_depth(
-                    m_ground_truth_alpha,
-                    metadata.depth,
+			} else if (m_ground_truth_render_mode == EGroundTruthRenderMode::Depth && metadata.depth) {
+				render_buffer.overlay_depth(
+					m_ground_truth_alpha,
+					metadata.depth,
 					1.0f/m_nerf.training.dataset.scale,
-                    metadata.resolution,
-                    m_fov_axis,
-                    m_zoom,
+					metadata.resolution,
+					m_fov_axis,
+					m_zoom,
 					Vector2f::Constant(0.5f),
-                    m_stream.get()
-                ); 
+					m_stream.get()
+				);
 			}
 		}
 

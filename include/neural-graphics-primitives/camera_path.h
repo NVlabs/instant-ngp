@@ -53,11 +53,11 @@ struct CameraKeyframe {
 	CameraKeyframe() = default;
 	CameraKeyframe(const Eigen::Vector4f &r, const Eigen::Vector3f &t, float sl, float sc, float fv, float df, int gm, float gyc) : R(r), T(t), slice(sl), scale(sc), fov(fv), aperture_size(df), glow_mode(gm), glow_y_cutoff(gyc) {}
 	CameraKeyframe(Eigen::Matrix<float, 3, 4> m, float sl, float sc, float fv, float df, int gm, float gyc) : slice(sl), scale(sc), fov(fv), aperture_size(df), glow_mode(gm), glow_y_cutoff(gyc) { T=m.col(3); R=Eigen::Quaternionf(m.block<3,3>(0,0)).coeffs();  }
-	CameraKeyframe operator*(float f) const { return {R*f,T*f,slice*f,scale*f,fov*f,aperture_size*f,glow_mode,glow_y_cutoff*f}; }
+	CameraKeyframe operator*(float f) const { return {R*f, T*f, slice*f, scale*f, fov*f, aperture_size*f, glow_mode, glow_y_cutoff*f}; }
 	CameraKeyframe operator+(const CameraKeyframe &rhs) const {
 		Eigen::Vector4f Rr=rhs.R;
 		if (Rr.dot(R)<0.f) Rr=-Rr;
-		return {R+Rr,T+rhs.T,slice+rhs.slice,scale+rhs.scale,fov+rhs.fov,aperture_size+rhs.aperture_size,glow_mode,glow_y_cutoff+rhs.glow_y_cutoff};
+		return {R+Rr, T+rhs.T, slice+rhs.slice, scale+rhs.scale, fov+rhs.fov, aperture_size+rhs.aperture_size, glow_mode, glow_y_cutoff+rhs.glow_y_cutoff};
 	}
 	bool SamePosAs(const CameraKeyframe &rhs) const {
 		return (T-rhs.T).norm()<0.0001f && fabsf(R.dot(rhs.R))>=0.999f;
@@ -88,8 +88,8 @@ struct CameraPath {
 #ifdef NGP_GUI
 	ImGuizmo::MODE m_gizmo_mode = ImGuizmo::LOCAL;
 	ImGuizmo::OPERATION m_gizmo_op = ImGuizmo::TRANSLATE;
-	int imgui(char path_filename_buf[128], float frame_milliseconds, Eigen::Matrix<float, 3, 4> &camera, float slice_plane_z, float scale, float fov, float aperture_size, float bounding_radius, const Eigen::Matrix<float, 3, 4> &first_xform, int glow_mode, float glow_y_cutoff);
-	bool imgui_viz(ImDrawList* list, Eigen::Matrix<float, 4, 4> &view2proj, Eigen::Matrix<float, 4, 4> &world2proj, Eigen::Matrix<float, 4, 4> &world2view, Eigen::Vector2f focal, float aspect);
+	int imgui(char path_filename_buf[128], float frame_milliseconds, Eigen::Matrix<float, 3, 4>& camera, float slice_plane_z, float scale, float fov, float aperture_size, float bounding_radius, const Eigen::Matrix<float, 3, 4>& first_xform, int glow_mode, float glow_y_cutoff);
+	bool imgui_viz(ImDrawList* list, Eigen::Matrix<float, 4, 4>& view2proj, Eigen::Matrix<float, 4, 4>& world2proj, Eigen::Matrix<float, 4, 4>& world2view, Eigen::Vector2f focal, float aspect);
 #endif
 };
 

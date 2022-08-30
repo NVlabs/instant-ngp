@@ -46,7 +46,7 @@ CameraKeyframe lerp(const CameraKeyframe& p0, const CameraKeyframe& p1, float t,
 		p0.aperture_size + (p1.aperture_size - p0.aperture_size) * t,
 		// Note, the glow mode from the previous frame is used, since the modes cannot be interpolated
 		p0.glow_mode,
-		p0.glow_y_cutoff + (p1.glow_y_cutoff - p0.glow_y_cutoff) * t
+		p0.glow_y_cutoff + (p1.glow_y_cutoff - p0.glow_y_cutoff) * t,
 	};
 }
 
@@ -86,16 +86,16 @@ void from_json(bool is_first, const json& j, CameraKeyframe& p, const CameraKeyf
 
 		if (load_relative_to_first) {
 	 		Eigen::Matrix4f ref4 = Eigen::Matrix4f::Identity();
-	 		ref4.block<3,4>(0,0) = ref;
+	 		ref4.block<3, 4>(0, 0) = ref;
 
 	 		Eigen::Matrix4f first4 = Eigen::Matrix4f::Identity();
-	 		first4.block<3,4>(0,0) = first.m();
+	 		first4.block<3, 4>(0, 0) = first.m();
 
 	 		Eigen::Matrix4f p4 = Eigen::Matrix4f::Identity();
-	 		p4.block<3,4>(0,0) = p.m();
+	 		p4.block<3, 4>(0, 0) = p.m();
 
 	 		auto cur4 = ref4 * first4.inverse() * p4;
-	 		p.from_m(cur4.block<3,4>(0,0));
+	 		p.from_m(cur4.block<3, 4>(0, 0));
 		}
 	}
 	j.at("slice").get_to(p.slice);
@@ -141,7 +141,7 @@ void CameraPath::load(const std::string& filepath_string, const Eigen::Matrix<fl
 }
 
 #ifdef NGP_GUI
-int CameraPath::imgui(char path_filename_buf[128], float frame_milliseconds, Matrix<float, 3, 4> &camera, float slice_plane_z, float scale, float fov, float aperture_size, float bounding_radius, const Eigen::Matrix<float, 3, 4> &first_xform, int glow_mode, float glow_y_cutoff) {
+int CameraPath::imgui(char path_filename_buf[128], float frame_milliseconds, Matrix<float, 3, 4>& camera, float slice_plane_z, float scale, float fov, float aperture_size, float bounding_radius, const Eigen::Matrix<float, 3, 4>& first_xform, int glow_mode, float glow_y_cutoff) {
 	int n=std::max(0,int(m_keyframes.size())-1);
 	int read= 0;					// 1=smooth, 2=hard
 	if (!m_keyframes.empty()) {
