@@ -840,7 +840,7 @@ void Testbed::render_sdf(
 		focal_length,
 		camera_matrix,
 		screen_center,
-		get_scaled_parallax_shift(),
+		m_parallax_shift,
 		m_snap_to_pixel_centers,
 		sdf_bounding_box,
 		get_floor_y(),

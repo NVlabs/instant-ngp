@@ -2534,7 +2534,8 @@ __global__ void dlss_prep_kernel(
 	const float prev_view_dist,
 	const Vector2f image_pos,
 	const Vector2f prev_image_pos,
-	const Vector2i image_resolution
+	const Vector2i image_resolution,
+	const Vector2i quilting_dims
 ) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
@@ -2548,12 +2549,15 @@ __global__ void dlss_prep_kernel(
 	uint32_t x_orig = x;
 	uint32_t y_orig = y;
 
+	if (quilting_dims != Vector2i::Ones()) {
+		apply_quilting(&x, &y, resolution, parallax_shift, quilting_dims);
+	}
 
 	const float depth = depth_buffer[idx];
 	Vector2f mvec = mode == ETestbedMode::Image ? motion_vector_2d(
 		sample_index,
 		{x, y},
-		resolution,
+		resolution.cwiseQuotient(quilting_dims),
 		image_resolution,
 		screen_center,
 		view_dist,
@@ -2564,7 +2568,7 @@ __global__ void dlss_prep_kernel(
 	) : motion_vector_3d(
 		sample_index,
 		{x, y},
-		resolution,
+		resolution.cwiseQuotient(quilting_dims),
 		focal_length,
 		camera,
 		prev_camera,
@@ -2594,6 +2598,11 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 
 	Vector2f focal_length = calc_focal_length(render_buffer.in_resolution(), m_fov_axis, m_zoom);
 	Vector2f screen_center = render_screen_center();
+
+	if (m_quilting_dims != Vector2i::Ones() && m_quilting_dims != Vector2i{2, 1}) {
+		// In the case of a holoplay lenticular screen, m_scale represents the inverse distance of the head above the display.
+		m_parallax_shift.z() = 1.0f / m_scale;
+	}
 
 	switch (m_testbed_mode) {
 		case ETestbedMode::Nerf:
@@ -2710,18 +2719,13 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 		const dim3 threads = { 16, 8, 1 };
 		const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
 
-		Vector3f parallax_shift = get_scaled_parallax_shift();
-		if (parallax_shift.head<2>() != Vector2f::Zero()) {
-			throw std::runtime_error{"Motion vectors don't support parallax shift."};
-		}
-
 		dlss_prep_kernel<<<blocks, threads, 0, m_stream.get()>>>(
 			m_testbed_mode,
 			res,
 			render_buffer.spp(),
 			focal_length,
 			screen_center,
-			parallax_shift,
+			m_parallax_shift,
 			m_snap_to_pixel_centers,
 			render_buffer.depth_buffer(),
 			camera_matrix0,
@@ -2734,7 +2738,8 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 			m_prev_scale,
 			m_image.pos,
 			m_image.prev_pos,
-			m_image.resolution
+			m_image.resolution,
+			m_quilting_dims
 		);
 
 		render_buffer.set_dlss_sharpening(m_dlss_sharpening);

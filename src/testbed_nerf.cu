@@ -1800,7 +1800,8 @@ __global__ void init_rays_with_payload_kernel_nerf(
 	float* __restrict__ depthbuffer,
 	const float* __restrict__ distortion_data,
 	const Vector2i distortion_resolution,
-	ERenderMode render_mode
+	ERenderMode render_mode,
+	Vector2i quilting_dims
 ) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
@@ -1815,6 +1816,9 @@ __global__ void init_rays_with_payload_kernel_nerf(
 		aperture_size = 0.0;
 	}
 
+	if (quilting_dims != Vector2i::Ones()) {
+		apply_quilting(&x, &y, resolution, parallax_shift, quilting_dims);
+	}
 
 	// TODO: pixel_to_ray also immediately computes u,v for the pixel, so this is somewhat redundant
 	float u = (x + 0.5f) * (1.f / resolution.x());
@@ -1823,7 +1827,7 @@ __global__ void init_rays_with_payload_kernel_nerf(
 	Ray ray = pixel_to_ray(
 		sample_index,
 		{x, y},
-		resolution,
+		resolution.cwiseQuotient(quilting_dims),
 		focal_length,
 		camera_matrix0 * ray_time + camera_matrix1 * (1.f - ray_time),
 		screen_center,
@@ -1962,8 +1966,9 @@ void Testbed::NerfTracer::init_rays_from_camera(
 	const Matrix<float, 3, 4>& camera_matrix0,
 	const Matrix<float, 3, 4>& camera_matrix1,
 	const Vector4f& rolling_shutter,
-	Vector2f screen_center,
-	Vector3f parallax_shift,
+	const Vector2f& screen_center,
+	const Vector3f& parallax_shift,
+	const Vector2i& quilting_dims,
 	bool snap_to_pixel_centers,
 	const BoundingBox& render_aabb,
 	const Matrix3f& render_aabb_to_local,
@@ -2010,7 +2015,8 @@ void Testbed::NerfTracer::init_rays_from_camera(
 		depth_buffer,
 		distortion_data,
 		distortion_resolution,
-		render_mode
+		render_mode,
+		quilting_dims
 	);
 
 	m_n_rays_initialized = resolution.x() * resolution.y();
@@ -2256,7 +2262,8 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 		camera_matrix1,
 		rolling_shutter,
 		screen_center,
-		get_scaled_parallax_shift(),
+		m_parallax_shift,
+		m_quilting_dims,
 		m_snap_to_pixel_centers,
 		m_render_aabb,
 		m_render_aabb_to_local,

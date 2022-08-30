@@ -298,7 +298,7 @@ inline __host__ __device__ Ray pixel_to_ray(
 	}
 
 	Eigen::Vector3f head_pos = {parallax_shift.x(), parallax_shift.y(), 0.f};
-	dir -= head_pos / parallax_shift.z(); // we could use focus_z here in the denominator. for now, we pack m_scale in here.
+	dir -= head_pos * parallax_shift.z(); // we could use focus_z here in the denominator. for now, we pack m_scale in here.
 	dir = camera_matrix.block<3, 3>(0, 0) * dir;
 
 	Eigen::Vector3f origin = camera_matrix.block<3, 3>(0, 0) * head_pos + camera_matrix.col(3);
@@ -330,7 +330,7 @@ inline __host__ __device__ Eigen::Vector2f pos_to_pixel(
 	Eigen::Vector3f dir = pos - origin;
 	dir = camera_matrix.block<3, 3>(0, 0).inverse() * dir;
 	dir /= dir.z();
-	dir += head_pos / parallax_shift.z();
+	dir += head_pos * parallax_shift.z();
 
 	if (camera_distortion.mode == ECameraDistortionMode::Iterative) {
 		float du, dv;
@@ -535,6 +535,26 @@ inline __host__ __device__ Eigen::Vector3f faceforward(const Eigen::Vector3f& n,
 	return n * copysignf(1.0f, i.dot(nref));
 }
 
+inline __host__ __device__ void apply_quilting(uint32_t* x, uint32_t* y, const Eigen::Vector2i& resolution, Eigen::Vector3f& parallax_shift, const Eigen::Vector2i& quilting_dims) {
+	float resx = float(resolution.x()) / quilting_dims.x();
+	float resy = float(resolution.y()) / quilting_dims.y();
+	int panelx = (int)floorf(*x/resx);
+	int panely = (int)floorf(*y/resy);
+	*x = (*x - panelx * resx);
+	*y = (*y - panely * resy);
+	int idx = panelx + quilting_dims.x() * panely;
+
+	if (quilting_dims == Eigen::Vector2i{2, 1}) {
+		// Likely VR: parallax_shift.x() is the IPD in this case. The following code centers the camera matrix between both eyes.
+		parallax_shift.x() = idx ? (-0.5f * parallax_shift.x()) : (0.5f * parallax_shift.x());
+	} else {
+		// Likely HoloPlay lenticular display: in this case, `parallax_shift.z()` is the inverse height of the head above the display.
+		// The following code computes the x-offset of views as a function of this.
+		const float max_parallax_angle = 17.5f; // suggested value in https://docs.lookingglassfactory.com/keyconcepts/camera
+		float parallax_angle = max_parallax_angle * PI() / 180.f * ((idx+0.5f)*2.f / float(quilting_dims.y() * quilting_dims.x()) - 1.f);
+		parallax_shift.x() = atanf(parallax_angle) / parallax_shift.z();
+	}
+}
 
 template <typename T>
 __global__ void from_rgba32(const uint64_t num_pixels, const uint8_t* __restrict__ pixels, T* __restrict__ out, bool white_2_transparent = false, bool black_2_transparent = false, uint32_t mask_color = 0) {

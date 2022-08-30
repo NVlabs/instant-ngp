@@ -138,8 +138,9 @@ public:
 			const Eigen::Matrix<float, 3, 4>& camera_matrix0,
 			const Eigen::Matrix<float, 3, 4>& camera_matrix1,
 			const Eigen::Vector4f& rolling_shutter,
-			Eigen::Vector2f screen_center,
-			Eigen::Vector3f parallax_shift,
+			const Eigen::Vector2f& screen_center,
+			const Eigen::Vector3f& parallax_shift,
+			const Eigen::Vector2i& quilting_dims,
 			bool snap_to_pixel_centers,
 			const BoundingBox& render_aabb,
 			const Eigen::Matrix3f& render_aabb_to_local,
@@ -471,6 +472,8 @@ public:
 	Eigen::Vector3f m_sun_dir = Eigen::Vector3f::Ones().normalized();
 	float m_bounding_radius = 1;
 	float m_exposure = 0.f;
+
+	Eigen::Vector2i m_quilting_dims = Eigen::Vector2i::Ones();
 
 	ERenderMode m_render_mode = ERenderMode::Shade;
 	EMeshRenderMode m_mesh_render_mode = EMeshRenderMode::VertexNormals;
@@ -806,8 +809,7 @@ public:
 	bool m_snap_to_pixel_centers = false;
 	bool m_edit_render_aabb = false;
 
-	Eigen::Vector2f m_parallax_shift = {0.f, 0.f}; // to shift the viewer's head position by some amount parallel to the screen
-	Eigen::Vector3f get_scaled_parallax_shift() const { return {m_parallax_shift.x(), m_parallax_shift.y(), m_scale}; } // pack m_scale into the parallax parameter so we know where the screen plane is.
+	Eigen::Vector3f m_parallax_shift = {0.0f, 0.0f, 0.0f}; // to shift the viewer's origin by some amount in camera space
 
 	// CUDA stuff
 	tcnn::StreamAndEvent m_stream;
