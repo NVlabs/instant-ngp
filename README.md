@@ -72,7 +72,7 @@ If the build fails, please consult [this list of possible fixes](https://github.
 
 If the build succeeds, you can now run the code via the `build/testbed` executable or the `scripts/run.py` script described below.
 
-If automatic GPU architecture detection fails, (as can happen if you have multiple GPUs installed), set the `TCNN_CUDA_ARCHITECTURES` enivonment variable for the GPU you would like to use. The following table lists the values for common GPUs. If your GPU is not listed, consult [this exhaustive list](https://developer.nvidia.com/cuda-gpus).
+If automatic GPU architecture detection fails, (as can happen if you have multiple GPUs installed), set the `TCNN_CUDA_ARCHITECTURES` environment variable for the GPU you would like to use. The following table lists the values for common GPUs. If your GPU is not listed, consult [this exhaustive list](https://developer.nvidia.com/cuda-gpus).
 
 | RTX 30X0 | A100 | RTX 20X0 | TITAN V / V100 | GTX 10X0 / TITAN Xp | GTX 9X0 | K80 |
 |:--------:|:----:|:--------:|:--------------:|:-------------------:|:-------:|:---:|
@@ -287,7 +287,7 @@ If your problem persists, consult the following table of known issues.
 | __Compile error:__ too few arguments in function call | Update submodules with the above two `git` commands. ([#37](https://github.com/NVlabs/instant-ngp/issues/37) [#52](https://github.com/NVlabs/instant-ngp/issues/52)) |
 | __Python error:__ No module named 'pyngp' | It is likely that CMake did not detect your Python installation and therefore did not build `pyngp`. Check CMake logs to verify this. If `pyngp` was built in a different folder than `instant-ngp/build`, Python will be unable to detect it and you have to supply the full path to the import statement. ([#43](https://github.com/NVlabs/instant-ngp/issues/43)) |
 
-If you cannot find your problem in the table, please feel free to [open an issue](https://github.com/NVlabs/instant-ngp/issues/new) and ask for help.
+If you cannot find your problem in the table, try searching [the discussions board](https://github.com/NVlabs/instant-ngp/discussions) and [the issues area](https://github.com/NVlabs/instant-ngp/issues?q=is%3Aissue) for help. If you are still stuck, please [open an issue](https://github.com/NVlabs/instant-ngp/issues/new) and ask for help.
 
 ## Thanks
 
