@@ -60,7 +60,7 @@ CameraKeyframe spline(float t, const CameraKeyframe& p0, const CameraKeyframe& p
 		CameraKeyframe r1 = lerp(q1, q2, t,  0.f, 2.f);
 		return lerp(r0, r1, t, 0.f, 1.f);
 	} else {
-		// cublic bspline
+		// cubic bspline
 		float tt=t*t;
 		float ttt=t*t*t;
 		float a = (1-t)*(1-t)*(1-t)*(1.f/6.f);

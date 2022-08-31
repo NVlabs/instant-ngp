@@ -388,6 +388,8 @@ public:
 	void set_camera_from_time(float t);
 	void update_loss_graph();
 	void load_camera_path(const std::string& filepath_string);
+	bool loop_animation();
+	void set_loop_animation(bool value);
 
 	float compute_image_mse(bool quantize_to_byte);
 

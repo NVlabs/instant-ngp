@@ -3008,5 +3008,13 @@ void Testbed::load_camera_path(const std::string& filepath_string) {
 	m_camera_path.load(filepath_string, Matrix<float, 3, 4>::Identity());
 }
 
+bool Testbed::loop_animation() {
+	return m_camera_path.m_loop;
+}
+
+void Testbed::set_loop_animation(bool value) {
+	m_camera_path.m_loop = value;
+}
+
 NGP_NAMESPACE_END
 
