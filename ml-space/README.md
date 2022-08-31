@@ -13,7 +13,6 @@ docker push cr.msk.sbercloud.ru/df299eee-bace-4fec-91f6-3b1757324136/jupyter-cud
 ## Установка окружения
 После запуска инстанса необходимо настроить окружение следующим образом:
 
-If you are using Debian based Linux distribution, install the following packages
 ```sh
 # clone project
 git clone --recursive git@github.com:sberbank-cds-ai/instant-ngp.git
