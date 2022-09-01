@@ -23,6 +23,8 @@ from scenes import *
 from tqdm import tqdm
 
 import pyngp as ngp # noqa
+from pyngp import BoundingBox
+
 
 def parse_args():
 	parser = argparse.ArgumentParser(description="Run neural graphics primitives testbed with additional configuration & output options")
@@ -53,6 +55,8 @@ def parse_args():
 	parser.add_argument("--video_output", type=str, default="video.mp4", help="Filename of the output video.")
 
 	parser.add_argument("--save_mesh", default="", help="Output a marching-cubes based mesh from the NeRF or SDF model. Supports OBJ and PLY format.")
+	parser.add_argument("--crop_min_xyz", help="Crop min coordinates for mesh creation.", type=float, nargs='*')
+	parser.add_argument("--crop_max_xyz", help="Crop max coordinates for mesh creation.", type=float, nargs='*')
 	parser.add_argument("--marching_cubes_res", default=256, type=int, help="Sets the resolution for the marching cubes grid.")
 
 	parser.add_argument("--width", "--screenshot_w", type=int, default=0, help="Resolution width of GUI and screenshots.")
@@ -70,7 +74,7 @@ def parse_args():
 
 if __name__ == "__main__":
 	args = parse_args()
-
+    
 	args.mode = args.mode or mode_from_scene(args.scene) or mode_from_scene(args.load_snapshot)
 	if not args.mode:
 		raise ValueError("Must specify either a valid '--mode' or '--scene' argument.")
@@ -305,7 +309,8 @@ if __name__ == "__main__":
 	if args.save_mesh:
 		res = args.marching_cubes_res or 256
 		print(f"Generating mesh via marching cubes and saving to {args.save_mesh}. Resolution=[{res},{res},{res}]")
-		testbed.compute_and_save_marching_cubes_mesh(args.save_mesh, [res, res, res])
+		render_aabb = BoundingBox(np.array(args.crop_min_xyz), np.array(args.crop_max_xyz))
+		testbed.compute_and_save_marching_cubes_mesh(args.save_mesh, [res, res, res], render_aabb, 2)
 
 	if ref_transforms:
 		testbed.fov_axis = 0
