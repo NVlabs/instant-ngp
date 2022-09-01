@@ -46,6 +46,7 @@ def parse_args():
 
 	parser.add_argument("--video_camera_path", default="", help="The camera path to render, e.g., base_cam.json.")
 	parser.add_argument("--video_camera_smoothing", action="store_true", help="Applies additional smoothing to the camera trajectory with the caveat that the endpoint of the camera path may not be reached.")
+	parser.add_argument("--video_loop_animation", action="store_true", help="Connect the last and first keyframes in a continuous loop.")
 	parser.add_argument("--video_fps", type=int, default=60, help="Number of frames per second.")
 	parser.add_argument("--video_n_seconds", type=int, default=1, help="Number of seconds the rendered video should be long.")
 	parser.add_argument("--video_spp", type=int, default=8, help="Number of samples per pixel. A larger number means less noise, but slower rendering.")
@@ -336,6 +337,7 @@ if __name__ == "__main__":
 
 	if args.video_camera_path:
 		testbed.load_camera_path(args.video_camera_path)
+		testbed.loop_animation = args.video_loop_animation
 
 		resolution = [args.width or 1920, args.height or 1080]
 		n_frames = args.video_n_seconds * args.video_fps
