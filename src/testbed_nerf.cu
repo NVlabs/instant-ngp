@@ -1509,7 +1509,7 @@ __global__ void compute_loss_kernel_train_nerf(
 		const float depth_suffix = depth_ray - depth_ray2;
 		const float depth_supervision = depth_loss_gradient * (T * depth - depth_suffix);
 
-		float dloss_by_dmlp = density_derivative * (
+		float dloss_by_dmlp = (
 			dt * (lg.gradient.matrix().dot((T * rgb - suffix).matrix()) + depth_supervision)
 		);
 
@@ -1517,9 +1517,9 @@ __global__ void compute_loss_kernel_train_nerf(
 		//dloss_by_dmlp += (texsamp.w()<0.001f) ? mask_supervision_strength * weight : 0.f;
 
 		local_dL_doutput[3] =
-			loss_scale * dloss_by_dmlp +
+			density_derivative * (loss_scale * dloss_by_dmlp +
 			(float(local_network_output[3]) < 0.0f ? -output_l1_reg_density : 0.0f) +
-			(float(local_network_output[3]) > -10.0f && depth < near_distance ? 1e-4f : 0.0f);
+			(float(local_network_output[3]) > -10.0f && depth < near_distance ? 1e-4f : 0.0f));
 			;
 
 		*(tcnn::vector_t<tcnn::network_precision_t, 4>*)dloss_doutput = local_dL_doutput;
