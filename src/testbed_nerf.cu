@@ -1035,8 +1035,8 @@ inline __device__ Vector2f nerf_random_image_pos_training(default_rng_t& rng, co
 
 inline __device__ uint32_t image_idx(uint32_t base_idx, uint32_t n_rays, uint32_t n_rays_total, uint32_t n_training_images, const float* __restrict__ cdf = nullptr, float* __restrict__ pdf = nullptr) {
 	if (cdf) {
-		float sample = ld_random_val(base_idx + n_rays_total, 0xdeadbeef);
-		// float sample = random_val(base_idx + n_rays_total);
+		float sample = ld_random_val(base_idx/* + n_rays_total*/, 0xdeadbeef);
+		// float sample = random_val(base_idx/* + n_rays_total*/);
 		uint32_t img = binary_search(sample, cdf, n_training_images);
 
 		if (pdf) {
@@ -1047,13 +1047,13 @@ inline __device__ uint32_t image_idx(uint32_t base_idx, uint32_t n_rays, uint32_
 		return img;
 	}
 
-	// return ((base_idx + n_rays_total) * 56924617 + 96925573) % n_training_images;
+	// return ((base_idx/* + n_rays_total*/) * 56924617 + 96925573) % n_training_images;
 
 	// Neighboring threads in the warp process the same image. Increases locality.
 	if (pdf) {
 		*pdf = 1.0f;
 	}
-	return (((base_idx + n_rays_total) * n_training_images) / n_rays) % n_training_images;
+	return (((base_idx/* + n_rays_total*/) * n_training_images) / n_rays) % n_training_images;
 }
 
 __global__ void generate_training_samples_nerf(
@@ -2676,7 +2676,7 @@ void Testbed::update_density_grid_nerf(float decay, uint32_t n_uniform_density_g
 
 		linear_kernel(generate_grid_samples_nerf_nonuniform, 0, stream,
 			n_uniform_density_grid_samples,
-			m_rng,
+			m_nerf.training.density_grid_rng,
 			m_nerf.density_grid_ema_step,
 			m_aabb,
 			m_nerf.density_grid.data(),
@@ -2685,11 +2685,11 @@ void Testbed::update_density_grid_nerf(float decay, uint32_t n_uniform_density_g
 			m_nerf.max_cascade+1,
 			-0.01f
 		);
-		m_rng.advance();
+		m_nerf.training.density_grid_rng.advance();
 
 		linear_kernel(generate_grid_samples_nerf_nonuniform, 0, stream,
 			n_nonuniform_density_grid_samples,
-			m_rng,
+			m_nerf.training.density_grid_rng,
 			m_nerf.density_grid_ema_step,
 			m_aabb,
 			m_nerf.density_grid.data(),
@@ -2698,7 +2698,7 @@ void Testbed::update_density_grid_nerf(float decay, uint32_t n_uniform_density_g
 			m_nerf.max_cascade+1,
 			NERF_MIN_OPTICAL_THICKNESS()
 		);
-		m_rng.advance();
+		m_nerf.training.density_grid_rng.advance();
 
 		GPUMatrix<network_precision_t, RM> density_matrix(mlp_out, padded_output_width, n_density_grid_samples);
 		GPUMatrix<float> density_grid_position_matrix((float*)density_grid_positions, sizeof(NerfPosition)/sizeof(float), n_density_grid_samples);

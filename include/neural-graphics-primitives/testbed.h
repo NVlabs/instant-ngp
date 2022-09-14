@@ -607,6 +607,7 @@ public:
 
 			float near_distance = 0.2f;
 			float density_grid_decay = 0.95f;
+			default_rng_t density_grid_rng;
 			int view = 0;
 
 			float depth_supervision_lambda = 0.f;

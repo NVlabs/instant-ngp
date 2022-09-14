@@ -2245,6 +2245,7 @@ void Testbed::reset_network(bool clear_density_grid) {
 	m_nerf.training.n_rays_since_error_map_update = 0;
 	m_nerf.training.n_steps_between_error_map_updates = 128;
 	m_nerf.training.error_map.is_cdf_valid = false;
+	m_nerf.training.density_grid_rng = default_rng_t{m_rng.next_uint()};
 
 	m_nerf.training.reset_camera_extrinsics();
 
