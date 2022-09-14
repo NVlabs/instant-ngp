@@ -384,7 +384,7 @@ void Testbed::dump_parameters_as_images(const T* params, const std::string& file
 	save_exr(params_cpu.data() + offset, non_layer_params_width, n_non_layer_params / non_layer_params_width, 1, 1, filename.c_str());
 }
 
-template void Testbed::dump_parameters_as_images<network_precision_t>(const network_precision_t*, const std::string&);
+template void Testbed::dump_parameters_as_images<__half>(const __half*, const std::string&);
 template void Testbed::dump_parameters_as_images<float>(const float*, const std::string&);
 
 #ifdef NGP_GUI
