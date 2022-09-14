@@ -352,7 +352,8 @@ inline float linear_to_db(float x) {
 	return -10.f*logf(x)/logf(10.f);
 }
 
-void Testbed::dump_parameters_as_images() {
+template <typename T>
+void Testbed::dump_parameters_as_images(const T* params, const std::string& filename_base) {
 	size_t non_layer_params_width = 2048;
 
 	size_t layer_params = 0;
@@ -360,23 +361,31 @@ void Testbed::dump_parameters_as_images() {
 		layer_params += size.first * size.second;
 	}
 
-	size_t non_layer_params = m_network->n_params() - layer_params;
+	size_t n_params = m_network->n_params();
+	size_t n_non_layer_params = n_params - layer_params;
 
-	float* params = m_trainer->params();
-	std::vector<float> params_cpu(layer_params + next_multiple(non_layer_params, non_layer_params_width), 0.0f);
-	CUDA_CHECK_THROW(cudaMemcpy(params_cpu.data(), params, m_network->n_params() * sizeof(float), cudaMemcpyDeviceToHost));
+	std::vector<T> params_cpu_network_precision(layer_params + next_multiple(n_non_layer_params, non_layer_params_width));
+	std::vector<float> params_cpu(params_cpu_network_precision.size(), 0.0f);
+	CUDA_CHECK_THROW(cudaMemcpy(params_cpu_network_precision.data(), params, n_params * sizeof(T), cudaMemcpyDeviceToHost));
+
+	for (size_t i = 0; i < n_params; ++i) {
+		params_cpu[i] = (float)params_cpu_network_precision[i];
+	}
 
 	size_t offset = 0;
 	size_t layer_id = 0;
 	for (auto size : m_network->layer_sizes()) {
-		save_exr(params_cpu.data() + offset, size.second, size.first, 1, 1, fmt::format("layer-{}.exr", layer_id).c_str());
+		save_exr(params_cpu.data() + offset, size.second, size.first, 1, 1, fmt::format("{}-layer-{}.exr", filename_base, layer_id).c_str());
 		offset += size.first * size.second;
 		++layer_id;
 	}
 
-	std::string filename = "non-layer.exr";
-	save_exr(params_cpu.data() + offset, non_layer_params_width, non_layer_params / non_layer_params_width, 1, 1, filename.c_str());
+	std::string filename = fmt::format("{}-non-layer.exr", filename_base);
+	save_exr(params_cpu.data() + offset, non_layer_params_width, n_non_layer_params / non_layer_params_width, 1, 1, filename.c_str());
 }
+
+template void Testbed::dump_parameters_as_images<network_precision_t>(const network_precision_t*, const std::string&);
+template void Testbed::dump_parameters_as_images<float>(const float*, const std::string&);
 
 #ifdef NGP_GUI
 bool imgui_colored_button(const char *name, float hue) {
@@ -935,7 +944,7 @@ void Testbed::imgui() {
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Dump parameters as images")) {
-			dump_parameters_as_images();
+			dump_parameters_as_images(m_trainer->params(), "params");
 		}
 		if (ImGui::BeginPopupModal("Snapshot load error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
 			ImGui::Text("%s", snapshot_load_error_string.c_str());

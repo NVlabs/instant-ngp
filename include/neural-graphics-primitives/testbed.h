@@ -328,7 +328,10 @@ public:
 	void train_sdf(size_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
 	void train_image(size_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
 	void set_train(bool mtrain);
-	void dump_parameters_as_images();
+
+	template <typename T>
+	void dump_parameters_as_images(const T* params, const std::string& filename_base);
+
 	void imgui();
 	void training_prep_nerf(uint32_t batch_size, cudaStream_t stream);
 	void training_prep_sdf(uint32_t batch_size, cudaStream_t stream);
