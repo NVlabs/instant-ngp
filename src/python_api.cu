@@ -131,16 +131,27 @@ py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool l
 	if (end_time < 0.f) {
 		end_time = start_time;
 	}
-
-	auto start_cam_matrix = m_smoothed_camera;
-
-	if (start_time >= 0.f) {
-		set_camera_from_time(end_time);
-		apply_camera_smoothing(1000.f / fps);
-	} else {
-		start_cam_matrix = m_smoothed_camera = m_camera;
+	bool path_animation_enabled = start_time >= 0.f;
+	if (!path_animation_enabled) { // the old code disabled camera smoothing for non-path renders; so we preserve that behaviour
+		m_smoothed_camera = m_camera;
 	}
 
+	// this rendering code assumes that the intra-frame camera motion starts from m_smoothed_camera (ie where we left off) to allow for EMA camera smoothing.
+	// in the case of a camera path animation, at the very start of the animation, we have yet to initialize smoothed_camera to something sensible
+	// - it will just be the default boot position. oops!
+	// that led to the first frame having a crazy streak from the default camera position to the start of the path.
+	// so we detect that case and explicitly force the current matrix to the start of the path
+	if (start_time == 0.f) {
+		set_camera_from_time(start_time);
+		m_smoothed_camera = m_camera;
+	}
+	auto start_cam_matrix = m_smoothed_camera;
+
+	// now set up the end-of-frame camera matrix if we are moving along a path
+	if (path_animation_enabled) {
+		set_camera_from_time(end_time);
+		apply_camera_smoothing(1000.f / fps);
+	}
 	auto end_cam_matrix = m_smoothed_camera;
 
 	for (int i = 0; i < spp; ++i) {
@@ -150,7 +161,7 @@ py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool l
 		auto sample_start_cam_matrix = log_space_lerp(start_cam_matrix, end_cam_matrix, start_alpha);
 		auto sample_end_cam_matrix = log_space_lerp(start_cam_matrix, end_cam_matrix, end_alpha);
 
-		if (start_time >= 0.f) {
+		if (path_animation_enabled) {
 			set_camera_from_time(start_time + (end_time-start_time) * (start_alpha + end_alpha) / 2.0f);
 			m_smoothed_camera = m_camera;
 		}
