@@ -1638,20 +1638,20 @@ __global__ void compute_cam_gradient_train_nerf(
 		ray_gradient.d += pos_gradient * t + dir_gradient;
 	}
 
-	// Projection of the raydir gradient onto the plane normal to raydir,
-	// because that's the only degree of motion that the raydir has.
-	ray_gradient.d -= ray.d * ray_gradient.d.dot(ray.d);
-
 	rng.advance(ray_idx * N_MAX_RANDOM_SAMPLES_PER_RAY());
 	float xy_pdf = 1.0f;
 
 	Vector2f xy = nerf_random_image_pos_training(rng, resolution, snap_to_pixel_centers, cdf_x_cond_y, cdf_y, error_map_res, img, &xy_pdf);
 
 	if (distortion_gradient) {
+		// Projection of the raydir gradient onto the plane normal to raydir,
+		// because that's the only degree of motion that the raydir has.
+		Vector3f orthogonal_ray_gradient = ray_gradient.d - ray.d * ray_gradient.d.dot(ray.d);
+
 		// Rotate ray gradient to obtain image plane gradient.
 		// This has the effect of projecting the (already projected) ray gradient from the
 		// tangent plane of the sphere onto the image plane (which is correct!).
-		Vector3f image_plane_gradient = xform.block<3,3>(0,0).inverse() * ray_gradient.d;
+		Vector3f image_plane_gradient = xform.block<3,3>(0,0).inverse() * orthogonal_ray_gradient;
 
 		// Splat the resulting 2D image plane gradient into the distortion params
 		deposit_image_gradient<2>(image_plane_gradient.head<2>() / xy_pdf, distortion_gradient, distortion_gradient_weight, distortion_resolution, xy);
