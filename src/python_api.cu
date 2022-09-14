@@ -131,16 +131,27 @@ py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool l
 	if (end_time < 0.f) {
 		end_time = start_time;
 	}
-
-	auto start_cam_matrix = m_smoothed_camera;
-
-	if (start_time >= 0.f) {
-		set_camera_from_time(end_time);
-		apply_camera_smoothing(1000.f / fps);
-	} else {
-		start_cam_matrix = m_smoothed_camera = m_camera;
+	bool path_animation_enabled = start_time >= 0.f;
+	if (!path_animation_enabled) { // the old code disabled camera smoothing for non-path renders; so we preserve that behaviour
+		m_smoothed_camera = m_camera;
 	}
 
+	// this rendering code assumes that the intra-frame camera motion starts from m_smoothed_camera (ie where we left off) to allow for EMA camera smoothing.
+	// in the case of a camera path animation, at the very start of the animation, we have yet to initialize smoothed_camera to something sensible
+	// - it will just be the default boot position. oops!
+	// that led to the first frame having a crazy streak from the default camera position to the start of the path.
+	// so we detect that case and explicitly force the current matrix to the start of the path
+	if (start_time == 0.f) {
+		set_camera_from_time(start_time);
+		m_smoothed_camera = m_camera;
+	}
+	auto start_cam_matrix = m_smoothed_camera;
+
+	// now set up the end-of-frame camera matrix if we are moving along a path
+	if (path_animation_enabled) {
+		set_camera_from_time(end_time);
+		apply_camera_smoothing(1000.f / fps);
+	}
 	auto end_cam_matrix = m_smoothed_camera;
 
 	for (int i = 0; i < spp; ++i) {
@@ -150,7 +161,7 @@ py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool l
 		auto sample_start_cam_matrix = log_space_lerp(start_cam_matrix, end_cam_matrix, start_alpha);
 		auto sample_end_cam_matrix = log_space_lerp(start_cam_matrix, end_cam_matrix, end_alpha);
 
-		if (start_time >= 0.f) {
+		if (path_animation_enabled) {
 			set_camera_from_time(start_time + (end_time-start_time) * (start_alpha + end_alpha) / 2.0f);
 			m_smoothed_camera = m_camera;
 		}
@@ -371,9 +382,15 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("destroy_window", &Testbed::destroy_window, "Destroy the window again.")
 		.def("train", &Testbed::train, py::call_guard<py::gil_scoped_release>(), "Perform a specified number of training steps.")
 		.def("reset", &Testbed::reset_network, py::arg("reset_density_grid") = true, "Reset training.")
-		.def("reset_accumulation", &Testbed::reset_accumulation, "Reset rendering accumulation.")
+		.def("reset_accumulation", &Testbed::reset_accumulation, "Reset rendering accumulation.",
+			py::arg("due_to_camera_movement") = false,
+			py::arg("immediate_redraw") = true
+		)
 		.def("reload_network_from_file", &Testbed::reload_network_from_file, py::arg("path")="", "Reload the network from a config file.")
-		.def("reload_network_from_json", &Testbed::reload_network_from_json, "Reload the network from a json object.")
+		.def("reload_network_from_json", &Testbed::reload_network_from_json, "Reload the network from a json object.",
+			py::arg("json"),
+			py::arg("config_base_path") = ""
+		)
 		.def("override_sdf_training_data", &Testbed::override_sdf_training_data, "Override the training data for learning a signed distance function")
 		.def("calculate_iou", &Testbed::calculate_iou, "Calculate the intersection over union error value",
 			py::arg("n_samples") = 128*1024*1024,
@@ -492,6 +509,9 @@ PYBIND11_MODULE(pyngp, m) {
 			}
 		)
 		.def_readwrite("dlss_sharpening", &Testbed::m_dlss_sharpening)
+		.def("crop_box", &Testbed::crop_box, py::arg("nerf_space") = true)
+		.def("set_crop_box", &Testbed::set_crop_box, py::arg("matrix"), py::arg("nerf_space") = true)
+		.def("crop_box_corners", &Testbed::crop_box_corners, py::arg("nerf_space") = true)
 		;
 
 	py::class_<CameraDistortion> camera_distortion(m, "CameraDistortion");
@@ -502,6 +522,7 @@ PYBIND11_MODULE(pyngp, m) {
 			return py::array{sizeof(o.params)/sizeof(o.params[0]), o.params, obj};
 		})
 		;
+
 
 	py::class_<Testbed::Nerf> nerf(testbed, "Nerf");
 	nerf

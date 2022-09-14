@@ -1035,8 +1035,8 @@ inline __device__ Vector2f nerf_random_image_pos_training(default_rng_t& rng, co
 
 inline __device__ uint32_t image_idx(uint32_t base_idx, uint32_t n_rays, uint32_t n_rays_total, uint32_t n_training_images, const float* __restrict__ cdf = nullptr, float* __restrict__ pdf = nullptr) {
 	if (cdf) {
-		float sample = ld_random_val(base_idx + n_rays_total, 0xdeadbeef);
-		// float sample = random_val(base_idx + n_rays_total);
+		float sample = ld_random_val(base_idx/* + n_rays_total*/, 0xdeadbeef);
+		// float sample = random_val(base_idx/* + n_rays_total*/);
 		uint32_t img = binary_search(sample, cdf, n_training_images);
 
 		if (pdf) {
@@ -1047,13 +1047,13 @@ inline __device__ uint32_t image_idx(uint32_t base_idx, uint32_t n_rays, uint32_
 		return img;
 	}
 
-	// return ((base_idx + n_rays_total) * 56924617 + 96925573) % n_training_images;
+	// return ((base_idx/* + n_rays_total*/) * 56924617 + 96925573) % n_training_images;
 
 	// Neighboring threads in the warp process the same image. Increases locality.
 	if (pdf) {
 		*pdf = 1.0f;
 	}
-	return (((base_idx + n_rays_total) * n_training_images) / n_rays) % n_training_images;
+	return (((base_idx/* + n_rays_total*/) * n_training_images) / n_rays) % n_training_images;
 }
 
 __global__ void generate_training_samples_nerf(
@@ -1638,20 +1638,20 @@ __global__ void compute_cam_gradient_train_nerf(
 		ray_gradient.d += pos_gradient * t + dir_gradient;
 	}
 
-	// Projection of the raydir gradient onto the plane normal to raydir,
-	// because that's the only degree of motion that the raydir has.
-	ray_gradient.d -= ray.d * ray_gradient.d.dot(ray.d);
-
 	rng.advance(ray_idx * N_MAX_RANDOM_SAMPLES_PER_RAY());
 	float xy_pdf = 1.0f;
 
 	Vector2f xy = nerf_random_image_pos_training(rng, resolution, snap_to_pixel_centers, cdf_x_cond_y, cdf_y, error_map_res, img, &xy_pdf);
 
 	if (distortion_gradient) {
+		// Projection of the raydir gradient onto the plane normal to raydir,
+		// because that's the only degree of motion that the raydir has.
+		Vector3f orthogonal_ray_gradient = ray_gradient.d - ray.d * ray_gradient.d.dot(ray.d);
+
 		// Rotate ray gradient to obtain image plane gradient.
 		// This has the effect of projecting the (already projected) ray gradient from the
 		// tangent plane of the sphere onto the image plane (which is correct!).
-		Vector3f image_plane_gradient = xform.block<3,3>(0,0).inverse() * ray_gradient.d;
+		Vector3f image_plane_gradient = xform.block<3,3>(0,0).inverse() * orthogonal_ray_gradient;
 
 		// Splat the resulting 2D image plane gradient into the distortion params
 		deposit_image_gradient<2>(image_plane_gradient.head<2>() / xy_pdf, distortion_gradient, distortion_gradient_weight, distortion_resolution, xy);
@@ -2676,7 +2676,7 @@ void Testbed::update_density_grid_nerf(float decay, uint32_t n_uniform_density_g
 
 		linear_kernel(generate_grid_samples_nerf_nonuniform, 0, stream,
 			n_uniform_density_grid_samples,
-			m_rng,
+			m_nerf.training.density_grid_rng,
 			m_nerf.density_grid_ema_step,
 			m_aabb,
 			m_nerf.density_grid.data(),
@@ -2685,11 +2685,11 @@ void Testbed::update_density_grid_nerf(float decay, uint32_t n_uniform_density_g
 			m_nerf.max_cascade+1,
 			-0.01f
 		);
-		m_rng.advance();
+		m_nerf.training.density_grid_rng.advance();
 
 		linear_kernel(generate_grid_samples_nerf_nonuniform, 0, stream,
 			n_nonuniform_density_grid_samples,
-			m_rng,
+			m_nerf.training.density_grid_rng,
 			m_nerf.density_grid_ema_step,
 			m_aabb,
 			m_nerf.density_grid.data(),
@@ -2698,7 +2698,7 @@ void Testbed::update_density_grid_nerf(float decay, uint32_t n_uniform_density_g
 			m_nerf.max_cascade+1,
 			NERF_MIN_OPTICAL_THICKNESS()
 		);
-		m_rng.advance();
+		m_nerf.training.density_grid_rng.advance();
 
 		GPUMatrix<network_precision_t, RM> density_matrix(mlp_out, padded_output_width, n_density_grid_samples);
 		GPUMatrix<float> density_grid_position_matrix((float*)density_grid_positions, sizeof(NerfPosition)/sizeof(float), n_density_grid_samples);

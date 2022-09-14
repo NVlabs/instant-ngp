@@ -352,7 +352,8 @@ inline float linear_to_db(float x) {
 	return -10.f*logf(x)/logf(10.f);
 }
 
-void Testbed::dump_parameters_as_images() {
+template <typename T>
+void Testbed::dump_parameters_as_images(const T* params, const std::string& filename_base) {
 	size_t non_layer_params_width = 2048;
 
 	size_t layer_params = 0;
@@ -360,23 +361,31 @@ void Testbed::dump_parameters_as_images() {
 		layer_params += size.first * size.second;
 	}
 
-	size_t non_layer_params = m_network->n_params() - layer_params;
+	size_t n_params = m_network->n_params();
+	size_t n_non_layer_params = n_params - layer_params;
 
-	float* params = m_trainer->params();
-	std::vector<float> params_cpu(layer_params + next_multiple(non_layer_params, non_layer_params_width), 0.0f);
-	CUDA_CHECK_THROW(cudaMemcpy(params_cpu.data(), params, m_network->n_params() * sizeof(float), cudaMemcpyDeviceToHost));
+	std::vector<T> params_cpu_network_precision(layer_params + next_multiple(n_non_layer_params, non_layer_params_width));
+	std::vector<float> params_cpu(params_cpu_network_precision.size(), 0.0f);
+	CUDA_CHECK_THROW(cudaMemcpy(params_cpu_network_precision.data(), params, n_params * sizeof(T), cudaMemcpyDeviceToHost));
+
+	for (size_t i = 0; i < n_params; ++i) {
+		params_cpu[i] = (float)params_cpu_network_precision[i];
+	}
 
 	size_t offset = 0;
 	size_t layer_id = 0;
 	for (auto size : m_network->layer_sizes()) {
-		save_exr(params_cpu.data() + offset, size.second, size.first, 1, 1, fmt::format("layer-{}.exr", layer_id).c_str());
+		save_exr(params_cpu.data() + offset, size.second, size.first, 1, 1, fmt::format("{}-layer-{}.exr", filename_base, layer_id).c_str());
 		offset += size.first * size.second;
 		++layer_id;
 	}
 
-	std::string filename = "non-layer.exr";
-	save_exr(params_cpu.data() + offset, non_layer_params_width, non_layer_params / non_layer_params_width, 1, 1, filename.c_str());
+	std::string filename = fmt::format("{}-non-layer.exr", filename_base);
+	save_exr(params_cpu.data() + offset, non_layer_params_width, n_non_layer_params / non_layer_params_width, 1, 1, filename.c_str());
 }
+
+template void Testbed::dump_parameters_as_images<__half>(const __half*, const std::string&);
+template void Testbed::dump_parameters_as_images<float>(const float*, const std::string&);
 
 #ifdef NGP_GUI
 bool imgui_colored_button(const char *name, float hue) {
@@ -935,7 +944,7 @@ void Testbed::imgui() {
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Dump parameters as images")) {
-			dump_parameters_as_images();
+			dump_parameters_as_images(m_trainer->params(), "params");
 		}
 		if (ImGui::BeginPopupModal("Snapshot load error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
 			ImGui::Text("%s", snapshot_load_error_string.c_str());
@@ -1124,6 +1133,60 @@ void Testbed::visualize_nerf_cameras(ImDrawList* list, const Matrix<float, 4, 4>
 		add_debug_line(list, world2proj, current_xform.col(3), current_xform.col(3) + current_xform.col(2) * m_nerf.training.near_distance, 0x20ffffff);
 	}
 
+}
+
+Eigen::Matrix<float, 3, 4> Testbed::crop_box(bool nerf_space) const {
+	Eigen::Vector3f cen = m_render_aabb_to_local.transpose() * m_render_aabb.center();
+	Eigen::Vector3f radius = m_render_aabb.diag() * 0.5f;
+	Eigen::Vector3f x = m_render_aabb_to_local.row(0) * radius.x();
+	Eigen::Vector3f y = m_render_aabb_to_local.row(1) * radius.y();
+	Eigen::Vector3f z = m_render_aabb_to_local.row(2) * radius.z();
+	Eigen::Matrix<float, 3, 4> rv;
+	rv.col(0) = x;
+	rv.col(1) = y;
+	rv.col(2) = z;
+	rv.col(3) = cen;
+	if (nerf_space)
+		rv = m_nerf.training.dataset.ngp_matrix_to_nerf(rv, true);
+	return rv;
+}
+
+void Testbed::set_crop_box(Eigen::Matrix<float, 3, 4> m, bool nerf_space) {
+	if (nerf_space)
+		m = m_nerf.training.dataset.nerf_matrix_to_ngp(m, true);
+	Eigen::Vector3f radius(m.col(0).norm(), m.col(1).norm(), m.col(2).norm());
+	Eigen::Vector3f cen(m.col(3));
+	m_render_aabb_to_local.row(0) = m.col(0) / radius.x();
+	m_render_aabb_to_local.row(1) = m.col(1) / radius.y();
+	m_render_aabb_to_local.row(2) = m.col(2) / radius.z();
+	cen = m_render_aabb_to_local * cen;
+	m_render_aabb.min = cen - radius;
+	m_render_aabb.max = cen + radius;
+}
+
+std::vector<Eigen::Vector3f> Testbed::crop_box_corners(bool nerf_space) const {
+	Eigen::Matrix<float, 3, 4> m = crop_box(nerf_space);
+	std::vector<Eigen::Vector3f> rv(8);
+	for (int i = 0; i < 8; ++i) {
+		rv[i] = m * Eigen::Vector4f((i & 1) ? 1.f : -1.f, (i & 2) ? 1.f : -1.f, (i & 4) ? 1.f : -1.f, 1.f);
+		/* debug print out corners to check math is all lined up */
+		if (0) {
+			tlog::info() << rv[i].x() << "," << rv[i].y() << "," << rv[i].z() << " [" << i << "]";
+			Eigen::Vector3f mn = m_render_aabb.min;
+			Eigen::Vector3f mx = m_render_aabb.max;
+			Eigen::Matrix3f m = m_render_aabb_to_local.transpose();
+			Eigen::Vector3f a;
+
+			a.x() = (i&1) ? mx.x() : mn.x();
+			a.y() = (i&2) ? mx.y() : mn.y();
+			a.z() = (i&4) ? mx.z() : mn.z();
+			a = m * a;
+			if (nerf_space)
+				a = m_nerf.training.dataset.ngp_position_to_nerf(a);
+			tlog::info() << a.x() << "," << a.y() << "," << a.z() << " [" << i << "]";
+		}
+	}
+	return rv;
 }
 
 void Testbed::draw_visualizations(ImDrawList* list, const Matrix<float, 3, 4>& camera_matrix) {
@@ -2182,6 +2245,7 @@ void Testbed::reset_network(bool clear_density_grid) {
 	m_nerf.training.n_rays_since_error_map_update = 0;
 	m_nerf.training.n_steps_between_error_map_updates = 128;
 	m_nerf.training.error_map.is_cdf_valid = false;
+	m_nerf.training.density_grid_rng = default_rng_t{m_rng.next_uint()};
 
 	m_nerf.training.reset_camera_extrinsics();
 

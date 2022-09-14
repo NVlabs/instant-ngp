@@ -328,7 +328,10 @@ public:
 	void train_sdf(size_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
 	void train_image(size_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
 	void set_train(bool mtrain);
-	void dump_parameters_as_images();
+
+	template <typename T>
+	void dump_parameters_as_images(const T* params, const std::string& filename_base);
+
 	void imgui();
 	void training_prep_nerf(uint32_t batch_size, cudaStream_t stream);
 	void training_prep_sdf(uint32_t batch_size, cudaStream_t stream);
@@ -604,6 +607,7 @@ public:
 
 			float near_distance = 0.2f;
 			float density_grid_decay = 0.95f;
+			default_rng_t density_grid_rng;
 			int view = 0;
 
 			float depth_supervision_lambda = 0.f;
@@ -787,6 +791,10 @@ public:
 	BoundingBox m_render_aabb;
 	Eigen::Matrix3f m_render_aabb_to_local;
 
+	Eigen::Matrix<float, 3, 4> crop_box(bool nerf_space) const;
+	std::vector<Eigen::Vector3f> crop_box_corners(bool nerf_space) const;
+	void set_crop_box(Eigen::Matrix<float, 3, 4> m, bool nerf_space);
+
 	// Rendering/UI bookkeeping
 	Ema m_training_prep_ms = {EEmaType::Time, 100};
 	Ema m_training_ms = {EEmaType::Time, 100};
@@ -840,6 +848,7 @@ public:
 	filesystem::path m_network_config_path;
 
 	nlohmann::json m_network_config;
+
 
 	default_rng_t m_rng;
 
