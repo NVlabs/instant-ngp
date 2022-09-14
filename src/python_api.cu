@@ -371,9 +371,15 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("destroy_window", &Testbed::destroy_window, "Destroy the window again.")
 		.def("train", &Testbed::train, py::call_guard<py::gil_scoped_release>(), "Perform a specified number of training steps.")
 		.def("reset", &Testbed::reset_network, py::arg("reset_density_grid") = true, "Reset training.")
-		.def("reset_accumulation", &Testbed::reset_accumulation, "Reset rendering accumulation.")
+		.def("reset_accumulation", &Testbed::reset_accumulation, "Reset rendering accumulation.",
+			py::arg("due_to_camera_movement") = false,
+			py::arg("immediate_redraw") = true
+		)
 		.def("reload_network_from_file", &Testbed::reload_network_from_file, py::arg("path")="", "Reload the network from a config file.")
-		.def("reload_network_from_json", &Testbed::reload_network_from_json, "Reload the network from a json object.")
+		.def("reload_network_from_json", &Testbed::reload_network_from_json, "Reload the network from a json object.",
+			py::arg("json"),
+			py::arg("config_base_path") = ""
+		)
 		.def("override_sdf_training_data", &Testbed::override_sdf_training_data, "Override the training data for learning a signed distance function")
 		.def("calculate_iou", &Testbed::calculate_iou, "Calculate the intersection over union error value",
 			py::arg("n_samples") = 128*1024*1024,
@@ -492,6 +498,9 @@ PYBIND11_MODULE(pyngp, m) {
 			}
 		)
 		.def_readwrite("dlss_sharpening", &Testbed::m_dlss_sharpening)
+		.def("crop_box", &Testbed::crop_box, py::arg("nerf_space") = true)
+		.def("set_crop_box", &Testbed::set_crop_box, py::arg("matrix"), py::arg("nerf_space") = true)
+		.def("crop_box_corners", &Testbed::crop_box_corners, py::arg("nerf_space") = true)
 		;
 
 	py::class_<CameraDistortion> camera_distortion(m, "CameraDistortion");
@@ -502,6 +511,7 @@ PYBIND11_MODULE(pyngp, m) {
 			return py::array{sizeof(o.params)/sizeof(o.params[0]), o.params, obj};
 		})
 		;
+
 
 	py::class_<Testbed::Nerf> nerf(testbed, "Nerf");
 	nerf

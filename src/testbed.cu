@@ -1126,6 +1126,60 @@ void Testbed::visualize_nerf_cameras(ImDrawList* list, const Matrix<float, 4, 4>
 
 }
 
+Eigen::Matrix<float, 3, 4> Testbed::crop_box(bool nerf_space) const {
+	Eigen::Vector3f cen = m_render_aabb_to_local.transpose() * m_render_aabb.center();
+	Eigen::Vector3f radius = m_render_aabb.diag() * 0.5f;
+	Eigen::Vector3f x = m_render_aabb_to_local.row(0) * radius.x();
+	Eigen::Vector3f y = m_render_aabb_to_local.row(1) * radius.y();
+	Eigen::Vector3f z = m_render_aabb_to_local.row(2) * radius.z();
+	Eigen::Matrix<float, 3, 4> rv;
+	rv.col(0) = x;
+	rv.col(1) = y;
+	rv.col(2) = z;
+	rv.col(3) = cen;
+	if (nerf_space)
+		rv = m_nerf.training.dataset.ngp_matrix_to_nerf(rv, true);
+	return rv;
+}
+
+void Testbed::set_crop_box(Eigen::Matrix<float, 3, 4> m, bool nerf_space) {
+	if (nerf_space)
+		m = m_nerf.training.dataset.nerf_matrix_to_ngp(m, true);
+	Eigen::Vector3f radius(m.col(0).norm(), m.col(1).norm(), m.col(2).norm());
+	Eigen::Vector3f cen(m.col(3));
+	m_render_aabb_to_local.row(0) = m.col(0) / radius.x();
+	m_render_aabb_to_local.row(1) = m.col(1) / radius.y();
+	m_render_aabb_to_local.row(2) = m.col(2) / radius.z();
+	cen = m_render_aabb_to_local * cen;
+	m_render_aabb.min = cen - radius;
+	m_render_aabb.max = cen + radius;
+}
+
+std::vector<Eigen::Vector3f> Testbed::crop_box_corners(bool nerf_space) const {
+	Eigen::Matrix<float, 3, 4> m = crop_box(nerf_space);
+	std::vector<Eigen::Vector3f> rv(8);
+	for (int i = 0; i < 8; ++i) {
+		rv[i] = m * Eigen::Vector4f((i & 1) ? 1.f : -1.f, (i & 2) ? 1.f : -1.f, (i & 4) ? 1.f : -1.f, 1.f);
+		/* debug print out corners to check math is all lined up */
+		if (0) {
+			tlog::info() << rv[i].x() << "," << rv[i].y() << "," << rv[i].z() << " [" << i << "]";
+			Eigen::Vector3f mn = m_render_aabb.min;
+			Eigen::Vector3f mx = m_render_aabb.max;
+			Eigen::Matrix3f m = m_render_aabb_to_local.transpose();
+			Eigen::Vector3f a;
+
+			a.x() = (i&1) ? mx.x() : mn.x();
+			a.y() = (i&2) ? mx.y() : mn.y();
+			a.z() = (i&4) ? mx.z() : mn.z();
+			a = m * a;
+			if (nerf_space)
+				a = m_nerf.training.dataset.ngp_position_to_nerf(a);
+			tlog::info() << a.x() << "," << a.y() << "," << a.z() << " [" << i << "]";
+		}
+	}
+	return rv;
+}
+
 void Testbed::draw_visualizations(ImDrawList* list, const Matrix<float, 3, 4>& camera_matrix) {
 	// Visualize 3D cameras for SDF or NeRF use cases
 	if (m_testbed_mode != ETestbedMode::Image) {
