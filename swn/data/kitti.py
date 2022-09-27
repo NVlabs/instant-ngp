@@ -3,6 +3,7 @@ import torch
 import numpy as np
 
 from PIL import Image
+
 from pathlib import Path
 
 KITTI_TEST_SEQS = unique_seqs = [
@@ -89,7 +90,7 @@ class KITTI(torch.utils.data.Dataset):
         else:
             self.x_transforms = torchvision.transforms.Compose([
                 torchvision.transforms.ToTensor(),
-            ])   
+            ])
 
 
     def __len__(self):
@@ -109,18 +110,18 @@ class KITTI(torch.utils.data.Dataset):
 
         y = self.y_transforms(y) / 256.0
         x = self.x_transforms(x)
-        x_nerf = self.x_transforms(x_nerf)
+        x_nerf = self.x_transforms(x_nerf)[:3]
         y_nerf = torch.from_numpy(y_nerf).unsqueeze(0)
 
         if self.kb_crop:
-            _, H, W = x.shape 
+            _, H, W = x.shape
             t = int(H - 352)
             l = int((W - 1216) / 2)
-    
-            x = x[:, t:t + 352, l:l+1216] 
-            
+
+            x = x[:, t:t + 352, l:l+1216]
+
             if self.kb_crop_gt:
-                y = y[:, t:t + 352, l:l+1216] 
+                y = y[:, t:t + 352, l:l+1216]
 
             print('WAAAAAAAAAAARNING!!!!')
 
