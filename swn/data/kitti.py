@@ -45,10 +45,11 @@ class KITTI(torch.utils.data.Dataset):
         path_raw: str,
         split_type: str = 'eigen_with_gt',
         split: str = 'train',
-        kb_crop: bool = True,
-        kb_crop_gt: bool = True,
+        kb_crop: bool = False,
+        kb_crop_gt: bool = False,
         sequence: str = None,
         normalize = False,
+        path_nerf_renders: str = None,
     ):
         """
         Args:
@@ -70,10 +71,11 @@ class KITTI(torch.utils.data.Dataset):
             for x, y in file_list if ((x.split('/')[1] == sequence) or (sequence is None))
         ]
 
-
         self.split = split
         self.kb_crop = kb_crop
         self.kb_crop_gt = kb_crop_gt
+
+        self.path_nerf_renders = path_nerf_renders
 
         self.y_transforms = torchvision.transforms.Compose([
             torchvision.transforms.PILToTensor(),
@@ -100,8 +102,15 @@ class KITTI(torch.utils.data.Dataset):
         y = Image.open(self.y_list[idx])
         x = Image.open(self.x_list[idx])
 
+        if self.path_nerf_renders is not None:
+            seq = str(self.x_list[idx]).split('/')[-4]
+            x_nerf = Image.open(Path(self.path_nerf_renders) / seq / 'rgb' / self.x_list[idx].name)
+            y_nerf = np.load(Path(self.path_nerf_renders) / seq / 'depth' / (self.x_list[idx].name[-15:-4] + '.npy'))
+
         y = self.y_transforms(y) / 256.0
         x = self.x_transforms(x)
+        x_nerf = self.x_transforms(x_nerf)
+        y_nerf = torch.from_numpy(y_nerf).unsqueeze(0)
 
         if self.kb_crop:
             _, H, W = x.shape 
@@ -113,4 +122,8 @@ class KITTI(torch.utils.data.Dataset):
             if self.kb_crop_gt:
                 y = y[:, t:t + 352, l:l+1216] 
 
+            print('WAAAAAAAAAAARNING!!!!')
+
+        if self.path_nerf_renders is not None:
+            return x, y, x_nerf, y_nerf
         return x, y

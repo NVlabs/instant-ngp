@@ -209,3 +209,6 @@ if __name__ == '__main__':
     parser.add_argument("--path_colmap", type=Path, help="Path to COLMAP data")
     parser.add_argument("--path_output", type=Path, help="Path to output data")
     main(parser.parse_args())
+
+
+# python3 ablation.py --path_raw_data /home/serizba/phd/data/kitti/raw_data_2 --path_depth_gt /home/serizba/phd/data/kitti/data_depth_annotated --path_colmap /home/serizba/phd/data/kitti/eigen_reconstructions --path_output /home/serizba/phd/supervisingnerf/fork/ablation/
