@@ -358,7 +358,7 @@ public:
 	void compute_mesh_vertex_colors();
 	tcnn::GPUMemory<float> get_density_on_grid(Eigen::Vector3i res3d, const BoundingBox& aabb, const Eigen::Matrix3f& render_aabb_to_local); // network version (nerf or sdf)
 	tcnn::GPUMemory<float> get_sdf_gt_on_grid(Eigen::Vector3i res3d, const BoundingBox& aabb, const Eigen::Matrix3f& render_aabb_to_local); // sdf gt version (sdf only)
-	tcnn::GPUMemory<Eigen::Array4f> get_rgba_on_grid(Eigen::Vector3i res3d, Eigen::Vector3f ray_dir, bool voxel_centers, bool density_to_alpha);
+	tcnn::GPUMemory<Eigen::Array4f> get_rgba_on_grid(Eigen::Vector3i res3d, Eigen::Vector3f ray_dir, bool voxel_centers, float depth, bool density_as_alpha = false);
 	int marching_cubes(Eigen::Vector3i res3d, const BoundingBox& render_aabb, const Eigen::Matrix3f& render_aabb_to_local, float thresh);
 
 	// Determines the 3d focus point by rendering a little 16x16 depth image around
