@@ -1140,6 +1140,7 @@ void Testbed::visualize_nerf_cameras(ImDrawList* list, const Matrix<float, 4, 4>
 	}
 
 }
+#endif //NGP_GUI
 
 Eigen::Matrix<float, 3, 4> Testbed::crop_box(bool nerf_space) const {
 	Eigen::Vector3f cen = m_render_aabb_to_local.transpose() * m_render_aabb.center();
@@ -1195,6 +1196,7 @@ std::vector<Eigen::Vector3f> Testbed::crop_box_corners(bool nerf_space) const {
 	return rv;
 }
 
+#ifdef NGP_GUI
 void Testbed::draw_visualizations(ImDrawList* list, const Matrix<float, 3, 4>& camera_matrix) {
 	// Visualize 3D cameras for SDF or NeRF use cases
 	if (m_testbed_mode != ETestbedMode::Image) {
