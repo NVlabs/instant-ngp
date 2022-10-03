@@ -382,7 +382,7 @@ __global__ void mark_untrained_density_grid(const uint32_t n_elements,  float* _
 	float voxel_radius = 0.5f*SQRT3()*scalbnf(1.0f, level) / NERF_GRIDSIZE();
 	int count=0;
 	for (uint32_t j=0; j < n_training_images; ++j) {
-		if (metadata[j].camera_distortion.mode == ECameraDistortionMode::FTheta || metadata[j].camera_distortion.mode == ECameraDistortionMode::LatLong) {
+		if (metadata[j].lens.mode == ELensMode::FTheta || metadata[j].lens.mode == ELensMode::LatLong) {
 			// not supported for now
 			count++;
 			break;
@@ -1111,7 +1111,7 @@ __global__ void generate_training_samples_nerf(
 	const Vector2f focal_length = metadata[img].focal_length;
 	const Vector2f principal_point = metadata[img].principal_point;
 	const float* extra_dims = extra_dims_gpu + img * n_extra_dims;
-	const CameraDistortion camera_distortion = metadata[img].camera_distortion;
+	const Lens lens = metadata[img].lens;
 
 	const Matrix<float, 3, 4> xform = get_xform_given_rolling_shutter(training_xforms[img], metadata[img].rolling_shutter, xy, motionblur_time);
 
@@ -1125,7 +1125,7 @@ __global__ void generate_training_samples_nerf(
 		const Matrix<float, 3, 4> xform = get_xform_given_rolling_shutter(training_xforms[img], metadata[img].rolling_shutter, xy, 0.f);
 		Ray ray2;
 		ray2.o = xform.col(3);
-		ray2.d = f_theta_distortion(xy, principal_point, camera_distortion);
+		ray2.d = f_theta_distortion(xy, principal_point, lens);
 		ray2.d = (xform.block<3, 3>(0, 0) * ray2.d).normalized();
 		if (i==1000) {
 			printf("\n%d uv %0.3f,%0.3f pixel %0.2f,%0.2f transform from [%0.5f %0.5f %0.5f] to [%0.5f %0.5f %0.5f]\n"
@@ -1143,9 +1143,9 @@ __global__ void generate_training_samples_nerf(
 	} else {
 		// Rays need to be inferred from the camera matrix
 		ray_unnormalized.o = xform.col(3);
-		if (camera_distortion.mode == ECameraDistortionMode::FTheta) {
-			ray_unnormalized.d = f_theta_undistortion(xy - principal_point, camera_distortion.params, {0.f, 0.f, 1.f});
-		} else if (camera_distortion.mode == ECameraDistortionMode::LatLong) {
+		if (lens.mode == ELensMode::FTheta) {
+			ray_unnormalized.d = f_theta_undistortion(xy - principal_point, lens.params, {0.f, 0.f, 1.f});
+		} else if (lens.mode == ELensMode::LatLong) {
 			ray_unnormalized.d = latlong_to_dir(xy);
 		} else {
 			ray_unnormalized.d = {
@@ -1154,8 +1154,8 @@ __global__ void generate_training_samples_nerf(
 				1.0f,
 			};
 
-			if (camera_distortion.mode == ECameraDistortionMode::Iterative) {
-				iterative_camera_undistortion(camera_distortion.params, &ray_unnormalized.d.x(), &ray_unnormalized.d.y());
+			if (lens.mode == ELensMode::OpenCV) {
+				iterative_opencv_lens_undistortion(lens.params, &ray_unnormalized.d.x(), &ray_unnormalized.d.y());
 			}
 		}
 
@@ -1796,7 +1796,7 @@ __global__ void init_rays_with_payload_kernel_nerf(
 	Matrix3f render_aabb_to_local,
 	float plane_z,
 	float aperture_size,
-	CameraDistortion camera_distortion,
+	Lens lens,
 	const float* __restrict__ envmap_data,
 	const Vector2i envmap_resolution,
 	Array4f* __restrict__ framebuffer,
@@ -1838,7 +1838,7 @@ __global__ void init_rays_with_payload_kernel_nerf(
 		snap_to_pixel_centers,
 		plane_z,
 		aperture_size,
-		camera_distortion,
+		lens,
 		distortion_data,
 		distortion_resolution
 	);
@@ -1977,7 +1977,7 @@ void Testbed::NerfTracer::init_rays_from_camera(
 	const Matrix3f& render_aabb_to_local,
 	float plane_z,
 	float aperture_size,
-	const CameraDistortion& camera_distortion,
+	const Lens& lens,
 	const float* envmap_data,
 	const Vector2i& envmap_resolution,
 	const float* distortion_data,
@@ -2011,7 +2011,7 @@ void Testbed::NerfTracer::init_rays_from_camera(
 		render_aabb_to_local,
 		plane_z,
 		aperture_size,
-		camera_distortion,
+		lens,
 		envmap_data,
 		envmap_resolution,
 		frame_buffer,
@@ -2249,10 +2249,10 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 	}};
 
 	// Our motion vector code can't undo f-theta and grid distortions -- so don't render these if DLSS is enabled.
-	bool render_opencv_camera_distortion = m_nerf.render_with_camera_distortion && (!render_buffer.dlss() || m_nerf.render_distortion.mode == ECameraDistortionMode::Iterative);
-	bool render_grid_camera_distortion = m_nerf.render_with_camera_distortion && !render_buffer.dlss();
+	bool render_opencv_lens = m_nerf.render_with_lens_distortion && (!render_buffer.dlss() || m_nerf.render_lens.mode == ELensMode::OpenCV);
+	bool render_grid_distortion = m_nerf.render_with_lens_distortion && !render_buffer.dlss();
 
-	CameraDistortion camera_distortion = render_opencv_camera_distortion ? m_nerf.render_distortion : CameraDistortion{};
+	Lens lens = render_opencv_lens ? m_nerf.render_lens : Lens{};
 
 
 	m_nerf.tracer.init_rays_from_camera(
@@ -2272,10 +2272,10 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 		m_render_aabb_to_local,
 		plane_z,
 		m_aperture_size,
-		camera_distortion,
+		lens,
 		m_envmap.envmap->params_inference(),
 		m_envmap.resolution,
-		render_grid_camera_distortion ? m_distortion.map->params_inference() : nullptr,
+		render_grid_distortion ? m_distortion.map->params_inference() : nullptr,
 		m_distortion.resolution,
 		render_buffer.frame_buffer(),
 		render_buffer.depth_buffer(),
@@ -2384,8 +2384,8 @@ void Testbed::Nerf::Training::set_camera_intrinsics(int frame_idx, float fx, flo
 	auto& m = dataset.metadata[frame_idx];
 	if (cx < 0.f) cx = -cx; else cx = cx / m.resolution.x();
 	if (cy < 0.f) cy = -cy; else cy = cy / m.resolution.y();
-	ECameraDistortionMode mode = (k1 || k2 || p1 || p2) ? ECameraDistortionMode::Iterative : ECameraDistortionMode::None;
-	m.camera_distortion = { mode, k1, k2, p1, p2 };
+	ELensMode mode = (k1 || k2 || p1 || p2) ? ELensMode::OpenCV : ELensMode::Perspective;
+	m.lens = { mode, k1, k2, p1, p2 };
 	m.principal_point = { cx, cy };
 	m.focal_length = { fx, fy };
 	dataset.update_metadata(frame_idx, frame_idx + 1);
@@ -2550,7 +2550,7 @@ void Testbed::load_nerf_post() { // moved the second half of load_nerf here
 
 	// Uncomment the following line to see how the network learns distortion from scratch rather than
 	// starting from the distortion that's described by the training data.
-	// m_nerf.training.dataset.camera_distortion = {};
+	// m_nerf.training.dataset.camera = {};
 
 	// Perturbation of the training cameras -- for debugging the online extrinsics learning code
 	float perturb_amount = 0.0f;
@@ -2570,7 +2570,7 @@ void Testbed::load_nerf_post() { // moved the second half of load_nerf here
 	m_nerf.training.update_transforms();
 
 	if (!m_nerf.training.dataset.metadata.empty()) {
-		m_nerf.render_distortion = m_nerf.training.dataset.metadata[0].camera_distortion;
+		m_nerf.render_lens = m_nerf.training.dataset.metadata[0].lens;
 		m_screen_center = Eigen::Vector2f::Constant(1.f) - m_nerf.training.dataset.metadata[0].principal_point;
 	}
 

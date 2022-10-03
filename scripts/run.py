@@ -142,7 +142,7 @@ if __name__ == "__main__":
 	testbed.shall_train = args.train if args.gui else True
 
 
-	testbed.nerf.render_with_camera_distortion = True
+	testbed.nerf.render_with_lens_distortion = True
 
 	network_stem = os.path.splitext(os.path.basename(network))[0]
 	if args.mode == "sdf":

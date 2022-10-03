@@ -147,7 +147,7 @@ public:
 			const Eigen::Matrix3f& render_aabb_to_local,
 			float plane_z,
 			float aperture_size,
-			const CameraDistortion& camera_distortion,
+			const Lens& lens,
 			const float* envmap_data,
 			const Eigen::Vector2i& envmap_resolution,
 			const float* distortion_data,
@@ -654,8 +654,8 @@ public:
 		float cone_angle_constant = 1.f/256.f;
 
 		bool visualize_cameras = false;
-		bool render_with_camera_distortion = false;
-		CameraDistortion render_distortion = {};
+		bool render_with_lens_distortion = false;
+		Lens render_lens = {};
 
 		float rendering_min_transmittance = 0.01f;
 

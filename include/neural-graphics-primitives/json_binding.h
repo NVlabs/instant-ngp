@@ -80,41 +80,41 @@ inline void from_json(const nlohmann::json& j, BoundingBox& box) {
 	from_json(j.at("max"), box.max);
 }
 
-inline void to_json(nlohmann::json& j, const CameraDistortion& dist) {
-	if (dist.mode == ECameraDistortionMode::Iterative) {
-		j["k1"] = dist.params[0];
-		j["k2"] = dist.params[1];
-		j["p1"] = dist.params[2];
-		j["p2"] = dist.params[3];
-	} else if (dist.mode == ECameraDistortionMode::FTheta) {
-		j["ftheta_p0"] = dist.params[0];
-		j["ftheta_p1"] = dist.params[1];
-		j["ftheta_p2"] = dist.params[2];
-		j["ftheta_p3"] = dist.params[3];
-		j["ftheta_p4"] = dist.params[4];
-		j["w"] = dist.params[5];
-		j["h"] = dist.params[6];
+inline void to_json(nlohmann::json& j, const Lens& lens) {
+	if (lens.mode == ELensMode::OpenCV) {
+		j["k1"] = lens.params[0];
+		j["k2"] = lens.params[1];
+		j["p1"] = lens.params[2];
+		j["p2"] = lens.params[3];
+	} else if (lens.mode == ELensMode::FTheta) {
+		j["ftheta_p0"] = lens.params[0];
+		j["ftheta_p1"] = lens.params[1];
+		j["ftheta_p2"] = lens.params[2];
+		j["ftheta_p3"] = lens.params[3];
+		j["ftheta_p4"] = lens.params[4];
+		j["w"] = lens.params[5];
+		j["h"] = lens.params[6];
 	}
 }
 
-inline void from_json(const nlohmann::json& j, CameraDistortion& dist) {
+inline void from_json(const nlohmann::json& j, Lens& lens) {
 	if (j.contains("k1")) {
-		dist.mode = ECameraDistortionMode::Iterative;
-		dist.params[0] = j.at("k1");
-		dist.params[1] = j.at("k2");
-		dist.params[2] = j.at("p1");
-		dist.params[3] = j.at("p2");
+		lens.mode = ELensMode::OpenCV;
+		lens.params[0] = j.at("k1");
+		lens.params[1] = j.at("k2");
+		lens.params[2] = j.at("p1");
+		lens.params[3] = j.at("p2");
 	} else if (j.contains("ftheta_p0")) {
-		dist.mode = ECameraDistortionMode::FTheta;
-		dist.params[0] = j.at("ftheta_p0");
-		dist.params[1] = j.at("ftheta_p1");
-		dist.params[2] = j.at("ftheta_p2");
-		dist.params[3] = j.at("ftheta_p3");
-		dist.params[4] = j.at("ftheta_p4");
-		dist.params[5] = j.at("w");
-		dist.params[6] = j.at("h");
+		lens.mode = ELensMode::FTheta;
+		lens.params[0] = j.at("ftheta_p0");
+		lens.params[1] = j.at("ftheta_p1");
+		lens.params[2] = j.at("ftheta_p2");
+		lens.params[3] = j.at("ftheta_p3");
+		lens.params[4] = j.at("ftheta_p4");
+		lens.params[5] = j.at("w");
+		lens.params[6] = j.at("h");
 	} else {
-		dist.mode = ECameraDistortionMode::None;
+		lens.mode = ELensMode::Perspective;
 	}
 }
 
@@ -135,7 +135,7 @@ inline void to_json(nlohmann::json& j, const NerfDataset& dataset) {
 		j["metadata"].emplace_back();
 		j["xforms"].emplace_back();
 		to_json(j["metadata"].at(i)["focal_length"], dataset.metadata[i].focal_length);
-		to_json(j["metadata"].at(i)["camera_distortion"], dataset.metadata[i].camera_distortion);
+		to_json(j["metadata"].at(i)["lens"], dataset.metadata[i].lens);
 		to_json(j["metadata"].at(i)["principal_point"], dataset.metadata[i].principal_point);
 		to_json(j["metadata"].at(i)["rolling_shutter"], dataset.metadata[i].rolling_shutter);
 		to_json(j["metadata"].at(i)["resolution"], dataset.metadata[i].resolution);
@@ -162,7 +162,9 @@ inline void from_json(const nlohmann::json& j, NerfDataset& dataset) {
 
 	for (size_t i = 0; i < dataset.n_images; ++i) {
 		// read global defaults first
-		if (j.contains("camera_distortion")) from_json(j.at("camera_distortion"), dataset.metadata[i].camera_distortion);
+		if (j.contains("lens")) from_json(j.at("lens"), dataset.metadata[i].lens);
+		// Legacy: "lens" used to be called "camera_distortion"
+		if (j.contains("camera_distortion")) from_json(j.at("camera_distortion"), dataset.metadata[i].lens);
 		if (j.contains("principal_point")) from_json(j.at("principal_point"), dataset.metadata[i].principal_point);
 		if (j.contains("rolling_shutter")) from_json(j.at("rolling_shutter"), dataset.metadata[i].rolling_shutter);
 		if (j.contains("focal_length")) from_json(j.at("focal_length"), dataset.metadata[i].focal_length);
@@ -175,8 +177,9 @@ inline void from_json(const nlohmann::json& j, NerfDataset& dataset) {
 			from_json(ji.at("resolution"), dataset.metadata[i].resolution);
 			from_json(ji.at("focal_length"), dataset.metadata[i].focal_length);
 			from_json(ji.at("principal_point"), dataset.metadata[i].principal_point);
-			from_json(ji.at("rolling_shutter"), dataset.metadata[i].rolling_shutter);
-			from_json(ji.at("camera_distortion"), dataset.metadata[i].camera_distortion);
+			if (ji.contains("lens")) from_json(ji.at("lens"), dataset.metadata[i].lens);
+			// Legacy: "lens" used to be called "camera_distortion"
+			if (ji.contains("camera_distortion")) from_json(ji.at("camera_distortion"), dataset.metadata[i].lens);
 		}
 	}
 
