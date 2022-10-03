@@ -60,6 +60,7 @@ class GLTexture;
 
 class Testbed {
 public:
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	Testbed(ETestbedMode mode);
 	~Testbed();
 	Testbed(ETestbedMode mode, const std::string& data_path) : Testbed(mode) { load_training_data(data_path); }
