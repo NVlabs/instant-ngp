@@ -2730,7 +2730,7 @@ void Testbed::update_density_grid_mean_and_bitfield(cudaStream_t stream) {
 	}
 }
 
-void Testbed::Nerf::Training::Counters::prepare_for_training_steps(cudaStream_t stream) {
+void Testbed::NerfCounters::prepare_for_training_steps(cudaStream_t stream) {
 	numsteps_counter.enlarge(1);
 	numsteps_counter_compacted.enlarge(1);
 	loss.enlarge(rays_per_batch);
@@ -2739,7 +2739,7 @@ void Testbed::Nerf::Training::Counters::prepare_for_training_steps(cudaStream_t 
 	CUDA_CHECK_THROW(cudaMemsetAsync(loss.data(), 0, sizeof(float)*rays_per_batch, stream));
 }
 
-float Testbed::Nerf::Training::Counters::update_after_training(uint32_t target_batch_size, bool get_loss_scalar, cudaStream_t stream) {
+float Testbed::NerfCounters::update_after_training(uint32_t target_batch_size, bool get_loss_scalar, cudaStream_t stream) {
 	std::vector<uint32_t> counter_cpu(1);
 	std::vector<uint32_t> compacted_counter_cpu(1);
 	numsteps_counter.copy_to_host(counter_cpu);
@@ -2815,14 +2815,9 @@ void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaS
 		CUDA_CHECK_THROW(cudaMemsetAsync(envmap_gradient, 0, sizeof(float)*m_envmap.envmap->n_params(), stream));
 	}
 
-	train_nerf_step(
-		target_batch_size,
-		m_nerf.training.counters_rgb.rays_per_batch,
-		m_nerf.training.counters_rgb.numsteps_counter.data(),
-		m_nerf.training.counters_rgb.numsteps_counter_compacted.data(),
-		m_nerf.training.counters_rgb.loss.data(),
-		m_stream.get()
-	);
+
+	train_nerf_step(target_batch_size, m_nerf.training.counters_rgb, stream);
+
 
 	m_trainer->optimizer_step(stream, LOSS_SCALE);
 
@@ -3012,7 +3007,7 @@ void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaS
 	}
 }
 
-void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_batch, uint32_t* counter, uint32_t* compacted_counter, float* loss, cudaStream_t stream) {
+void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters& counters, cudaStream_t stream) {
 	const uint32_t padded_output_width = m_network->padded_output_width();
 	const uint32_t max_samples = target_batch_size * 16; // Somewhat of a worst case
 	const uint32_t floats_per_coord = sizeof(NerfCoordinate) / sizeof(float) + m_nerf_network->n_extra_dims();
@@ -3033,9 +3028,9 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 		uint32_t // ray_counter
 	>(
 		stream, &alloc,
-		n_rays_per_batch,
-		n_rays_per_batch,
-		n_rays_per_batch * 2,
+		counters.rays_per_batch,
+		counters.rays_per_batch,
+		counters.rays_per_batch * 2,
 		max_samples * floats_per_coord,
 		max_samples,
 		std::max(target_batch_size, max_samples) * padded_output_width,
@@ -3060,10 +3055,10 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 	uint32_t* ray_counter = std::get<10>(scratch);
 
 	uint32_t max_inference;
-	if (m_nerf.training.counters_rgb.measured_batch_size_before_compaction == 0) {
-		m_nerf.training.counters_rgb.measured_batch_size_before_compaction = max_inference = max_samples;
+	if (counters.measured_batch_size_before_compaction == 0) {
+		counters.measured_batch_size_before_compaction = max_inference = max_samples;
 	} else {
-		max_inference = next_multiple(std::min(m_nerf.training.counters_rgb.measured_batch_size_before_compaction, max_samples), tcnn::batch_size_granularity);
+		max_inference = next_multiple(std::min(counters.measured_batch_size_before_compaction, max_samples), tcnn::batch_size_granularity);
 	}
 
 	GPUMatrix<float> coords_matrix((float*)coords, floats_per_coord, max_inference);
@@ -3075,12 +3070,12 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 	GPUMatrix<network_precision_t> gradient_matrix(dloss_dmlp_out, padded_output_width, target_batch_size);
 
 	if (m_training_step == 0) {
-		m_nerf.training.counters_rgb.n_rays_total = 0;
+		counters.n_rays_total = 0;
 	}
 
-	uint32_t n_rays_total = m_nerf.training.counters_rgb.n_rays_total;
-	m_nerf.training.counters_rgb.n_rays_total += n_rays_per_batch;
-	m_nerf.training.n_rays_since_error_map_update += n_rays_per_batch;
+	uint32_t n_rays_total = counters.n_rays_total;
+	counters.n_rays_total += counters.rays_per_batch;
+	m_nerf.training.n_rays_since_error_map_update += counters.rays_per_batch;
 
 	// If we have an envmap, prepare its gradient buffer
 	float* envmap_gradient = m_nerf.training.train_envmap ? m_envmap.envmap->gradients() : nullptr;
@@ -3095,13 +3090,13 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 	CUDA_CHECK_THROW(cudaMemsetAsync(ray_counter, 0, sizeof(uint32_t), stream));
 
 	linear_kernel(generate_training_samples_nerf, 0, stream,
-		n_rays_per_batch,
+		counters.rays_per_batch,
 		m_aabb,
 		max_inference,
 		n_rays_total,
 		m_rng,
 		ray_counter,
-		counter,
+		counters.numsteps_counter.data(),
 		ray_indices,
 		rays_unnormalized,
 		numsteps,
@@ -3137,7 +3132,7 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 	}
 
 	linear_kernel(compute_loss_kernel_train_nerf, 0, stream,
-		n_rays_per_batch,
+		counters.rays_per_batch,
 		m_aabb,
 		n_rays_total,
 		m_rng,
@@ -3156,7 +3151,7 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 		m_nerf.training.n_images_for_training,
 		m_nerf.training.dataset.metadata_gpu.data(),
 		mlp_out,
-		compacted_counter,
+		counters.numsteps_counter_compacted.data(),
 		ray_indices,
 		rays_unnormalized,
 		numsteps,
@@ -3165,7 +3160,7 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 		dloss_dmlp_out,
 		m_nerf.training.loss_type,
 		m_nerf.training.depth_loss_type,
-		loss,
+		counters.loss.data(),
 		m_max_level_rand_training,
 		max_level_compacted,
 		m_nerf.rgb_activation,
@@ -3189,13 +3184,13 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 	);
 
 	fill_rollover_and_rescale<network_precision_t><<<n_blocks_linear(target_batch_size*padded_output_width), n_threads_linear, 0, stream>>>(
-		target_batch_size, padded_output_width, compacted_counter, dloss_dmlp_out
+		target_batch_size, padded_output_width, counters.numsteps_counter_compacted.data(), dloss_dmlp_out
 	);
 	fill_rollover<float><<<n_blocks_linear(target_batch_size * floats_per_coord), n_threads_linear, 0, stream>>>(
-		target_batch_size, floats_per_coord, compacted_counter, (float*)coords_compacted
+		target_batch_size, floats_per_coord, counters.numsteps_counter_compacted.data(), (float*)coords_compacted
 	);
 	fill_rollover<float><<<n_blocks_linear(target_batch_size), n_threads_linear, 0, stream>>>(
-		target_batch_size, 1, compacted_counter, max_level_compacted
+		target_batch_size, 1, counters.numsteps_counter_compacted.data(), max_level_compacted
 	);
 
 	bool train_camera = m_nerf.training.optimize_extrinsics || m_nerf.training.optimize_distortion || m_nerf.training.optimize_focal_length;
@@ -3211,7 +3206,7 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 	if (train_extra_dims) {
 		// Compute extra-dim gradients
 		linear_kernel(compute_extra_dims_gradient_train_nerf, 0, stream,
-		n_rays_per_batch,
+			counters.rays_per_batch,
 			n_rays_total,
 			ray_counter,
 			m_nerf.training.extra_dims_gradient_gpu.data(),
@@ -3227,7 +3222,7 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_ba
 	if (train_camera) {
 		// Compute camera gradients
 		linear_kernel(compute_cam_gradient_train_nerf, 0, stream,
-			n_rays_per_batch,
+			counters.rays_per_batch,
 			n_rays_total,
 			m_rng,
 			m_aabb,

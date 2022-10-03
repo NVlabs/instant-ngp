@@ -380,8 +380,10 @@ void Testbed::dump_parameters_as_images(const T* params, const std::string& file
 		++layer_id;
 	}
 
-	std::string filename = fmt::format("{}-non-layer.exr", filename_base);
-	save_exr(params_cpu.data() + offset, non_layer_params_width, n_non_layer_params / non_layer_params_width, 1, 1, filename.c_str());
+	if (n_non_layer_params > 0) {
+		std::string filename = fmt::format("{}-non-layer.exr", filename_base);
+		save_exr(params_cpu.data() + offset, non_layer_params_width, n_non_layer_params / non_layer_params_width, 1, 1, filename.c_str());
+	}
 }
 
 template void Testbed::dump_parameters_as_images<__half>(const __half*, const std::string&);
