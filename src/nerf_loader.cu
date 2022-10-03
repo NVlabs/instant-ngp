@@ -194,32 +194,34 @@ NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale, bool is_h
 	return result;
 }
 
-void read_camera_distortion(const nlohmann::json &json, CameraDistortion &camera_distortion, Vector2f &principal_point, Vector4f &rolling_shutter) {
+void read_camera_distortion(const nlohmann::json& json, CameraDistortion& camera_distortion, Vector2f& principal_point, Vector4f& rolling_shutter) {
+	ECameraDistortionMode mode = ECameraDistortionMode::None;
+
 	if (json.contains("k1")) {
 		camera_distortion.params[0] = json["k1"];
 		if (camera_distortion.params[0] != 0.f) {
-			camera_distortion.mode = ECameraDistortionMode::Iterative;
+			mode = ECameraDistortionMode::Iterative;
 		}
 	}
 
 	if (json.contains("k2")) {
 		camera_distortion.params[1] = json["k2"];
 		if (camera_distortion.params[1] != 0.f) {
-			camera_distortion.mode = ECameraDistortionMode::Iterative;
+			mode = ECameraDistortionMode::Iterative;
 		}
 	}
 
 	if (json.contains("p1")) {
 		camera_distortion.params[2] = json["p1"];
 		if (camera_distortion.params[2] != 0.f) {
-			camera_distortion.mode = ECameraDistortionMode::Iterative;
+			mode = ECameraDistortionMode::Iterative;
 		}
 	}
 
 	if (json.contains("p2")) {
 		camera_distortion.params[3] = json["p2"];
 		if (camera_distortion.params[3] != 0.f) {
-			camera_distortion.mode = ECameraDistortionMode::Iterative;
+			mode = ECameraDistortionMode::Iterative;
 		}
 	}
 
@@ -246,6 +248,10 @@ void read_camera_distortion(const nlohmann::json &json, CameraDistortion &camera
 	}
 
 	if (json.contains("ftheta_p0")) {
+		if (mode != ECameraDistortionMode::None) {
+			tlog::warning() << "Found camera distortion parameters for multiple camera models. Overriding previous with FTheta.";
+		}
+
 		camera_distortion.params[0] = json["ftheta_p0"];
 		camera_distortion.params[1] = json["ftheta_p1"];
 		camera_distortion.params[2] = json["ftheta_p2"];
@@ -253,7 +259,20 @@ void read_camera_distortion(const nlohmann::json &json, CameraDistortion &camera
 		camera_distortion.params[4] = json["ftheta_p4"];
 		camera_distortion.params[5] = json["w"];
 		camera_distortion.params[6] = json["h"];
-		camera_distortion.mode = ECameraDistortionMode::FTheta;
+		mode = ECameraDistortionMode::FTheta;
+	}
+
+	if (json.contains("latlong")) {
+		if (mode != ECameraDistortionMode::None) {
+			tlog::warning() << "Found camera distortion parameters for multiple camera models. Overriding previous with LatLong.";
+		}
+
+		mode = ECameraDistortionMode::LatLong;
+	}
+
+	// If there was an outer distortion mode, don't override it with nothing.
+	if (mode != ECameraDistortionMode::None) {
+		camera_distortion.mode = mode;
 	}
 }
 
