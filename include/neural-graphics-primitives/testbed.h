@@ -324,8 +324,23 @@ public:
 	void generate_training_samples_sdf(Eigen::Vector3f* positions, float* distances, uint32_t n_to_generate, cudaStream_t stream, bool uniform_only);
 	void update_density_grid_nerf(float decay, uint32_t n_uniform_density_grid_samples, uint32_t n_nonuniform_density_grid_samples, cudaStream_t stream);
 	void update_density_grid_mean_and_bitfield(cudaStream_t stream);
+
+	struct NerfCounters {
+		tcnn::GPUMemory<uint32_t> numsteps_counter; // number of steps each ray took
+		tcnn::GPUMemory<uint32_t> numsteps_counter_compacted; // number of steps each ray took
+		tcnn::GPUMemory<float> loss;
+
+		uint32_t rays_per_batch = 1<<12;
+		uint32_t n_rays_total = 0;
+		uint32_t measured_batch_size = 0;
+		uint32_t measured_batch_size_before_compaction = 0;
+
+		void prepare_for_training_steps(cudaStream_t stream);
+		float update_after_training(uint32_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
+	};
+
 	void train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
-	void train_nerf_step(uint32_t target_batch_size, uint32_t n_rays_per_batch, uint32_t* counter, uint32_t* compacted_counter, float* loss, cudaStream_t stream);
+	void train_nerf_step(uint32_t target_batch_size, NerfCounters& counters, cudaStream_t stream);
 	void train_sdf(size_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
 	void train_image(size_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
 	void set_train(bool mtrain);
@@ -344,7 +359,7 @@ public:
 	void compute_mesh_vertex_colors();
 	tcnn::GPUMemory<float> get_density_on_grid(Eigen::Vector3i res3d, const BoundingBox& aabb, const Eigen::Matrix3f& render_aabb_to_local); // network version (nerf or sdf)
 	tcnn::GPUMemory<float> get_sdf_gt_on_grid(Eigen::Vector3i res3d, const BoundingBox& aabb, const Eigen::Matrix3f& render_aabb_to_local); // sdf gt version (sdf only)
-	tcnn::GPUMemory<Eigen::Array4f> get_rgba_on_grid(Eigen::Vector3i res3d, Eigen::Vector3f ray_dir, bool voxel_centers, bool density_to_alpha);
+	tcnn::GPUMemory<Eigen::Array4f> get_rgba_on_grid(Eigen::Vector3i res3d, Eigen::Vector3f ray_dir, bool voxel_centers, float depth, bool density_as_alpha = false);
 	int marching_cubes(Eigen::Vector3i res3d, const BoundingBox& render_aabb, const Eigen::Matrix3f& render_aabb_to_local, float thresh);
 
 	// Determines the 3d focus point by rendering a little 16x16 depth image around
@@ -566,21 +581,7 @@ public:
 			float intrinsic_l2_reg = 1e-4f;
 			float exposure_l2_reg = 0.0f;
 
-			struct Counters {
-				tcnn::GPUMemory<uint32_t> numsteps_counter; // number of steps each ray took
-				tcnn::GPUMemory<uint32_t> numsteps_counter_compacted; // number of steps each ray took
-				tcnn::GPUMemory<float> loss;
-
-				uint32_t rays_per_batch = 1<<12;
-				uint32_t n_rays_total = 0;
-				uint32_t measured_batch_size = 0;
-				uint32_t measured_batch_size_before_compaction = 0;
-
-				void prepare_for_training_steps(cudaStream_t stream);
-				float update_after_training(uint32_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
-			};
-
-			Counters counters_rgb;
+			NerfCounters counters_rgb;
 
 			bool random_bg_color = true;
 			bool linear_colors = false;

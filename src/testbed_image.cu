@@ -230,55 +230,64 @@ void Testbed::train_image(size_t target_batch_size, bool get_loss_scalar, cudaSt
 	m_image.training.positions.enlarge(n_elements);
 	m_image.training.targets.enlarge(n_elements);
 
-	if (m_image.random_mode == ERandomMode::Halton) {
-		linear_kernel(halton23_kernel, 0, stream, n_elements, (size_t)batch_size * m_training_step, m_image.training.positions.data());
-	} else if (m_image.random_mode == ERandomMode::Sobol) {
-		linear_kernel(sobol2_kernel, 0, stream, n_elements, (size_t)batch_size * m_training_step, m_seed, m_image.training.positions.data());
-	} else {
-		generate_random_uniform<float>(stream, m_rng, n_elements * n_input_dims, (float*)m_image.training.positions.data());
-		if (m_image.random_mode == ERandomMode::Stratified) {
-			uint32_t log2_batch_size = 0;
-			if (!is_pot(batch_size, &log2_batch_size)) {
-				tlog::warning() << "Can't stratify a non-pot batch size";
-			} else if (log2_batch_size % 2 != 0) {
-				tlog::warning() << "Can't stratify a non-square batch size";
-			} else {
-				linear_kernel(stratify2_kernel, 0, stream, n_elements, log2_batch_size, m_image.training.positions.data());
+	auto generate_training_data = [&]() {
+		if (m_image.random_mode == ERandomMode::Halton) {
+			linear_kernel(halton23_kernel, 0, stream, n_elements, (size_t)batch_size * m_training_step, m_image.training.positions.data());
+		} else if (m_image.random_mode == ERandomMode::Sobol) {
+			linear_kernel(sobol2_kernel, 0, stream, n_elements, (size_t)batch_size * m_training_step, m_seed, m_image.training.positions.data());
+		} else {
+			generate_random_uniform<float>(stream, m_rng, n_elements * n_input_dims, (float*)m_image.training.positions.data());
+			if (m_image.random_mode == ERandomMode::Stratified) {
+				uint32_t log2_batch_size = 0;
+				if (!is_pot(batch_size, &log2_batch_size)) {
+					tlog::warning() << "Can't stratify a non-pot batch size";
+				} else if (log2_batch_size % 2 != 0) {
+					tlog::warning() << "Can't stratify a non-square batch size";
+				} else {
+					linear_kernel(stratify2_kernel, 0, stream, n_elements, log2_batch_size, m_image.training.positions.data());
+				}
 			}
 		}
-	}
 
-	if (m_image.type == EDataType::Float) {
-		linear_kernel(eval_image_kernel_and_snap<float, 3>, 0, stream,
-			n_elements,
-			(float*)m_image.data.data(),
-			m_image.training.positions.data(),
-			m_image.resolution,
-			(float*)m_image.training.targets.data(),
-			m_image.training.snap_to_pixel_centers,
-			m_image.training.linear_colors
-		);
-	} else {
-		linear_kernel(eval_image_kernel_and_snap<__half, 3>, 0, stream,
-			n_elements,
-			(__half*)m_image.data.data(),
-			m_image.training.positions.data(),
-			m_image.resolution,
-			(float*)m_image.training.targets.data(),
-			m_image.training.snap_to_pixel_centers,
-			m_image.training.linear_colors
-		);
-	}
+		if (m_image.type == EDataType::Float) {
+			linear_kernel(eval_image_kernel_and_snap<float, 3>, 0, stream,
+				n_elements,
+				(float*)m_image.data.data(),
+				m_image.training.positions.data(),
+				m_image.resolution,
+				(float*)m_image.training.targets.data(),
+				m_image.training.snap_to_pixel_centers,
+				m_image.training.linear_colors
+			);
+		} else {
+			linear_kernel(eval_image_kernel_and_snap<__half, 3>, 0, stream,
+				n_elements,
+				(__half*)m_image.data.data(),
+				m_image.training.positions.data(),
+				m_image.resolution,
+				(float*)m_image.training.targets.data(),
+				m_image.training.snap_to_pixel_centers,
+				m_image.training.linear_colors
+			);
+		}
+	};
+
+	generate_training_data();
 
 	GPUMatrix<float> training_batch_matrix((float*)(m_image.training.positions.data()), n_input_dims, batch_size);
 	GPUMatrix<float> training_target_matrix((float*)(m_image.training.targets.data()), n_output_dims, batch_size);
 
-	auto ctx = m_trainer->training_step(stream, training_batch_matrix, training_target_matrix);
-	m_training_step++;
 
-	if (get_loss_scalar) {
-		m_loss_scalar.update(m_trainer->loss(stream, *ctx));
+	{
+		auto ctx = m_trainer->training_step(stream, training_batch_matrix, training_target_matrix, nullptr, false);
+		if (get_loss_scalar) {
+			m_loss_scalar.update(m_trainer->loss(stream, *ctx));
+		}
 	}
+
+
+	m_trainer->optimizer_step(stream, 128);
+	m_training_step++;
 }
 
 void Testbed::render_image(CudaRenderBuffer& render_buffer, cudaStream_t stream) {

@@ -380,8 +380,10 @@ void Testbed::dump_parameters_as_images(const T* params, const std::string& file
 		++layer_id;
 	}
 
-	std::string filename = fmt::format("{}-non-layer.exr", filename_base);
-	save_exr(params_cpu.data() + offset, non_layer_params_width, n_non_layer_params / non_layer_params_width, 1, 1, filename.c_str());
+	if (n_non_layer_params > 0) {
+		std::string filename = fmt::format("{}-non-layer.exr", filename_base);
+		save_exr(params_cpu.data() + offset, non_layer_params_width, n_non_layer_params / non_layer_params_width, 1, 1, filename.c_str());
+	}
 }
 
 template void Testbed::dump_parameters_as_images<__half>(const __half*, const std::string&);
@@ -993,7 +995,10 @@ void Testbed::imgui() {
 				ImGui::SameLine();
 				if (imgui_colored_button("Save RGBA PNG sequence", 0.2f)) {
 					auto effective_view_dir = flip_y_and_z_axes ? Vector3f{0.0f, 1.0f, 0.0f} : Vector3f{0.0f, 0.0f, 1.0f};
-					GPUMemory<Array4f> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, true);
+					// Depth of 0.01f is arbitrarily chosen to produce a visually interpretable range of alpha values.
+					// Alternatively, if the true transparency of a given voxel is desired, one could use the voxel size,
+					// the voxel diagonal, or some form of expected ray length through the voxel, given random directions.
+					GPUMemory<Array4f> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, 0.01f);
 					auto dir = m_data_path / "rgba_slices";
 					if (!dir.exists()) {
 						fs::create_directory(dir);
@@ -1012,7 +1017,8 @@ void Testbed::imgui() {
 					for (int cascade = 0; (1<<cascade)<= m_aabb.diag().x()+0.5f; ++cascade) {
 						float radius = (1<<cascade) * 0.5f;
 						m_render_aabb = BoundingBox(Eigen::Vector3f::Constant(0.5f-radius), Eigen::Vector3f::Constant(0.5f+radius));
-						GPUMemory<Array4f> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, false);
+						// Dump raw density values that the user can then convert to alpha as they please.
+						GPUMemory<Array4f> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, 0.0f, true);
 						save_rgba_grid_to_raw_file(rgba, dir.str().c_str(), res3d, flip_y_and_z_axes, cascade);
 					}
 					m_render_aabb_to_local = old_local;
