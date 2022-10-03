@@ -297,7 +297,7 @@ public:
 			throw std::runtime_error{"Starting level must be below octree depth."};
 		}
 
-		m_n_padded_output_dims = m_n_output_dims = N_FEATURES_PER_LEVEL * n_levels();
+		m_n_output_dims = N_FEATURES_PER_LEVEL * n_levels();
 
 		if (N_FEATURES_PER_LEVEL != 1 && N_FEATURES_PER_LEVEL != 2 && N_FEATURES_PER_LEVEL != 4 && N_FEATURES_PER_LEVEL != 8) {
 			throw std::runtime_error{"Number of features per level must be 1, 2, 4, or 8."};
@@ -315,7 +315,7 @@ public:
 	) override {
 		auto forward = std::make_unique<ForwardContext>();
 
-		if ((!output && !prepare_input_gradients) || m_n_padded_output_dims == 0) {
+		if ((!output && !prepare_input_gradients) || padded_output_width() == 0) {
 			return forward;
 		}
 
@@ -350,7 +350,7 @@ public:
 		tcnn::EGradientMode param_gradients_mode = tcnn::EGradientMode::Overwrite
 	) override {
 		const uint32_t num_elements = input.n();
-		if (m_n_padded_output_dims == 0 || num_elements == 0) {
+		if (padded_output_width() == 0 || num_elements == 0) {
 			return;
 		}
 
@@ -409,24 +409,22 @@ public:
 	}
 
 	uint32_t padded_output_width() const override {
-		return m_n_padded_output_dims;
+		return m_n_output_dims + m_n_to_pad;
 	}
 
 	uint32_t output_width() const override {
-		return m_n_padded_output_dims;
+		return padded_output_width();
 	}
 
 	uint32_t required_input_alignment() const override {
 		return 1;
 	}
 
-	void set_alignment(uint32_t alignment) override {
-		if (m_n_output_dims != tcnn::next_multiple(m_n_output_dims, alignment)) {
-			throw std::runtime_error{fmt::format("TakikawaEncoding only supports number of output dims that divide into {}; n_n_output_dims={}.", alignment, m_n_output_dims)};
-		}
+	void set_padded_output_width(uint32_t padded_output_width) override {
+		CHECK_THROW(padded_output_width == m_n_output_dims);
 	}
 
-	uint32_t min_alignment() const override {
+	uint32_t required_output_alignment() const override {
 		return N_FEATURES_PER_LEVEL;
 	}
 
@@ -473,7 +471,7 @@ private:
 	// derived sizes
 	uint32_t m_n_input_dims;
 	uint32_t m_n_output_dims;
-	uint32_t m_n_padded_output_dims;
+	uint32_t m_n_to_pad = 0;
 
 	// Storage of params
 	T* m_params;
