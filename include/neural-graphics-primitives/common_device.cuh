@@ -143,7 +143,7 @@ __device__ void deposit_image_gradient(const Eigen::Matrix<float, N_DIMS, 1>& va
 }
 
 template <typename T>
-__device__ __host__ inline void apply_camera_distortion(const T* extra_params, const T u, const T v, T* du, T* dv) {
+__device__ __host__ inline void apply_opencv_lens_distortion(const T* extra_params, const T u, const T v, T* du, T* dv) {
 	const T k1 = extra_params[0];
 	const T k2 = extra_params[1];
 	const T p1 = extra_params[2];
@@ -159,7 +159,7 @@ __device__ __host__ inline void apply_camera_distortion(const T* extra_params, c
 }
 
 template <typename T>
-__device__ __host__ inline void iterative_camera_undistortion(const T* params, T* u, T* v) {
+__device__ __host__ inline void iterative_opencv_lens_undistortion(const T* params, T* u, T* v) {
 	// Parameters for Newton iteration using numerical differentiation with
 	// central differences, 100 iterations should be enough even for complex
 	// camera models with higher order terms.
@@ -179,11 +179,11 @@ __device__ __host__ inline void iterative_camera_undistortion(const T* params, T
 	for (uint32_t i = 0; i < kNumIterations; ++i) {
 		const float step0 = std::max(std::numeric_limits<float>::epsilon(), std::abs(kRelStepSize * x(0)));
 		const float step1 = std::max(std::numeric_limits<float>::epsilon(), std::abs(kRelStepSize * x(1)));
-		apply_camera_distortion(params, x(0), x(1), &dx(0), &dx(1));
-		apply_camera_distortion(params, x(0) - step0, x(1), &dx_0b(0), &dx_0b(1));
-		apply_camera_distortion(params, x(0) + step0, x(1), &dx_0f(0), &dx_0f(1));
-		apply_camera_distortion(params, x(0), x(1) - step1, &dx_1b(0), &dx_1b(1));
-		apply_camera_distortion(params, x(0), x(1) + step1, &dx_1f(0), &dx_1f(1));
+		apply_opencv_lens_distortion(params, x(0), x(1), &dx(0), &dx(1));
+		apply_opencv_lens_distortion(params, x(0) - step0, x(1), &dx_0b(0), &dx_0b(1));
+		apply_opencv_lens_distortion(params, x(0) + step0, x(1), &dx_0f(0), &dx_0f(1));
+		apply_opencv_lens_distortion(params, x(0), x(1) - step1, &dx_1b(0), &dx_1b(1));
+		apply_opencv_lens_distortion(params, x(0), x(1) + step1, &dx_1f(0), &dx_1f(1));
 		J(0, 0) = 1 + (dx_0f(0) - dx_0b(0)) / (2 * step0);
 		J(0, 1) = (dx_1f(0) - dx_1b(0)) / (2 * step1);
 		J(1, 0) = (dx_0f(1) - dx_0b(1)) / (2 * step0);
@@ -268,20 +268,20 @@ inline NGP_HOST_DEVICE Ray pixel_to_ray(
 	bool snap_to_pixel_centers = false,
 	float focus_z = 1.0f,
 	float aperture_size = 0.0f,
-	const CameraDistortion& camera_distortion = {},
-	const float* __restrict__ distortion_data = nullptr,
-	const Eigen::Vector2i distortion_resolution = Eigen::Vector2i::Zero()
+	const Lens& lens = {},
+	const float* __restrict__ distortion_grid = nullptr,
+	const Eigen::Vector2i distortion_grid_resolution = Eigen::Vector2i::Zero()
 ) {
 	Eigen::Vector2f offset = ld_random_pixel_offset(snap_to_pixel_centers ? 0 : spp);
 	Eigen::Vector2f uv = (pixel.cast<float>() + offset).cwiseQuotient(resolution.cast<float>());
 
 	Eigen::Vector3f dir;
-	if (camera_distortion.mode == ECameraDistortionMode::FTheta) {
-		dir = f_theta_undistortion(uv - screen_center, camera_distortion.params, {1000.f, 0.f, 0.f});
+	if (lens.mode == ELensMode::FTheta) {
+		dir = f_theta_undistortion(uv - screen_center, lens.params, {1000.f, 0.f, 0.f});
 		if (dir.x() == 1000.f) {
 			return {{1000.f, 0.f, 0.f}, {0.f, 0.f, 1.f}}; // return a point outside the aabb so the pixel is not rendered
 		}
-	} else if (camera_distortion.mode == ECameraDistortionMode::LatLong) {
+	} else if (lens.mode == ELensMode::LatLong) {
 		dir = latlong_to_dir(uv);
 	} else {
 		dir = {
@@ -289,12 +289,12 @@ inline NGP_HOST_DEVICE Ray pixel_to_ray(
 			(uv.y() - screen_center.y()) * (float)resolution.y() / focal_length.y(),
 			1.0f
 		};
-		if (camera_distortion.mode == ECameraDistortionMode::Iterative) {
-			iterative_camera_undistortion(camera_distortion.params, &dir.x(), &dir.y());
+		if (lens.mode == ELensMode::OpenCV) {
+			iterative_opencv_lens_undistortion(lens.params, &dir.x(), &dir.y());
 		}
 	}
-	if (distortion_data) {
-		dir.head<2>() += read_image<2>(distortion_data, distortion_resolution, uv);
+	if (distortion_grid) {
+		dir.head<2>() += read_image<2>(distortion_grid, distortion_grid_resolution, uv);
 	}
 
 	Eigen::Vector3f head_pos = {parallax_shift.x(), parallax_shift.y(), 0.f};
@@ -321,7 +321,7 @@ inline NGP_HOST_DEVICE Eigen::Vector2f pos_to_pixel(
 	const Eigen::Matrix<float, 3, 4>& camera_matrix,
 	const Eigen::Vector2f& screen_center,
 	const Eigen::Vector3f& parallax_shift,
-	const CameraDistortion& camera_distortion = {}
+	const Lens& lens = {}
 ) {
 	// Express ray in terms of camera frame
 	Eigen::Vector3f head_pos = {parallax_shift.x(), parallax_shift.y(), 0.f};
@@ -332,14 +332,14 @@ inline NGP_HOST_DEVICE Eigen::Vector2f pos_to_pixel(
 	dir /= dir.z();
 	dir += head_pos * parallax_shift.z();
 
-	if (camera_distortion.mode == ECameraDistortionMode::Iterative) {
+	if (lens.mode == ELensMode::OpenCV) {
 		float du, dv;
-		apply_camera_distortion(camera_distortion.params, dir.x(), dir.y(), &du, &dv);
+		apply_opencv_lens_distortion(lens.params, dir.x(), dir.y(), &du, &dv);
 		dir.x() += du;
 		dir.y() += dv;
-	} else if (camera_distortion.mode == ECameraDistortionMode::FTheta) {
+	} else if (lens.mode == ELensMode::FTheta) {
 		assert(false);
-	}  else if (camera_distortion.mode == ECameraDistortionMode::LatLong) {
+	}  else if (lens.mode == ELensMode::LatLong) {
 		assert(false);
 	}
 
@@ -360,7 +360,7 @@ inline NGP_HOST_DEVICE Eigen::Vector2f motion_vector_3d(
 	const Eigen::Vector3f& parallax_shift,
 	const bool snap_to_pixel_centers,
 	const float depth,
-	const CameraDistortion& camera_distortion = {}
+	const Lens& lens = {}
 ) {
 	Ray ray = pixel_to_ray(
 		sample_index,
@@ -373,7 +373,7 @@ inline NGP_HOST_DEVICE Eigen::Vector2f motion_vector_3d(
 		snap_to_pixel_centers,
 		1.0f,
 		0.0f,
-		camera_distortion,
+		lens,
 		nullptr,
 		Eigen::Vector2i::Zero()
 	);
@@ -385,7 +385,7 @@ inline NGP_HOST_DEVICE Eigen::Vector2f motion_vector_3d(
 		prev_camera,
 		screen_center,
 		parallax_shift,
-		camera_distortion
+		lens
 	);
 
 	return prev_pixel - (pixel.cast<float>() + ld_random_pixel_offset(sample_index));

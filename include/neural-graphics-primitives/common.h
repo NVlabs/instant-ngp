@@ -173,15 +173,15 @@ struct TrainingXForm {
 	Eigen::Matrix<float, 3, 4> end;
 };
 
-enum class ECameraDistortionMode : int {
-	None,
-	Iterative,
+enum class ELensMode : int {
+	Perspective,
+	OpenCV,
 	FTheta,
 	LatLong,
 };
 
-struct CameraDistortion {
-	ECameraDistortionMode mode = ECameraDistortionMode::None;
+struct Lens {
+	ELensMode mode = ELensMode::Perspective;
 	float params[7] = {};
 };
 

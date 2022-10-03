@@ -194,34 +194,34 @@ NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale, bool is_h
 	return result;
 }
 
-void read_camera_distortion(const nlohmann::json& json, CameraDistortion& camera_distortion, Vector2f& principal_point, Vector4f& rolling_shutter) {
-	ECameraDistortionMode mode = ECameraDistortionMode::None;
+void read_lens(const nlohmann::json& json, Lens& lens, Vector2f& principal_point, Vector4f& rolling_shutter) {
+	ELensMode mode = ELensMode::Perspective;
 
 	if (json.contains("k1")) {
-		camera_distortion.params[0] = json["k1"];
-		if (camera_distortion.params[0] != 0.f) {
-			mode = ECameraDistortionMode::Iterative;
+		lens.params[0] = json["k1"];
+		if (lens.params[0] != 0.f) {
+			mode = ELensMode::OpenCV;
 		}
 	}
 
 	if (json.contains("k2")) {
-		camera_distortion.params[1] = json["k2"];
-		if (camera_distortion.params[1] != 0.f) {
-			mode = ECameraDistortionMode::Iterative;
+		lens.params[1] = json["k2"];
+		if (lens.params[1] != 0.f) {
+			mode = ELensMode::OpenCV;
 		}
 	}
 
 	if (json.contains("p1")) {
-		camera_distortion.params[2] = json["p1"];
-		if (camera_distortion.params[2] != 0.f) {
-			mode = ECameraDistortionMode::Iterative;
+		lens.params[2] = json["p1"];
+		if (lens.params[2] != 0.f) {
+			mode = ELensMode::OpenCV;
 		}
 	}
 
 	if (json.contains("p2")) {
-		camera_distortion.params[3] = json["p2"];
-		if (camera_distortion.params[3] != 0.f) {
-			mode = ECameraDistortionMode::Iterative;
+		lens.params[3] = json["p2"];
+		if (lens.params[3] != 0.f) {
+			mode = ELensMode::OpenCV;
 		}
 	}
 
@@ -248,31 +248,23 @@ void read_camera_distortion(const nlohmann::json& json, CameraDistortion& camera
 	}
 
 	if (json.contains("ftheta_p0")) {
-		if (mode != ECameraDistortionMode::None) {
-			tlog::warning() << "Found camera distortion parameters for multiple camera models. Overriding previous with FTheta.";
-		}
-
-		camera_distortion.params[0] = json["ftheta_p0"];
-		camera_distortion.params[1] = json["ftheta_p1"];
-		camera_distortion.params[2] = json["ftheta_p2"];
-		camera_distortion.params[3] = json["ftheta_p3"];
-		camera_distortion.params[4] = json["ftheta_p4"];
-		camera_distortion.params[5] = json["w"];
-		camera_distortion.params[6] = json["h"];
-		mode = ECameraDistortionMode::FTheta;
+		lens.params[0] = json["ftheta_p0"];
+		lens.params[1] = json["ftheta_p1"];
+		lens.params[2] = json["ftheta_p2"];
+		lens.params[3] = json["ftheta_p3"];
+		lens.params[4] = json["ftheta_p4"];
+		lens.params[5] = json["w"];
+		lens.params[6] = json["h"];
+		mode = ELensMode::FTheta;
 	}
 
 	if (json.contains("latlong")) {
-		if (mode != ECameraDistortionMode::None) {
-			tlog::warning() << "Found camera distortion parameters for multiple camera models. Overriding previous with LatLong.";
-		}
-
-		mode = ECameraDistortionMode::LatLong;
+		mode = ELensMode::LatLong;
 	}
 
 	// If there was an outer distortion mode, don't override it with nothing.
-	if (mode != ECameraDistortionMode::None) {
-		camera_distortion.mode = mode;
+	if (mode != ELensMode::Perspective) {
+		lens.mode = mode;
 	}
 }
 
@@ -489,7 +481,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 			result.n_extra_learnable_dims = json["n_extra_learnable_dims"];
 		}
 
-		CameraDistortion camera_distortion = {};
+		Lens lens = {};
 		Vector2f principal_point = Vector2f::Constant(0.5f);
 		Vector4f rolling_shutter = Vector4f::Zero();
 
@@ -497,8 +489,8 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 			info.depth_scale = json["integer_depth_scale"];
 		}
 
-		// Camera distortion
-		read_camera_distortion(json, camera_distortion, principal_point, rolling_shutter);
+		// Lens parameters
+		read_lens(json, lens, principal_point, rolling_shutter);
 
 		if (json.contains("aabb_scale")) {
 			result.aabb_scale = json["aabb_scale"];
@@ -553,7 +545,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 			}
 		}
 
-		if (json.contains("frames") && json["frames"].is_array()) pool.parallelForAsync<size_t>(0, json["frames"].size(), [&progress, &n_loaded, &result, &images, &json, basepath, image_idx, info, rolling_shutter, principal_point, camera_distortion, part_after_underscore, fix_premult, enable_depth_loading, enable_ray_loading](size_t i) {
+		if (json.contains("frames") && json["frames"].is_array()) pool.parallelForAsync<size_t>(0, json["frames"].size(), [&progress, &n_loaded, &result, &images, &json, basepath, image_idx, info, rolling_shutter, principal_point, lens, part_after_underscore, fix_premult, enable_depth_loading, enable_ray_loading](size_t i) {
 			size_t i_img = i + image_idx;
 			auto& frame = json["frames"][i];
 			LoadedImageInfo& dst = images[i_img];
@@ -700,9 +692,9 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 			// set these from the base settings
 			result.metadata[i_img].rolling_shutter = rolling_shutter;
 			result.metadata[i_img].principal_point = principal_point;
-			result.metadata[i_img].camera_distortion = camera_distortion;
+			result.metadata[i_img].lens = lens;
 			// see if there is a per-frame override
-			read_camera_distortion(frame, result.metadata[i_img].camera_distortion, result.metadata[i_img].principal_point, result.metadata[i_img].rolling_shutter);
+			read_lens(frame, result.metadata[i_img].lens, result.metadata[i_img].principal_point, result.metadata[i_img].rolling_shutter);
 
 			result.xforms[i_img].start = result.nerf_matrix_to_ngp(result.xforms[i_img].start);
 			result.xforms[i_img].end = result.nerf_matrix_to_ngp(result.xforms[i_img].end);

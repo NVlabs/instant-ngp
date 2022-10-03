@@ -272,8 +272,8 @@ void Testbed::set_camera_to_training_view(int trainview) {
 	m_camera = m_smoothed_camera = get_xform_given_rolling_shutter(m_nerf.training.transforms[trainview], m_nerf.training.dataset.metadata[trainview].rolling_shutter, Vector2f{0.5f, 0.5f}, 0.0f);
 	m_relative_focal_length = m_nerf.training.dataset.metadata[trainview].focal_length / (float)m_nerf.training.dataset.metadata[trainview].resolution[m_fov_axis];
 	m_scale = std::max((old_look_at - view_pos()).dot(view_dir()), 0.1f);
-	m_nerf.render_with_camera_distortion = true;
-	m_nerf.render_distortion = m_nerf.training.dataset.metadata[trainview].camera_distortion;
+	m_nerf.render_with_lens_distortion = true;
+	m_nerf.render_lens = m_nerf.training.dataset.metadata[trainview].lens;
 	m_screen_center = Vector2f::Constant(1.0f) - m_nerf.training.dataset.metadata[0].principal_point;
 }
 
@@ -701,24 +701,23 @@ void Testbed::imgui() {
 		}
 
 		if (m_testbed_mode == ETestbedMode::Nerf && ImGui::TreeNode("NeRF rendering options")) {
-			accum_reset |= ImGui::Checkbox("Apply lens distortion", &m_nerf.render_with_camera_distortion);
+			accum_reset |= ImGui::Checkbox("Apply lens distortion", &m_nerf.render_with_lens_distortion);
 
-			if (m_nerf.render_with_camera_distortion) {
-				accum_reset |= ImGui::Combo("Distortion mode", (int*)&m_nerf.render_distortion.mode, "None\0Iterative\0F-Theta\0LatLong\0");
-				if (m_nerf.render_distortion.mode == ECameraDistortionMode::Iterative) {
-					accum_reset |= ImGui::InputFloat("k1", &m_nerf.render_distortion.params[0], 0.f, 0.f, "%.5f");
-					accum_reset |= ImGui::InputFloat("k2", &m_nerf.render_distortion.params[1], 0.f, 0.f, "%.5f");
-					accum_reset |= ImGui::InputFloat("p1", &m_nerf.render_distortion.params[2], 0.f, 0.f, "%.5f");
-					accum_reset |= ImGui::InputFloat("p2", &m_nerf.render_distortion.params[3], 0.f, 0.f, "%.5f");
-				}
-				else if (m_nerf.render_distortion.mode == ECameraDistortionMode::FTheta) {
-					accum_reset |= ImGui::InputFloat("width", &m_nerf.render_distortion.params[5], 0.f, 0.f, "%.0f");
-					accum_reset |= ImGui::InputFloat("height", &m_nerf.render_distortion.params[6], 0.f, 0.f, "%.0f");
-					accum_reset |= ImGui::InputFloat("f_theta p0", &m_nerf.render_distortion.params[0], 0.f, 0.f, "%.5f");
-					accum_reset |= ImGui::InputFloat("f_theta p1", &m_nerf.render_distortion.params[1], 0.f, 0.f, "%.5f");
-					accum_reset |= ImGui::InputFloat("f_theta p2", &m_nerf.render_distortion.params[2], 0.f, 0.f, "%.5f");
-					accum_reset |= ImGui::InputFloat("f_theta p3", &m_nerf.render_distortion.params[3], 0.f, 0.f, "%.5f");
-					accum_reset |= ImGui::InputFloat("f_theta p4", &m_nerf.render_distortion.params[4], 0.f, 0.f, "%.5f");
+			if (m_nerf.render_with_lens_distortion) {
+				accum_reset |= ImGui::Combo("Lens mode", (int*)&m_nerf.render_lens.mode, "Perspective\0OpenCV\0F-Theta\0LatLong\0");
+				if (m_nerf.render_lens.mode == ELensMode::OpenCV) {
+					accum_reset |= ImGui::InputFloat("k1", &m_nerf.render_lens.params[0], 0.f, 0.f, "%.5f");
+					accum_reset |= ImGui::InputFloat("k2", &m_nerf.render_lens.params[1], 0.f, 0.f, "%.5f");
+					accum_reset |= ImGui::InputFloat("p1", &m_nerf.render_lens.params[2], 0.f, 0.f, "%.5f");
+					accum_reset |= ImGui::InputFloat("p2", &m_nerf.render_lens.params[3], 0.f, 0.f, "%.5f");
+				} else if (m_nerf.render_lens.mode == ELensMode::FTheta) {
+					accum_reset |= ImGui::InputFloat("width", &m_nerf.render_lens.params[5], 0.f, 0.f, "%.0f");
+					accum_reset |= ImGui::InputFloat("height", &m_nerf.render_lens.params[6], 0.f, 0.f, "%.0f");
+					accum_reset |= ImGui::InputFloat("f_theta p0", &m_nerf.render_lens.params[0], 0.f, 0.f, "%.5f");
+					accum_reset |= ImGui::InputFloat("f_theta p1", &m_nerf.render_lens.params[1], 0.f, 0.f, "%.5f");
+					accum_reset |= ImGui::InputFloat("f_theta p2", &m_nerf.render_lens.params[2], 0.f, 0.f, "%.5f");
+					accum_reset |= ImGui::InputFloat("f_theta p3", &m_nerf.render_lens.params[3], 0.f, 0.f, "%.5f");
+					accum_reset |= ImGui::InputFloat("f_theta p4", &m_nerf.render_lens.params[4], 0.f, 0.f, "%.5f");
 				}
 			}
 			ImGui::TreePop();
@@ -974,7 +973,7 @@ void Testbed::imgui() {
 
 			if (imgui_colored_button("Mesh it!", 0.4f)) {
 				marching_cubes(res3d, aabb, m_render_aabb_to_local, m_mesh.thresh);
-				m_nerf.render_with_camera_distortion = false;
+				m_nerf.render_with_lens_distortion = false;
 			}
 			if (m_mesh.indices.size()>0) {
 				ImGui::SameLine();
@@ -2599,7 +2598,7 @@ __global__ void dlss_prep_kernel(
 	cudaSurfaceObject_t depth_surface,
 	cudaSurfaceObject_t mvec_surface,
 	cudaSurfaceObject_t exposure_surface,
-	CameraDistortion camera_distortion,
+	Lens lens,
 	const float view_dist,
 	const float prev_view_dist,
 	const Vector2f image_pos,
@@ -2646,7 +2645,7 @@ __global__ void dlss_prep_kernel(
 		parallax_shift,
 		snap_to_pixel_centers,
 		depth,
-		camera_distortion
+		lens
 	);
 
 	surf2Dwrite(make_float2(mvec.x(), mvec.y()), mvec_surface, x_orig * sizeof(float2), y_orig);
@@ -2784,7 +2783,7 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 	if (render_buffer.dlss()) {
 		auto res = render_buffer.in_resolution();
 
-		bool distortion = m_testbed_mode == ETestbedMode::Nerf && m_nerf.render_with_camera_distortion;
+		bool distortion = m_testbed_mode == ETestbedMode::Nerf && m_nerf.render_with_lens_distortion;
 
 		const dim3 threads = { 16, 8, 1 };
 		const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
@@ -2803,7 +2802,7 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 			render_buffer.dlss()->depth(),
 			render_buffer.dlss()->mvec(),
 			render_buffer.dlss()->exposure(),
-			distortion ? m_nerf.render_distortion : CameraDistortion{},
+			distortion ? m_nerf.render_lens : Lens{},
 			m_scale,
 			m_prev_scale,
 			m_image.pos,
