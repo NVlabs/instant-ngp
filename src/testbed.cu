@@ -3057,11 +3057,12 @@ void Testbed::load_snapshot(const std::string& filepath_string) {
 			density_grid[i] = (float)density_grid_fp16[i];
 		});
 
-		if (m_nerf.density_grid.size() != NERF_GRIDSIZE() * NERF_GRIDSIZE() * NERF_GRIDSIZE() * (m_nerf.max_cascade + 1)) {
+		if (m_nerf.density_grid.size() == NERF_GRIDSIZE() * NERF_GRIDSIZE() * NERF_GRIDSIZE() * (m_nerf.max_cascade + 1)) {
+			update_density_grid_mean_and_bitfield(nullptr);
+		} else if (m_nerf.density_grid.size() != 0) {
+			// A size of 0 indicates that the density grid was never populated, which is a valid state of a (yet) untrained model.
 			throw std::runtime_error{"Incompatible number of grid cascades."};
 		}
-
-		update_density_grid_mean_and_bitfield(nullptr);
 	}
 
 	m_network_config_path = filepath_string;

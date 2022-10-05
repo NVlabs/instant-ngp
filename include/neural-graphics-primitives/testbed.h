@@ -154,7 +154,7 @@ public:
 			const Eigen::Vector2i& distortion_resolution,
 			Eigen::Array4f* frame_buffer,
 			float* depth_buffer,
-			uint8_t *grid,
+			uint8_t* grid,
 			int show_accel,
 			float cone_angle_constant,
 			ERenderMode render_mode,
