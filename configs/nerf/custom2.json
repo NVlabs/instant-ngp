@@ -1,0 +1,105 @@
+{
+	"loss": {
+		"otype": "Huber"
+	},
+	"optimizer": {
+		"otype": "Ema",
+		"decay": 0.95,
+		"nested": {
+			"otype": "ExponentialDecay",
+			"decay_start": 20000,
+			"decay_interval": 10000,
+			"decay_base": 0.33,
+			"nested": {
+				"otype": "Adam",
+				"learning_rate": 1e-2,
+				"beta1": 0.9,
+				"beta2": 0.99,
+				"epsilon": 1e-15,
+				"l2_reg": 1e-6
+			}
+		}
+	},
+	"encoding": {
+		"otype": "HashGrid",
+		"n_levels": 16,
+		"n_features_per_level": 2,
+		"log2_hashmap_size": 19,
+		"base_resolution": 16
+	},
+	"network": {
+		"otype": "FullyFusedMLP",
+		"activation": "ReLU",
+		"output_activation": "None",
+		"n_neurons": 64,
+		"n_hidden_layers": 1
+	},
+	"dir_encoding": {
+		"otype": "Composite",
+		"nested": [
+			{
+				"n_dims_to_encode": 3,
+				"otype": "SphericalHarmonics",
+				"degree": 4
+			},
+			{
+				"otype": "Identity",
+				"n_bins": 4,
+				"degree": 4
+			}
+		]
+	},
+	"rgb_network": {
+		"otype": "FullyFusedMLP",
+		"activation": "ReLU",
+		"output_activation": "None",
+		"n_neurons": 64,
+		"n_hidden_layers": 2
+	},
+	"distortion_map": {
+		"resolution": [32, 32],
+		"optimizer": {
+			"otype": "ExponentialDecay",
+			"decay_start": 10000,
+			"decay_interval": 5000,
+			"decay_end": 25000,
+			"decay_base": 0.33,
+			"nested": {
+				"otype": "Adam",
+				"learning_rate": 1e-4,
+				"beta1": 0.9,
+				"beta2": 0.99,
+				"epsilon": 1e-8
+			}
+		}
+	},
+	"envmap": {
+		"loss": {
+			"otype": "RelativeL2"
+		},
+		"optimizer": {
+			"otype": "Ema",
+			"decay": 0.99,
+			"nested": {
+				"otype": "ExponentialDecay",
+				"decay_start": 10000,
+				"decay_interval": 5000,
+				"decay_base": 0.33,
+				"nested": {
+					"otype": "Adam",
+					"learning_rate": 1e-2,
+					"beta1": 0.9,
+					"beta2": 0.99,
+					"beta3": 0.9,
+					"beta_shampoo": 0.0,
+					"epsilon": 1e-10,
+					"identity": 0.0001,
+					"cg_on_momentum": false,
+					"frobenius_normalization": true,
+					"l2_reg": 1e-10
+				}
+			}
+		}
+	}
+}
+

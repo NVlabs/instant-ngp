@@ -11,6 +11,9 @@
 import argparse
 import os
 import commentjson as json
+import cv2
+
+from matplotlib import pyplot as plt
 
 import numpy as np
 
@@ -21,6 +24,7 @@ from common import *
 from scenes import *
 
 from tqdm import tqdm
+from plyfile import PlyData, PlyElement
 
 import pyngp as ngp # noqa
 
@@ -53,6 +57,7 @@ def parse_args():
 	parser.add_argument("--video_output", type=str, default="video.mp4", help="Filename of the output video.")
 
 	parser.add_argument("--save_mesh", default="", help="Output a marching-cubes based mesh from the NeRF or SDF model. Supports OBJ and PLY format.")
+	parser.add_argument("--save_mesh_ply", default="", help="Output a marching-cubes based mesh from the NeRF or SDF model. PLY format.")
 	parser.add_argument("--marching_cubes_res", default=256, type=int, help="Sets the resolution for the marching cubes grid.")
 
 	parser.add_argument("--width", "--screenshot_w", type=int, default=0, help="Resolution width of GUI and screenshots.")
@@ -64,6 +69,7 @@ def parse_args():
 	parser.add_argument("--second_window", action="store_true", help="Open a second window containing a copy of the main output.")
 
 	parser.add_argument("--sharpen", default=0, help="Set amount of sharpening applied to NeRF training images. Range 0.0 to 1.0.")
+	parser.add_argument("--depth", action="store_true", help="Render and save a depth image.")
 
 
 	return parser.parse_args()
@@ -101,7 +107,8 @@ if __name__ == "__main__":
 	network = args.network if args.network else base_network
 	if not os.path.isabs(network):
 		network = os.path.join(configs_dir, network)
-
+	
+	print(ngp.LensMode)
 	testbed = ngp.Testbed(mode)
 	testbed.nerf.sharpen = float(args.sharpen)
 	testbed.exposure = args.exposure
@@ -138,11 +145,16 @@ if __name__ == "__main__":
 		print("Screenshot transforms from ", args.screenshot_transforms)
 		with open(args.screenshot_transforms) as f:
 			ref_transforms = json.load(f)
+	
+	print(f"aabb_scale: {ref_transforms['aabb_scale']}")
+	print(f"scale: {ref_transforms['scale']}")
 
 	testbed.shall_train = args.train if args.gui else True
 
-
+	testbed.nerf.cone_angle_constant = 0
+	print(f"cone_angle_constant: {testbed.nerf.cone_angle_constant}")
 	testbed.nerf.render_with_lens_distortion = True
+	print(f"render_with_lens_distortion: {testbed.nerf.render_with_lens_distortion}")
 
 	network_stem = os.path.splitext(os.path.basename(network))[0]
 	if args.mode == "sdf":
@@ -205,11 +217,13 @@ if __name__ == "__main__":
 				now = time.monotonic()
 				if now - tqdm_last_update > 0.1:
 					t.update(testbed.training_step - old_training_step)
-					t.set_postfix(loss=testbed.loss)
+					psnrloss = mse2psnr(testbed.loss)
+					t.set_postfix(loss=testbed.loss, psnr=psnrloss)
 					old_training_step = testbed.training_step
 					tqdm_last_update = now
 
 	if args.save_snapshot:
+		snapshot = args.save_snapshot
 		print("Saving snapshot ", args.save_snapshot)
 		testbed.save_snapshot(args.save_snapshot, False)
 
@@ -236,9 +250,9 @@ if __name__ == "__main__":
 		testbed.nerf.rendering_min_transmittance = 1e-4
 
 		testbed.fov_axis = 0
-		testbed.fov = test_transforms["camera_angle_x"] * 180 / np.pi
+		testbed.fov = ref_transforms["frames"][0]["camera_angle_x"] * 180 / np.pi
 		testbed.shall_train = False
-
+		
 		with tqdm(list(enumerate(test_transforms["frames"])), unit="images", desc=f"Rendering test frame") as t:
 			for i, frame in t:
 				p = frame["file_path"]
@@ -279,7 +293,7 @@ if __name__ == "__main__":
 				if i == 0:
 					write_image("out.png", image)
 
-				diffimg = np.absolute(image - ref_image)
+				diffimg = np.absolute(image[...,:3] - ref_image)
 				diffimg[...,3:4] = 1.0
 				if i == 0:
 					write_image("diff.png", diffimg)
@@ -307,9 +321,30 @@ if __name__ == "__main__":
 		print(f"Generating mesh via marching cubes and saving to {args.save_mesh}. Resolution=[{res},{res},{res}]")
 		testbed.compute_and_save_marching_cubes_mesh(args.save_mesh, [res, res, res])
 
+	if args.save_mesh_ply:
+		mode = ngp.TestbedMode.Nerf
+		testbed = ngp.Testbed(mode)
+		testbed.load_snapshot(snapshot)
+		mc = testbed.compute_marching_cubes_mesh()
+		vertex = np.array(list(zip(*mc["V"].T)), dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')])
+		vertex_color = np.array(list(zip(*((mc["C"] * 255).T))), dtype=[('red', 'u1'), ('green', 'u1'), ('blue', 'u1')])
+		n = len(vertex)
+		assert len(vertex_color) == n
+
+		vertex_all = np.empty(n, vertex.dtype.descr + vertex_color.dtype.descr)
+
+		for prop in vertex.dtype.names:
+			vertex_all[prop] = vertex[prop]
+
+		for prop in vertex_color.dtype.names:
+			vertex_all[prop] = vertex_color[prop]
+
+		ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=False)
+		ply.write(args.save_mesh)
+
 	if ref_transforms:
 		testbed.fov_axis = 0
-		testbed.fov = ref_transforms["camera_angle_x"] * 180 / np.pi
+		testbed.fov = ref_transforms["frames"][0]["camera_angle_x"] * 180 / np.pi
 		if not args.screenshot_frames:
 			args.screenshot_frames = range(len(ref_transforms["frames"]))
 		print(args.screenshot_frames)
@@ -317,16 +352,50 @@ if __name__ == "__main__":
 			f = ref_transforms["frames"][int(idx)]
 			cam_matrix = f["transform_matrix"]
 			testbed.set_nerf_camera_matrix(np.matrix(cam_matrix)[:-1,:])
-			outname = os.path.join(args.screenshot_dir, os.path.basename(f["file_path"]))
+			outname = os.path.join(args.screenshot_dir, os.path.basename(f["file_path"]))			
 
+			#Add configuration to the screenshot filename
+			pos = outname.index('.',1)
+			ss = "_"+snapshot.split('.')[1].split('/')[-1]
+			outname = outname[:pos]+ss+outname[pos:]
+   
 			# Some NeRF datasets lack the .png suffix in the dataset metadata
 			if not os.path.splitext(outname)[1]:
 				outname = outname + ".png"
 
 			print(f"rendering {outname}")
-			image = testbed.render(args.width or int(ref_transforms["w"]), args.height or int(ref_transforms["h"]), args.screenshot_spp, True)
+			#image = testbed.render(args.width or int(ref_transforms["frames"][0]["w"]), args.height or int(ref_transforms["frames"][0]["h"]), args.screenshot_spp, True)
+			
+			ref_image = read_image(os.path.join(os.path.split(args.screenshot_transforms)[0], f["file_path"]))
+			image = testbed.render(ref_image.shape[1], ref_image.shape[0], args.screenshot_spp, True)
+			
+			diffimg = np.absolute(image[...,:3] - ref_image)
+			diffimg[...,3:4] = 1.0
+			A = np.clip(linear_to_srgb(image[...,:3]), 0.0, 1.0)
+			R = np.clip(linear_to_srgb(ref_image[...,:3]), 0.0, 1.0)
+			mse = float(compute_error("MSE", A, R))
+			ssim = float(compute_error("SSIM", A, R))
+			psnr = mse2psnr(mse)
+			print(f"{outname}: mse: {mse}, ssim: {ssim}, psnr: {psnr}")
+			
 			os.makedirs(os.path.dirname(outname), exist_ok=True)
 			write_image(outname, image)
+			print(np.shape(image))
+			
+			if args.depth:
+				print("saving depth screenshots")
+				pos = outname.index('.',1)
+				outname = outname[:pos]+"_depth"+outname[pos:]
+				testbed.render_mode = ngp.Depth
+				print(f"rendering {outname}")
+				#imaged = testbed.render(args.width or int(ref_transforms["frames"][0]["w"]), args.height or int(ref_transforms["frames"][0]["h"]), args.screenshot_spp, True)
+				imaged = testbed.render(ref_image.shape[1], ref_image.shape[0], args.screenshot_spp, True)
+
+				#Scale the depth image and print it in better colormap
+				gray = cv2.cvtColor(imaged, cv2.COLOR_BGR2GRAY) * 255
+				gray = cv2.equalizeHist(np.uint8(gray))
+				plt.imsave(outname,gray, cmap=plt.get_cmap('viridis'), vmin=0, vmax=255)
+
 	elif args.screenshot_dir:
 		outname = os.path.join(args.screenshot_dir, args.scene + "_" + network_stem)
 		print(f"Rendering {outname}.png")
