@@ -145,6 +145,7 @@ public:
 			bool snap_to_pixel_centers,
 			const BoundingBox& render_aabb,
 			const Eigen::Matrix3f& render_aabb_to_local,
+			float near_distance,
 			float plane_z,
 			float aperture_size,
 			const Lens& lens,
@@ -657,7 +658,8 @@ public:
 		bool render_with_lens_distortion = false;
 		Lens render_lens = {};
 
-		float rendering_min_transmittance = 0.01f;
+		float render_near_distance = 0.00f;
+		float render_min_transmittance = 0.01f;
 
 		float glow_y_cutoff = 0.f;
 		int glow_mode = 0;
