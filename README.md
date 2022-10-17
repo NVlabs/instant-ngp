@@ -74,9 +74,9 @@ If the build succeeds, you can now run the code via the `build/testbed` executab
 
 If automatic GPU architecture detection fails, (as can happen if you have multiple GPUs installed), set the `TCNN_CUDA_ARCHITECTURES` environment variable for the GPU you would like to use. The following table lists the values for common GPUs. If your GPU is not listed, consult [this exhaustive list](https://developer.nvidia.com/cuda-gpus).
 
-| RTX 30X0 | A100 | RTX 20X0 | TITAN V / V100 | GTX 10X0 / TITAN Xp | GTX 9X0 | K80 |
-|:--------:|:----:|:--------:|:--------------:|:-------------------:|:-------:|:---:|
-|       86 |   80 |       75 |             70 |                  61 |      52 |  37 |
+| H100 | 40X0 | 30X0 | A100 | 20X0 | TITAN V / V100 | 10X0 / TITAN Xp | 9X0 | K80 |
+|:----:|:----:|:----:|:----:|:----:|:--------------:|:---------------:|:---:|:---:|
+|   90 |   89 |   86 |   80 |   75 |             70 |              61 |  52 |  37 |
 
 
 
