@@ -184,7 +184,6 @@ def trim(error, skip=0.000001):
 	return error[skip:size-skip].mean()
 
 def luminance(a):
-	a = np.maximum(0, a)**0.4545454545
 	return 0.2126 * a[:,:,0] + 0.7152 * a[:,:,1] + 0.0722 * a[:,:,2]
 
 def SSIM(a, b):
