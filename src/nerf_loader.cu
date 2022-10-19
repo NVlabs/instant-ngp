@@ -565,7 +565,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 					path = path.with_extension("exr");
 				}
 				if (!path.exists()) {
-					throw std::runtime_error{ "Could not find image file: " + path.str()};
+					throw std::runtime_error{"Could not find image file: " + path.str()};
 				}
 			}
 
@@ -578,6 +578,9 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 			} else {
 				dst.image_data_on_gpu = false;
 				uint8_t* img = stbi_load(path.str().c_str(), &dst.res.x(), &dst.res.y(), &comp, 4);
+				if (!img) {
+					throw std::runtime_error{"Could not open image file: "s + std::string{stbi_failure_reason()}};
+				}
 
 
 				fs::path alphapath = basepath / fmt::format("{}.alpha.{}", frame["file_path"], path.extension());
@@ -621,7 +624,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 			}
 
 			if (!dst.pixels) {
-				throw std::runtime_error{ "image not found: " + path.str() };
+				throw std::runtime_error{"Could not load image: " + path.str()};
 			}
 
 			if (enable_depth_loading && info.depth_scale > 0.f && frame.contains("depth_path")) {
