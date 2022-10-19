@@ -525,7 +525,7 @@ __global__ void init_rays_with_payload_kernel_sdf(
 		aperture_size = 0.0;
 	}
 
-	Ray ray = pixel_to_ray(sample_index, {x, y}, resolution, focal_length, camera_matrix, screen_center, parallax_shift, snap_to_pixel_centers, plane_z, aperture_size);
+	Ray ray = pixel_to_ray(sample_index, {x, y}, resolution, focal_length, camera_matrix, screen_center, parallax_shift, snap_to_pixel_centers, 0.0f, plane_z, aperture_size);
 
 	distances[idx] = 10000.0f;
 

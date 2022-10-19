@@ -1837,6 +1837,7 @@ __global__ void init_rays_with_payload_kernel_nerf(
 		screen_center,
 		parallax_shift,
 		snap_to_pixel_centers,
+		near_distance,
 		plane_z,
 		aperture_size,
 		lens,
@@ -1867,7 +1868,7 @@ __global__ void init_rays_with_payload_kernel_nerf(
 		framebuffer[idx] = read_envmap(envmap_data, envmap_resolution, ray.d);
 	}
 
-	float t = fmaxf(render_aabb.ray_intersect(render_aabb_to_local * ray.o, render_aabb_to_local * ray.d).x(), near_distance) + 1e-6f;
+	float t = fmaxf(render_aabb.ray_intersect(render_aabb_to_local * ray.o, render_aabb_to_local * ray.d).x(), 0.0f) + 1e-6f;
 
 	if (!render_aabb.contains(render_aabb_to_local * (ray.o + ray.d * t))) {
 		payload.origin = ray.o;
