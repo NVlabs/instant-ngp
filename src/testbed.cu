@@ -649,6 +649,9 @@ void Testbed::imgui() {
 		}
 
 		ImGui::Checkbox("Dynamic resolution", &m_dynamic_res);
+		if (ImGui::Checkbox("VSync", &m_vsync)) {
+			glfwSwapInterval(m_vsync ? 1 : 0);
+		}
 		ImGui::SliderFloat("Target FPS", &m_dynamic_res_target_fps, 2.0f, 144.0f, "%.01f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
 		ImGui::SliderInt("Max spp", &m_max_spp, 0, 1024, "%d", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
 
