@@ -565,7 +565,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 					path = path.with_extension("exr");
 				}
 				if (!path.exists()) {
-					throw std::runtime_error{ "Could not find image file: " + path.str()};
+					throw std::runtime_error{"Could not find image file: " + path.str()};
 				}
 			}
 
@@ -578,11 +578,14 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 			} else {
 				dst.image_data_on_gpu = false;
 				uint8_t* img = stbi_load(path.str().c_str(), &dst.res.x(), &dst.res.y(), &comp, 4);
+				if (!img) {
+					throw std::runtime_error{"Could not open image file: "s + std::string{stbi_failure_reason()}};
+				}
 
 
 				fs::path alphapath = basepath / fmt::format("{}.alpha.{}", frame["file_path"], path.extension());
 				if (alphapath.exists()) {
-					int wa=0,ha=0;
+					int wa = 0, ha = 0;
 					uint8_t* alpha_img = stbi_load(alphapath.str().c_str(), &wa, &ha, &comp, 4);
 					if (!alpha_img) {
 						throw std::runtime_error{"Could not load alpha image "s + alphapath.str()};
@@ -592,14 +595,14 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 						throw std::runtime_error{fmt::format("Alpha image {} has wrong resolution.", alphapath.str())};
 					}
 					tlog::success() << "Alpha loaded from " << alphapath;
-					for (int i=0;i<dst.res.prod();++i) {
-						img[i*4+3] = uint8_t(255.0f*srgb_to_linear(alpha_img[i*4]*(1.f/255.f))); // copy red channel of alpha to alpha.png to our alpha channel
+					for (int i = 0; i < dst.res.prod(); ++i) {
+						img[i*4+3] = (uint8_t)(255.0f*srgb_to_linear(alpha_img[i*4]*(1.f/255.f))); // copy red channel of alpha to alpha.png to our alpha channel
 					}
 				}
 
 				fs::path maskpath = path.parent_path()/(fmt::format("dynamic_mask_{}.png", path.basename()));
 				if (maskpath.exists()) {
-					int wa=0,ha=0;
+					int wa = 0, ha = 0;
 					uint8_t* mask_img = stbi_load(maskpath.str().c_str(), &wa, &ha, &comp, 4);
 					if (!mask_img) {
 						throw std::runtime_error{fmt::format("Dynamic mask {} could not be loaded.", maskpath.str())};
@@ -621,7 +624,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 			}
 
 			if (!dst.pixels) {
-				throw std::runtime_error{ "image not found: " + path.str() };
+				throw std::runtime_error{"Could not load image: " + path.str()};
 			}
 
 			if (enable_depth_loading && info.depth_scale > 0.f && frame.contains("depth_path")) {

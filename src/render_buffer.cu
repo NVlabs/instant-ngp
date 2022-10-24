@@ -28,11 +28,10 @@
 #    include <GL/glew.h>
 #  endif
 #  include <GLFW/glfw3.h>
+#  include <cuda_gl_interop.h>
 #endif
 
 #include <stb_image/stb_image.h>
-
-#include <cuda_gl_interop.h>
 
 using namespace Eigen;
 using namespace tcnn;

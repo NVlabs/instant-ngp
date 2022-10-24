@@ -811,6 +811,8 @@ public:
 	std::chrono::time_point<std::chrono::steady_clock> m_training_start_time_point;
 	Eigen::Array4f m_background_color = {0.0f, 0.0f, 0.0f, 1.0f};
 
+	bool m_vsync = false;
+
 	// Visualization of neuron activations
 	int m_visualized_dimension = -1;
 	int m_visualized_layer = 0;
