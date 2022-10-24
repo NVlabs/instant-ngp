@@ -311,7 +311,7 @@ inline NGP_HOST_DEVICE Ray pixel_to_ray(
 		dir = (lookat - origin) / focus_z;
 	}
 	
-	origin += dir * near_distance;
+	origin += dir.normalized() * near_distance;
 
 	return {origin, dir};
 }
