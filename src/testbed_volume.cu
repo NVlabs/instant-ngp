@@ -215,6 +215,7 @@ __global__ void init_rays_volume(
 	Vector3f parallax_shift,
 	bool snap_to_pixel_centers,
 	BoundingBox aabb,
+	float near_distance,
 	float plane_z,
 	float aperture_size,
 	const float* __restrict__ envmap_data,
@@ -239,7 +240,7 @@ __global__ void init_rays_volume(
 	if (plane_z < 0) {
 		aperture_size = 0.0;
 	}
-	Ray ray = pixel_to_ray(sample_index, {x, y}, resolution, focal_length, camera_matrix, screen_center, parallax_shift, snap_to_pixel_centers, plane_z, aperture_size);
+	Ray ray = pixel_to_ray(sample_index, {x, y}, resolution, focal_length, camera_matrix, screen_center, parallax_shift, snap_to_pixel_centers, near_distance, plane_z, aperture_size);
 	ray.d = ray.d.normalized();
 	auto box_intersection = aabb.ray_intersect(ray.o, ray.d);
 	float t = max(box_intersection.x(), 0.0f);
@@ -423,6 +424,7 @@ void Testbed::render_volume(CudaRenderBuffer& render_buffer,
 		m_parallax_shift,
 		m_snap_to_pixel_centers,
 		m_render_aabb,
+		m_render_near_distance,
 		plane_z,
 		m_aperture_size,
 		m_envmap.envmap->params_inference(),

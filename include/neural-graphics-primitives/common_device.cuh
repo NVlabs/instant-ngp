@@ -266,6 +266,7 @@ inline NGP_HOST_DEVICE Ray pixel_to_ray(
 	const Eigen::Vector2f& screen_center,
 	const Eigen::Vector3f& parallax_shift,
 	bool snap_to_pixel_centers = false,
+	float near_distance = 0.0f,
 	float focus_z = 1.0f,
 	float aperture_size = 0.0f,
 	const Lens& lens = {},
@@ -302,14 +303,15 @@ inline NGP_HOST_DEVICE Ray pixel_to_ray(
 	dir = camera_matrix.block<3, 3>(0, 0) * dir;
 
 	Eigen::Vector3f origin = camera_matrix.block<3, 3>(0, 0) * head_pos + camera_matrix.col(3);
-	if (aperture_size == 0.0f) {
-		return {origin, dir};
+	
+	if (aperture_size > 0.0f) {
+		Eigen::Vector3f lookat = origin + dir * focus_z;
+		Eigen::Vector2f blur = aperture_size * square2disk_shirley(ld_random_val_2d(spp, (uint32_t)pixel.x() * 19349663 + (uint32_t)pixel.y() * 96925573) * 2.0f - Eigen::Vector2f::Ones());
+		origin += camera_matrix.block<3, 2>(0, 0) * blur;
+		dir = (lookat - origin) / focus_z;
 	}
-
-	Eigen::Vector3f lookat = origin + dir * focus_z;
-	Eigen::Vector2f blur = aperture_size * square2disk_shirley(ld_random_val_2d(spp, (uint32_t)pixel.x() * 19349663 + (uint32_t)pixel.y() * 96925573) * 2.0f - Eigen::Vector2f::Ones());
-	origin += camera_matrix.block<3, 2>(0, 0) * blur;
-	dir = (lookat - origin) / focus_z;
+	
+	origin += dir * near_distance;
 
 	return {origin, dir};
 }
@@ -371,6 +373,7 @@ inline NGP_HOST_DEVICE Eigen::Vector2f motion_vector_3d(
 		screen_center,
 		parallax_shift,
 		snap_to_pixel_centers,
+		0.0f,
 		1.0f,
 		0.0f,
 		lens,

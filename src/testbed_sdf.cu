@@ -503,6 +503,7 @@ __global__ void init_rays_with_payload_kernel_sdf(
 	bool snap_to_pixel_centers,
 	BoundingBox aabb,
 	float floor_y,
+	float near_distance,
 	float plane_z,
 	float aperture_size,
 	const float* __restrict__ envmap_data,
@@ -525,7 +526,7 @@ __global__ void init_rays_with_payload_kernel_sdf(
 		aperture_size = 0.0;
 	}
 
-	Ray ray = pixel_to_ray(sample_index, {x, y}, resolution, focal_length, camera_matrix, screen_center, parallax_shift, snap_to_pixel_centers, plane_z, aperture_size);
+	Ray ray = pixel_to_ray(sample_index, {x, y}, resolution, focal_length, camera_matrix, screen_center, parallax_shift, snap_to_pixel_centers, near_distance, plane_z, aperture_size);
 
 	distances[idx] = 10000.0f;
 
@@ -599,6 +600,7 @@ void Testbed::SphereTracer::init_rays_from_camera(uint32_t sample_index,
 	bool snap_to_pixel_centers,
 	const BoundingBox& aabb,
 	float floor_y,
+	float near_distance,
 	float plane_z,
 	float aperture_size,
 	const float* envmap_data,
@@ -628,6 +630,7 @@ void Testbed::SphereTracer::init_rays_from_camera(uint32_t sample_index,
 		snap_to_pixel_centers,
 		aabb,
 		floor_y,
+		near_distance,
 		plane_z,
 		aperture_size,
 		envmap_data,
@@ -844,6 +847,7 @@ void Testbed::render_sdf(
 		m_snap_to_pixel_centers,
 		sdf_bounding_box,
 		get_floor_y(),
+		m_render_near_distance,
 		plane_z,
 		m_aperture_size,
 		m_envmap.envmap->params_inference(),
