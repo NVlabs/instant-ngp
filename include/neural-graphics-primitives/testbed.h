@@ -86,6 +86,7 @@ public:
 			bool snap_to_pixel_centers,
 			const BoundingBox& aabb,
 			float floor_y,
+			float near_distance,
 			float plane_z,
 			float aperture_size,
 			const float* envmap_data,
@@ -658,7 +659,6 @@ public:
 		bool render_with_lens_distortion = false;
 		Lens render_lens = {};
 
-		float render_near_distance = 0.00f;
 		float render_min_transmittance = 0.01f;
 
 		float glow_y_cutoff = 0.f;
@@ -787,6 +787,7 @@ public:
 	float m_dlss_sharpening = 0.0f;
 
 	// 3D stuff
+	float m_render_near_distance = 0.0f;
 	float m_slice_plane_z = 0.0f;
 	bool m_floor_enable = false;
 	inline float get_floor_y() const { return m_floor_enable ? m_aabb.min.y()+0.001f : -10000.f; }

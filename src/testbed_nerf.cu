@@ -2274,7 +2274,7 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 		m_snap_to_pixel_centers,
 		m_render_aabb,
 		m_render_aabb_to_local,
-		m_nerf.render_near_distance,
+		m_render_near_distance,
 		plane_z,
 		m_aperture_size,
 		lens,
