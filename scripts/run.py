@@ -279,7 +279,7 @@ if __name__ == "__main__":
 				if i == 0:
 					write_image("out.png", image)
 
-				diffimg = np.absolute(image - ref_image)
+				diffimg = np.absolute(image[...,:3] - ref_image)
 				diffimg[...,3:4] = 1.0
 				if i == 0:
 					write_image("diff.png", diffimg)
