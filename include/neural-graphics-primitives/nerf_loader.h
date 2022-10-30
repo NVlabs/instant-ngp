@@ -105,7 +105,7 @@ struct NerfDataset {
 		if (from_mitsuba) {
 			result *= -1;
 		} else {
-			result=Eigen::Vector3f(result.y(), result.z(), result.x());
+			result = Eigen::Vector3f(result.y(), result.z(), result.x());
 		}
 		return result;
 	}

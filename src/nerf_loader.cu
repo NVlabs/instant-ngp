@@ -33,20 +33,20 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 
-#if defined(__NVCC__)
-#if defined __NVCC_DIAG_PRAGMA_SUPPORT__
-#  pragma nv_diag_suppress 550
-#else
-#  pragma diag_suppress 550
-#endif
+#ifdef __NVCC__
+#  ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
+#    pragma nv_diag_suppress 550
+#  else
+#    pragma diag_suppress 550
+#  endif
 #endif
 #include <stb_image/stb_image.h>
-#if defined(__NVCC__)
-#if defined __NVCC_DIAG_PRAGMA_SUPPORT__
-#  pragma nv_diag_default 550
-#else
-#  pragma diag_default 550
-#endif
+#ifdef __NVCC__
+#  ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
+#    pragma nv_diag_default 550
+#  else
+#    pragma diag_default 550
+#  endif
 #endif
 
 using namespace tcnn;

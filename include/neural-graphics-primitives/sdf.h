@@ -28,7 +28,7 @@ struct SdfPayload {
 };
 
 struct RaysSdfSoa {
-#ifdef __NVCC__
+#if defined(__NVCC__) || (defined(__clang__) && defined(__CUDA__))
 	void enlarge(size_t n_elements) {
 		pos.enlarge(n_elements);
 		normal.enlarge(n_elements);
@@ -49,6 +49,7 @@ struct RaysSdfSoa {
 		CUDA_CHECK_THROW(cudaMemcpyAsync(payload.data(), other.payload.data(), n_elements * sizeof(SdfPayload), cudaMemcpyDeviceToDevice, stream));
 	}
 #endif
+
 	tcnn::GPUMemory<Eigen::Vector3f> pos;
 	tcnn::GPUMemory<Eigen::Vector3f> normal;
 	tcnn::GPUMemory<float> distance;

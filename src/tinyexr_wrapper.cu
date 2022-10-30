@@ -20,14 +20,14 @@
 
 #include <tiny-cuda-nn/gpu_memory.h>
 
-#if defined(__NVCC__)
-#if defined __NVCC_DIAG_PRAGMA_SUPPORT__
-#  pragma nv_diag_suppress 174
-#  pragma nv_diag_suppress 550
-#else
-#  pragma diag_suppress 174
-#  pragma diag_suppress 550
-#endif
+#ifdef __NVCC__
+#  ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
+#    pragma nv_diag_suppress 174
+#    pragma nv_diag_suppress 550
+#  else
+#    pragma diag_suppress 174
+#    pragma diag_suppress 550
+#  endif
 #endif
 
 #define TINYEXR_IMPLEMENTATION

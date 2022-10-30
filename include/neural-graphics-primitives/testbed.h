@@ -33,8 +33,8 @@
 #include <filesystem/path.h>
 
 #ifdef NGP_PYTHON
-#include <pybind11/pybind11.h>
-#include <pybind11/numpy.h>
+#  include <pybind11/pybind11.h>
+#  include <pybind11/numpy.h>
 #endif
 
 #include <thread>

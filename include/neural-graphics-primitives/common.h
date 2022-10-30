@@ -23,8 +23,8 @@
 // to emit this diagnostic.
 // nlohmann::json produces a comparison with zero in one of its templates,
 // which can also safely be ignored.
-#if defined(__NVCC__)
-#  if defined __NVCC_DIAG_PRAGMA_SUPPORT__
+#ifdef __NVCC__
+#  ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
 #    pragma nv_diag_suppress = esa_on_defaulted_function_ignored
 #    pragma nv_diag_suppress = unsigned_compare_with_zero
 #  else
@@ -185,7 +185,7 @@ struct Lens {
 	float params[7] = {};
 };
 
-#ifdef __NVCC__
+#if defined(__NVCC__) || (defined(__clang__) && defined(__CUDA__))
 #define NGP_HOST_DEVICE __host__ __device__
 #else
 #define NGP_HOST_DEVICE
