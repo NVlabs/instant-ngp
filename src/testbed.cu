@@ -3005,6 +3005,8 @@ void Testbed::save_snapshot(const std::string& filepath_string, bool include_opt
 	snapshot["loss"] = m_loss_scalar.val();
 	snapshot["aabb"] = m_aabb;
 	snapshot["bounding_radius"] = m_bounding_radius;
+	to_json(snapshot["render_aabb_to_local"], m_render_aabb_to_local);
+	snapshot["render_aabb"] = m_render_aabb;
 
 	if (m_testbed_mode == ETestbedMode::Nerf) {
 		snapshot["nerf"]["rgb"]["rays_per_batch"] = m_nerf.training.counters_rgb.rays_per_batch;
@@ -3071,6 +3073,10 @@ void Testbed::load_snapshot(const std::string& filepath_string) {
 			throw std::runtime_error{"Incompatible number of grid cascades."};
 		}
 	}
+
+	// Needs to happen after `load_nerf_post()`
+	if (snapshot.contains("render_aabb_to_local")) from_json(snapshot.at("render_aabb_to_local"), m_render_aabb_to_local);
+	m_render_aabb = snapshot.value("render_aabb", m_render_aabb);
 
 	m_network_config_path = filepath_string;
 	m_network_config = config;
