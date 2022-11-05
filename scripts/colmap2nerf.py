@@ -38,6 +38,7 @@ def parse_args():
 	parser.add_argument("--keep_colmap_coords", action="store_true", help="keep transforms.json in COLMAP's original frame of reference (this will avoid reorienting and repositioning the scene for preview and rendering)")
 	parser.add_argument("--out", default="transforms.json", help="output path")
 	parser.add_argument("--vocab_path", default="", help="vocabulary tree path")
+	parser.add_argument("--num_threads", default=-1, help="number of threads to use for colmap")
 	args = parser.parse_args()
 	return args
 
@@ -85,7 +86,7 @@ def run_colmap(args):
 		sys.exit(1)
 	if os.path.exists(db):
 		os.remove(db)
-	do_system(f"colmap feature_extractor --ImageReader.camera_model {args.colmap_camera_model} --ImageReader.camera_params \"{args.colmap_camera_params}\" --SiftExtraction.estimate_affine_shape=true --SiftExtraction.domain_size_pooling=true --ImageReader.single_camera 1 --database_path {db} --image_path {images}")
+	do_system(f"colmap feature_extractor --ImageReader.camera_model {args.colmap_camera_model} --ImageReader.camera_params \"{args.colmap_camera_params}\" --SiftExtraction.estimate_affine_shape=true --SiftExtraction.domain_size_pooling=true, --SiftExtraction.num_threads {args.num_threads} --ImageReader.single_camera 1 --database_path {db} --image_path {images}")
 	match_cmd = f"colmap {args.colmap_matcher}_matcher --SiftMatching.guided_matching=true --database_path {db}"
 	if args.vocab_path:
 		match_cmd += f" --VocabTreeMatching.vocab_tree_path {args.vocab_path}"
@@ -327,5 +328,6 @@ if __name__ == "__main__":
 		f["transform_matrix"] = f["transform_matrix"].tolist()
 	print(nframes,"frames")
 	print(f"writing {OUT_PATH}")
+
 	with open(OUT_PATH, "w") as outfile:
 		json.dump(out, outfile, indent=2)
