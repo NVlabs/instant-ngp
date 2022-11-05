@@ -36,7 +36,7 @@ def parse_args():
 	parser.add_argument("--aabb_scale", default=16, choices=["1","2","4","8","16"], help="large scene scale factor. 1=scene fits in unit cube; power of 2 up to 16")
 	parser.add_argument("--skip_early", default=0, help="skip this many images from the start")
 	parser.add_argument("--keep_colmap_coords", action="store_true", help="keep transforms.json in COLMAP's original frame of reference (this will avoid reorienting and repositioning the scene for preview and rendering)")
-	parser.add_argument("--out", default="transforms.json", help="output path")
+	parser.add_argument("--out", default="", help="output path")
 	parser.add_argument("--vocab_path", default="", help="vocabulary tree path")
 	parser.add_argument("--num_threads", default=-1, help="number of threads to use for colmap")
 	args = parser.parse_args()
@@ -166,7 +166,7 @@ if __name__ == "__main__":
 	SKIP_EARLY = int(args.skip_early)
 	IMAGE_FOLDER = args.images
 	TEXT_FOLDER = args.text
-	OUT_PATH = args.out
+	OUT_PATH = args.out + "transforms.json"
 	print(f"outputting to {OUT_PATH}...")
 	with open(os.path.join(TEXT_FOLDER,"cameras.txt"), "r") as f:
 		angle_x = math.pi / 2
