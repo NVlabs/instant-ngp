@@ -161,19 +161,26 @@ if __name__ == "__main__":
 	AABB_SCALE = int(args.aabb_scale)
 	SKIP_EARLY = int(args.skip_early)
 	IMAGE_FOLDER = os.path.normpath(args.images)
-	print(f"using images from {IMAGE_FOLDER}")
 	TEXT_FOLDER = os.path.normpath(args.text)
-	OUT_PATH = os.path.dirname(IMAGE_FOLDER) + "/transforms.json"
-	OUT_PATH = os.path.normpath(OUT_PATH)
+	VIDEO_FOLDER = os.path.dirname(args.video_in)
 
 	# Replace args with the normalized paths
 	args.images = IMAGE_FOLDER
 	args.text = TEXT_FOLDER
 
 	if args.video_in != "":
+		print("Extracting frames from video: " + args.video_in)
+		# The image folder is set here so that it can be accesed later on when building the transforms.json file
+		IMAGE_FOLDER = os.path.normpath(os.path.join(VIDEO_FOLDER, "images"))
 		run_ffmpeg(args)
+	else:
+		print("Using images from", IMAGE_FOLDER)
+
 	if args.run_colmap:
 		run_colmap(args)
+
+	OUT_PATH = os.path.dirname(IMAGE_FOLDER) + "/transforms.json"
+	OUT_PATH = os.path.normpath(OUT_PATH)
 
 	print(f"outputting to {OUT_PATH}...")
 	with open(os.path.join(TEXT_FOLDER,"cameras.txt"), "r") as f:
