@@ -24,7 +24,7 @@ For business inquiries, please submit the [NVIDIA research licensing form](https
   - __Windows:__ Visual Studio 2019
   - __Linux:__ GCC/G++ 7.5 or higher
 - __[CUDA](https://developer.nvidia.com/cuda-toolkit) v10.2 or higher__ and __[CMake](https://cmake.org/) v3.21 or higher__.
-- __(optional) [Python](https://www.python.org/) 3.7 or higher__ for interactive bindings. Also, run `pip install -r requirements.txt`.
+- __(optional) [Python](https://www.python.org/) 3.7 to 3.10__ for interactive bindings. Also, run `pip install -r requirements.txt`.
 - __(optional) [OptiX](https://developer.nvidia.com/optix) 7.3 or higher__ for faster mesh SDF training. Set the environment variable `OptiX_INSTALL_DIR` to the installation directory if it is not discovered automatically.
 - __(optional) [Vulkan SDK](https://vulkan.lunarg.com/)__ for DLSS support.
 
