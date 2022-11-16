@@ -1,7 +1,7 @@
 commentjson
 imageio
 numpy
-opencv-python
+opencv-python-headless
 pybind11
 scipy
 tqdm
