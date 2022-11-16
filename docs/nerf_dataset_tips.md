@@ -50,7 +50,11 @@ You can set any of the following parameters, where the listed values are the def
 See [nerf_loader.cu](src/nerf_loader.cu) for implementation details and additional options.
 
 ## Preparing new NeRF datasets
+To train on self-captured data, one has to process the data into an existing format supported by Instant-NGP. We provide scripts to support two complementary approaches:
+- [COLMAP](#COLMAP)
+- [Record3D](#Record3D) (based on ARKit)
 
+### COLMAP
 Make sure that you have installed [COLMAP](https://colmap.github.io/) and that it is available in your PATH. If you are using a video file as input, also be sure to install [FFmpeg](https://www.ffmpeg.org/) and make sure that it is available in your PATH.
 To check that this is the case, from a terminal window, you should be able to run `colmap` and `ffmpeg -?` and see some help text from each.
 
@@ -81,10 +85,26 @@ Assuming success, you can now train your NeRF model as follows, starting in the 
 instant-ngp$ ./build/testbed --mode nerf --scene [path to training data folder containing transforms.json]
 ```
 
-### Tips for NeRF training data
+### Record3D
+With an >=iPhone 12 Pro, one can use [Record3D](https://record3d.app/) to collect data and avoid COLMAP. [Record3D](https://record3d.app/) is an iOS app that relies on ARKit to estimate each image's camera pose. It is more robust than COLMAP for scenes that lack textures or contain repetitive patterns. To train Instant-NGPs with Record3D data, follow these steps: 
+
+1. Record a video and export with the "Shareable/Internal format (.r3d)".
+2. Send the exported data to your computer.
+3. Replace the `.r3d` extension with `.zip` and unzip the file to get a directory `path/to/data`.
+4. Run the preprocessing script: 
+	```
+	python scripts/record3d2nerf.py --scene path/to/data
+	```
+	If you capture the scene in the landscape orientation, add `--rotate`.
+
+5. Launch Instant-NGP training:
+	```
+	./build/testbed --scene path/to/data
+	```
+
+## Tips for NeRF training data
 
 The NeRF model trains best with between 50-150 images which exhibit minimal scene movement, motion blur or other blurring artefacts. The quality of reconstruction is predicated on COLMAP being able to extract accurate camera parameters from the images.
 Review the earlier sections for information on how to verify this.
 
 The `colmap2nerf.py` script assumes that the training images are all pointing approximately at a shared point of interest, which it places at the origin. This point is found by taking a weighted average of the closest points of approach between the rays through the central pixel of all pairs of training images. In practice, this means that the script works best when the training images have been captured pointing inwards towards the object of interest, although they do not need to complete a full 360 view of it. Any background visible behind the object of interest will still be reconstructed if `aabb_scale` is set to a number larger than 1, as explained above.
-
