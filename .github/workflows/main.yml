@@ -18,21 +18,27 @@ jobs:
           - os: ubuntu-22.04
             cuda: "11.7"
             arch: 86
+            python: "3.11"
           - os: ubuntu-18.04
             cuda: "10.2"
             arch: 75
+            python: "3.10"
           - os: ubuntu-18.04
             cuda: "10.2"
             arch: 70
+            python: "3.9"
           - os: ubuntu-18.04
             cuda: "10.2"
             arch: 61
+            python: "3.8"
           - os: ubuntu-18.04
             cuda: "10.2"
             arch: 53
+            python: "3.7"
           - os: ubuntu-18.04
             cuda: "10.2"
             arch: 37
+            python: "3.6"
     env:
       build_dir: "build"
       config: "Release"
@@ -40,9 +46,13 @@ jobs:
     steps:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install build-essential python3-dev libglfw3-dev libglew-dev libxinerama-dev libxcursor-dev libxi-dev
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: recursive
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -r requirements.txt
       - name: Install CUDA
         env:
           cuda: ${{ matrix.cuda }}
@@ -65,34 +75,44 @@ jobs:
             visual_studio: "Visual Studio 16 2019"
             cuda: "11.5.1"
             arch: 86
+            python: "3.11"
           - os: windows-2019
             visual_studio: "Visual Studio 16 2019"
             cuda: "11.5.1"
             arch: 75
+            python: "3.10"
           - os: windows-2019
             visual_studio: "Visual Studio 16 2019"
             cuda: "11.5.1"
             arch: 70
+            python: "3.9"
           - os: windows-2019
             visual_studio: "Visual Studio 16 2019"
             cuda: "11.5.1"
             arch: 61
+            python: "3.8"
           - os: windows-2019
             visual_studio: "Visual Studio 16 2019"
             cuda: "11.5.1"
             arch: 53
+            python: "3.7"
           - os: windows-2019
             visual_studio: "Visual Studio 16 2019"
             cuda: "11.5.1"
             arch: 37
+            python: "3.6"
     env:
       build_dir: "build"
       config: "Release"
       TCNN_CUDA_ARCHITECTURES: ${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: recursive
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -r requirements.txt
       - name: Install CUDA
         env:
           cuda: ${{ matrix.cuda }}
