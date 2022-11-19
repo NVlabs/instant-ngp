@@ -37,6 +37,7 @@ def parse_args():
 	parser.add_argument("--skip_early", default=0, help="skip this many images from the start")
 	parser.add_argument("--keep_colmap_coords", action="store_true", help="keep transforms.json in COLMAP's original frame of reference (this will avoid reorienting and repositioning the scene for preview and rendering)")
 	parser.add_argument("--vocab_path", default="", help="vocabulary tree path")
+	parser.add_argument("--out", default="", help="output path")
 	parser.add_argument("--num_threads", default=-1, help="number of threads to use for colmap")
 	args = parser.parse_args()
 	return args
@@ -179,8 +180,9 @@ if __name__ == "__main__":
 	if args.run_colmap:
 		run_colmap(args)
 
-	OUT_PATH = os.path.dirname(IMAGE_FOLDER) + "/transforms.json"
-	OUT_PATH = os.path.normpath(OUT_PATH)
+	if(args.out == ""):
+		OUT_PATH = os.path.dirname(IMAGE_FOLDER) + "/transforms.json"
+		OUT_PATH = os.path.normpath(OUT_PATH)
 
 	print(f"outputting to {OUT_PATH}...")
 	with open(os.path.join(TEXT_FOLDER,"cameras.txt"), "r") as f:
@@ -270,7 +272,7 @@ if __name__ == "__main__":
 				# why is this requireing a relitive path while using ^
 
 				image_rel = os.path.relpath(IMAGE_FOLDER)
-				name = str(f"./{image_rel}/{'_'.join(elems[9:])}")
+				name = os.path.normpath(str(f"./{image_rel}/{'_'.join(elems[9:])}"))
 				b = sharpness(name)
 				print(name, "sharpness=", b)
 				image_id = int(elems[0])
@@ -290,6 +292,9 @@ if __name__ == "__main__":
 
 				local_file_path = str(f"./{os.path.basename(IMAGE_FOLDER)}/{'_'.join(elems[9:])}")
 				local_file_path = os.path.normpath(local_file_path)
+				
+				#Convert it from OS native path to Posix path
+				local_file_path = str(PurePosixPath(Path(local_file_path)))
 
 				frame={"file_path":local_file_path,"sharpness":b,"transform_matrix": c2w}
 				out["frames"].append(frame)
