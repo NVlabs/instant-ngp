@@ -13,7 +13,6 @@
 __pycache__
 .DS_Store
 imgui.ini
-data/nerf/custom/*
 *colmap_sparse
 *colmap_text
 *colmap.db
