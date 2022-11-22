@@ -103,6 +103,7 @@ if __name__ == "__main__":
 		network = os.path.join(configs_dir, network)
 
 	testbed = ngp.Testbed(mode)
+	testbed.nerf.training.optimize_extrinsics = True
 	testbed.nerf.sharpen = float(args.sharpen)
 	testbed.exposure = args.exposure
 	if mode == ngp.TestbedMode.Sdf:
@@ -112,6 +113,7 @@ if __name__ == "__main__":
 		scene = args.scene
 		if not os.path.exists(args.scene) and args.scene in scenes:
 			scene = os.path.join(scenes[args.scene]["data_dir"], scenes[args.scene]["dataset"])
+		print(f"scene: {scene}")
 		testbed.load_training_data(scene)
 
 	if args.gui:
@@ -190,10 +192,12 @@ if __name__ == "__main__":
 			while testbed.frame():
 				if testbed.want_repl():
 					repl(testbed)
+					# Replace with ipython.embed 
 				# What will happen when training is done?
 				if testbed.training_step >= n_steps:
 					if args.gui:
 						testbed.shall_train = False
+						# break
 					else:
 						break
 
@@ -353,3 +357,6 @@ if __name__ == "__main__":
 
 		os.system(f"ffmpeg -y -framerate {args.video_fps} -i tmp/%04d.jpg -c:v libx264 -pix_fmt yuv420p {args.video_output}")
 		shutil.rmtree("tmp")
+
+	while True:
+		pass 
