@@ -2278,9 +2278,9 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 		plane_z,
 		m_aperture_size,
 		lens,
-		m_envmap.envmap->params_inference(),
+		m_envmap.envmap->inference_params(),
 		m_envmap.resolution,
-		render_grid_distortion ? m_distortion.map->params_inference() : nullptr,
+		render_grid_distortion ? m_distortion.map->inference_params() : nullptr,
 		m_distortion.resolution,
 		render_buffer.frame_buffer(),
 		render_buffer.depth_buffer(),
@@ -3454,7 +3454,8 @@ int Testbed::marching_cubes(Vector3i res3d, const BoundingBox& aabb, const Matri
 	m_mesh.verts_gradient.copy_from_device(m_mesh.verts); // Make sure the vertices don't get destroyed in the initialization
 
 	pcg32 rnd{m_seed};
-	m_mesh.trainable_verts->initialize_params(rnd, (float*)m_mesh.verts.data(), (float*)m_mesh.verts.data(), (float*)m_mesh.verts.data(), (float*)m_mesh.verts.data(), (float*)m_mesh.verts_gradient.data());
+	m_mesh.trainable_verts->initialize_params(rnd, (float*)m_mesh.verts.data());
+	m_mesh.trainable_verts->set_params((float*)m_mesh.verts.data(), (float*)m_mesh.verts.data(), (float*)m_mesh.verts_gradient.data());
 	m_mesh.verts.copy_from_device(m_mesh.verts_gradient);
 
 	m_mesh.verts_optimizer.reset(create_optimizer<float>({

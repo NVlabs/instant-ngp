@@ -58,15 +58,9 @@ public:
 		throw std::runtime_error{"The trainable buffer does not support backward(). Its content is meant to be used externally."};
 	}
 
-	void set_params(T* params, T* inference_params, T* backward_params, T* gradients) override {
-		m_params = params;
-		m_params_inference = inference_params;
-		m_params_gradient = gradients;
-	}
+	void set_params_impl(T* params, T* inference_params, T* gradients) override { }
 
-	void initialize_params(tcnn::pcg32& rnd, float* params_full_precision, T* params, T* inference_params, T* backward_params, T* gradients, float scale = 1) override {
-		set_params(params, inference_params, backward_params, gradients);
-
+	void initialize_params(tcnn::pcg32& rnd, float* params_full_precision, float scale = 1) override {
 		// Initialize the buffer to zero from the GPU
 		CUDA_CHECK_THROW(cudaMemset(params_full_precision, 0, n_params()*sizeof(float)));
 	}
@@ -95,20 +89,8 @@ public:
 		return {};
 	}
 
-	T* gradients() const {
-		return m_params_gradient;
-	}
-
 	T* gradient_weights() const {
 		return m_params_gradient_weight.data();
-	}
-
-	T* params() const {
-		return m_params;
-	}
-
-	T* params_inference() const {
-		return m_params_inference;
 	}
 
 	tcnn::json hyperparams() const override {
@@ -119,10 +101,6 @@ public:
 
 private:
 	ResVector m_resolution;
-
-	T* m_params = nullptr;
-	T* m_params_inference = nullptr;
-	T* m_params_gradient = nullptr;
 	tcnn::GPUMemory<T> m_params_gradient_weight;
 };
 
