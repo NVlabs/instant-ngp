@@ -850,7 +850,7 @@ void Testbed::render_sdf(
 		m_render_near_distance,
 		plane_z,
 		m_aperture_size,
-		m_envmap.envmap->params_inference(),
+		m_envmap.envmap->inference_params(),
 		m_envmap.resolution,
 		render_buffer.frame_buffer(),
 		render_buffer.depth_buffer(),

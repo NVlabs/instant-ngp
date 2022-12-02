@@ -330,7 +330,7 @@ public:
 			m_interpolation_type,
 			m_octree->nodes_gpu(),
 			m_octree->dual_nodes_gpu(),
-			use_inference_params ? m_params_inference : m_params,
+			use_inference_params ? this->inference_params() : this->params(),
 			input.view(),
 			output ? output->view() : tcnn::MatrixView<T>{},
 			forward->dy_dx.data()
@@ -366,7 +366,7 @@ public:
 				params_gradient_tmp = tcnn::allocate_workspace(stream, n_params() * sizeof(grad_t));
 				params_gradient = (grad_t*)params_gradient_tmp.data();
 			} else {
-				params_gradient = (grad_t*)m_params_gradient;
+				params_gradient = (grad_t*)this->gradients();
 			}
 
 			if (param_gradients_mode == tcnn::EGradientMode::Overwrite) {
@@ -386,7 +386,7 @@ public:
 			);
 
 			if (!std::is_same<grad_t, T>::value) {
-				parallel_for_gpu(stream, n_params(), [grad=m_params_gradient, grad_tmp=params_gradient] __device__ (size_t i) {
+				parallel_for_gpu(stream, n_params(), [grad=this->gradients(), grad_tmp=params_gradient] __device__ (size_t i) {
 					grad[i] = (T)grad_tmp[i];
 				});
 			}
@@ -428,17 +428,11 @@ public:
 		return N_FEATURES_PER_LEVEL;
 	}
 
-	void set_params(T* params, T* inference_params, T* backward_params, T* gradients) override {
-		m_params = params;
-		m_params_inference = inference_params;
-		m_params_gradient = gradients;
-	}
+	void set_params_impl(T* params, T* inference_params, T* gradients) override { }
 
-	void initialize_params(tcnn::pcg32& rnd, float* params_full_precision, T* params, T* inference_params, T* backward_params, T* gradients, float scale = 1) override {
-		set_params(params, inference_params, backward_params, gradients);
-
+	void initialize_params(tcnn::pcg32& rnd, float* params_full_precision, float scale = 1) override {
 		// Initialize the encoding from the GPU, because the number of parameters can be quite large.
-		tcnn::generate_random_uniform<float>(rnd, n_params(), params_full_precision, -1e-4f, 1e-4f);
+		tcnn::generate_random_uniform<float>(rnd, n_params(), params_full_precision, -1e-4f * scale, 1e-4f * scale);
 	}
 
 	size_t n_params() const override {
@@ -472,11 +466,6 @@ private:
 	uint32_t m_n_input_dims;
 	uint32_t m_n_output_dims;
 	uint32_t m_n_to_pad = 0;
-
-	// Storage of params
-	T* m_params;
-	T* m_params_inference;
-	T* m_params_gradient;
 
 	std::shared_ptr<TriangleOctree> m_octree;
 	tcnn::InterpolationType m_interpolation_type;
