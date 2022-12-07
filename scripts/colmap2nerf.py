@@ -274,7 +274,8 @@ if __name__ == "__main__":
 				frame={"file_path":name,"sharpness":b,"transform_matrix": c2w}
 				out["frames"].append(frame)
 	nframes = len(out["frames"])
-
+	out["frames"] = sorted(out["frames"], key=lambda x: x["file_path"])
+	
 	if args.keep_colmap_coords:
 		flip_mat = np.array([
 			[1, 0, 0, 0],

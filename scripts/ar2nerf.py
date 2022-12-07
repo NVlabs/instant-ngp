@@ -46,7 +46,7 @@ parser.add_argument(
     help="the video to load",
 )
 parser.add_argument(
-    "--output_dir", default=".", help="the directory to save the output files to"
+    "--output_dir", "-o", default=".", help="the directory to save the output files to"
 )
 parser.add_argument(
     "--images_dir",
@@ -55,6 +55,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--sharpness_filter_window",
+    "--sw",
     default=10,
     type=int,
     help="the window size for the sharpness filter",
@@ -82,6 +83,14 @@ parser.add_argument(
     default=None,
     type=float,
     help="the scale factor to apply to camera positions",
+)
+
+parser.add_argument(
+    "--sharpness_threshold",
+    "--st",
+    default=0,
+    type=int,
+    help="threshold to filter out blurry images",
 )
 args = parser.parse_args()
 
@@ -207,27 +216,29 @@ for idx in tqdm.tqdm(range(n_frames)):
     if len(frame_queue) >= args.sharpness_filter_window:
         # get sharpest frame
         frames_by_sharpness = [(frame["sharpness"], frame) for frame in frame_queue]
-        _, sharpest = max(frames_by_sharpness)
-        idx, image, sharpness, ar_info = sharpest.values()
+        sharpeness_val, sharpest = max(frames_by_sharpness)
 
-        # save frame
-        image_fn = images_dir / f"{idx:04d}.png"
-        cv2.imwrite(str(output_dir / image_fn), image)
+        if sharpeness_val > args.sharpness_threshold:
+            idx, image, sharpness, ar_info = sharpest.values()
 
-        # compute transform matrix
-        transform_matrix = np.eye(4)
-        x, y, z, w = ar_info["rotationQuat"]  # CamTrackAR uses xyzw quaternions
-        transform_matrix[:3, :3] = Quaternion(w, x, y, z).rotation_matrix
-        transform_matrix[:3, -1] = np.array(ar_info["position_normalized"])
-        transform_matrix = axis_rot_mtx @ transform_matrix
+            # save frame
+            image_fn = images_dir / f"{idx:04d}.png"
+            cv2.imwrite(str(output_dir / image_fn), image)
 
-        # frame descriptor for transforms.json
-        frame_transform = {
-            "file_path": str(image_fn),
-            "sharpness": sharpness,
-            "transform_matrix": transform_matrix.tolist(),
-        }
-        transforms_json["frames"].append(frame_transform)
+            # compute transform matrix
+            transform_matrix = np.eye(4)
+            x, y, z, w = ar_info["rotationQuat"]  # CamTrackAR uses xyzw quaternions
+            transform_matrix[:3, :3] = Quaternion(w, x, y, z).rotation_matrix
+            transform_matrix[:3, -1] = np.array(ar_info["position_normalized"])
+            transform_matrix = axis_rot_mtx @ transform_matrix
+
+            # frame descriptor for transforms.json
+            frame_transform = {
+                "file_path": str(image_fn),
+                "sharpness": sharpness,
+                "transform_matrix": transform_matrix.tolist(),
+            }
+            transforms_json["frames"].append(frame_transform)
 
         # clear frame queue
         frame_queue = []

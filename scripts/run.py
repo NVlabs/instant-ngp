@@ -24,6 +24,13 @@ from tqdm import tqdm
 
 import pyngp as ngp # noqa
 
+import cv2 
+
+def write_depth(file, depth_img, scale=1000.0):
+    depth_img = depth_img[:, :, 0] * scale
+    depth_img = np.uint16(depth_img)
+    cv2.imwrite(file, depth_img)
+
 def parse_args():
 	parser = argparse.ArgumentParser(description="Run neural graphics primitives testbed with additional configuration & output options")
 
@@ -59,6 +66,7 @@ def parse_args():
 	parser.add_argument("--height", "--screenshot_h", type=int, default=0, help="Resolution height of GUI and screenshots.")
 
 	parser.add_argument("--gui", action="store_true", help="Run the testbed GUI interactively.")
+	parser.add_argument("--depth", action="store_true", help="Write depth.")
 	parser.add_argument("--train", action="store_true", help="If the GUI is enabled, controls whether training starts immediately.")
 	parser.add_argument("--n_steps", type=int, default=-1, help="Number of steps to train for before quitting.")
 	parser.add_argument("--second_window", action="store_true", help="Open a second window containing a copy of the main output.")
@@ -109,6 +117,14 @@ if __name__ == "__main__":
 	if mode == ngp.TestbedMode.Sdf:
 		testbed.tonemap_curve = ngp.TonemapCurve.ACES
 
+	testbed.background_color = [0, 0, 0, 0]
+	
+	# print(f"testbed.nerf.training attributes: {dir(testbed.nerf.training)}")
+	# print("---")
+	# print(f"testbed.nerf.training.get_camera_extrinsics attributes: {dir(testbed.nerf.training.get_camera_extrinsics)}")
+	# print("---")
+	# print(f"testbed.nerf attributes: {dir(testbed.nerf)}")
+
 	if args.scene:
 		scene = args.scene
 		if not os.path.exists(args.scene) and args.scene in scenes:
@@ -140,6 +156,7 @@ if __name__ == "__main__":
 		print("Screenshot transforms from ", args.screenshot_transforms)
 		with open(args.screenshot_transforms) as f:
 			ref_transforms = json.load(f)
+
 
 	testbed.shall_train = args.train if args.gui else True
 
@@ -330,7 +347,13 @@ if __name__ == "__main__":
 			print(f"rendering {outname}")
 			image = testbed.render(args.width or int(ref_transforms["w"]), args.height or int(ref_transforms["h"]), args.screenshot_spp, True)
 			os.makedirs(os.path.dirname(outname), exist_ok=True)
-			write_image(outname, image)
+
+
+			if args.depth: 
+				write_depth(outname, image)
+			else:
+				write_image(outname, image)
+
 	elif args.screenshot_dir:
 		outname = os.path.join(args.screenshot_dir, args.scene + "_" + network_stem)
 		print(f"Rendering {outname}.png")
