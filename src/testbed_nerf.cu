@@ -376,8 +376,6 @@ __global__ void mark_untrained_density_grid(const uint32_t n_elements,  float* _
 	uint32_t y = tcnn::morton3D_invert(pos_idx>>1);
 	uint32_t z = tcnn::morton3D_invert(pos_idx>>2);
 
-
-
 	Vector3f pos = ((Vector3f{(float)x+0.5f, (float)y+0.5f, (float)z+0.5f}) / NERF_GRIDSIZE() - Vector3f::Constant(0.5f)) * scalbnf(1.0f, level) + Vector3f::Constant(0.5f);
 	float voxel_radius = 0.5f*SQRT3()*scalbnf(1.0f, level) / NERF_GRIDSIZE();
 	int count=0;
@@ -643,7 +641,12 @@ __global__ void advance_pos_nerf(
 		}
 
 		dt = calc_dt(t, cone_angle);
-		uint32_t mip = max(min_mip, mip_from_dt(dt, pos));
+
+		// Use the mip level from the position rather than dt. Unlike training,
+		// for rendering there's no need to use coarser mip levels when the step
+		// size is large (rather, it reduces performance, because the network may be queried)
+		// more frequently than necessary.
+		uint32_t mip = max(min_mip, mip_from_pos(pos));
 
 		if (!density_grid || density_grid_occupied_at(pos, density_grid, mip)) {
 			break;
@@ -736,7 +739,12 @@ __global__ void generate_next_nerf_network_inputs(
 			}
 
 			dt = calc_dt(t, cone_angle);
-			uint32_t mip = max(min_mip, mip_from_dt(dt, pos));
+
+			// Use the mip level from the position rather than dt. Unlike training,
+			// for rendering there's no need to use coarser mip levels when the step
+			// size is large (rather, it reduces performance, because the network may be queried)
+			// more frequently than necessary.
+			uint32_t mip = max(min_mip, mip_from_pos(pos));
 
 			if (!density_grid || density_grid_occupied_at(pos, density_grid, mip)) {
 				break;
