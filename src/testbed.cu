@@ -53,8 +53,7 @@
 #    include <GL/glew.h>
 #  endif
 #  include <GLFW/glfw3.h>
-
-
+#  include <cuda_gl_interop.h>
 #endif
 
 // Windows.h is evil
@@ -2479,6 +2478,35 @@ void Testbed::reset_network(bool clear_density_grid) {
 Testbed::Testbed(ETestbedMode mode)
 : m_testbed_mode(mode)
 {
+	if (!(__CUDACC_VER_MAJOR__ > 10 || (__CUDACC_VER_MAJOR__ == 10 && __CUDACC_VER_MINOR__ >= 2))) {
+		throw std::runtime_error{"Testbed required CUDA 10.2 or later."};
+	}
+
+#ifdef NGP_GUI
+	// Ensure we're running on the GPU that'll host our GUI. To do so, try creating a dummy
+	// OpenGL context, figure out the GPU it's running on, and then kill that context again.
+	if (glfwInit()) {
+		glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+		GLFWwindow* offscreen_context = glfwCreateWindow(640, 480, "", NULL, NULL);
+
+		if (offscreen_context) {
+			glfwMakeContextCurrent(offscreen_context);
+
+			int gl_device = -1;
+			unsigned int device_count = 0;
+			if (cudaGLGetDevices(&device_count, &gl_device, 1, cudaGLDeviceListAll) == cudaSuccess) {
+				if (device_count > 0 && gl_device != -1) {
+					set_cuda_device(gl_device);
+				}
+			}
+
+			glfwDestroyWindow(offscreen_context);
+		}
+
+		glfwTerminate();
+	}
+#endif
+
 	uint32_t compute_capability = cuda_compute_capability();
 	if (compute_capability < MIN_GPU_ARCH) {
 		tlog::warning() << "Insufficient compute capability " << compute_capability << " detected.";
@@ -2514,10 +2542,6 @@ Testbed::Testbed(ETestbedMode mode)
 	};
 
 	reset_camera();
-
-	if (!(__CUDACC_VER_MAJOR__ > 10 || (__CUDACC_VER_MAJOR__ == 10 && __CUDACC_VER_MINOR__ >= 2))) {
-		throw std::runtime_error{"Testbed required CUDA 10.2 or later."};
-	}
 
 	set_exposure(0);
 	set_min_level(0.f);
