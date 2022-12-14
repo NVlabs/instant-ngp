@@ -53,8 +53,7 @@
 #    include <GL/glew.h>
 #  endif
 #  include <GLFW/glfw3.h>
-
-
+#  include <cuda_gl_interop.h>
 #endif
 
 // Windows.h is evil
@@ -209,7 +208,7 @@ void Testbed::set_visualized_dim(int dim) {
 }
 
 void Testbed::translate_camera(const Vector3f& rel) {
-	m_camera.col(3) += m_camera.block<3,3>(0,0) * rel * m_bounding_radius;
+	m_camera.col(3) += m_camera.block<3, 3>(0, 0) * rel * m_bounding_radius;
 	reset_accumulation(true);
 }
 
@@ -524,7 +523,7 @@ void Testbed::imgui() {
 			}
 			ImGui::SameLine();
 			ImGui::PushItemWidth(400.f);
-			ImGui::InputText("File", opt_extr_filename_buf, sizeof(opt_extr_filename_buf));
+			ImGui::InputText("File##Extrinsics file path", opt_extr_filename_buf, sizeof(opt_extr_filename_buf));
 			ImGui::PopItemWidth();
 			ImGui::SameLine();
 			ImGui::Checkbox("Quaternion format", &export_extrinsics_in_quat_format);
@@ -1019,7 +1018,7 @@ void Testbed::imgui() {
 		}
 		ImGui::SameLine();
 		ImGui::Checkbox("w/ Optimizer State", &m_include_optimizer_state_in_snapshot);
-		ImGui::InputText("File", snapshot_filename_buf, sizeof(snapshot_filename_buf));
+		ImGui::InputText("File##Snapshot file path", snapshot_filename_buf, sizeof(snapshot_filename_buf));
 	}
 
 	if (m_testbed_mode == ETestbedMode::Nerf || m_testbed_mode == ETestbedMode::Sdf) {
@@ -1451,7 +1450,7 @@ void Testbed::mouse_drag(const Vector2f& rel, int button) {
 
 			m_image.pos += rel;
 			if (m_fps_camera) {
-				m_camera.block<3,3>(0,0) = rot * m_camera.block<3,3>(0,0);
+				m_camera.block<3, 3>(0, 0) = rot * m_camera.block<3, 3>(0, 0);
 			} else {
 				// Turntable
 				auto old_look_at = look_at();
@@ -1693,40 +1692,51 @@ void Testbed::train_and_render(bool skip_rendering) {
 
 		auto& render_buffer = m_render_surfaces.front();
 
-		if (m_dlss) {
-			render_buffer.enable_dlss(m_window_res);
-			m_aperture_size = 0.0f;
-		} else {
-			render_buffer.disable_dlss();
+		{
+			// Don't count the time being spent allocating buffers and resetting DLSS as part of the frame time.
+			// Otherwise the dynamic resolution calculations for following frames will be thrown out of whack
+			// and may even start oscillating.
+			auto skip_start = std::chrono::steady_clock::now();
+			ScopeGuard skip_timing_guard{[&]() {
+				start += std::chrono::steady_clock::now() - skip_start;
+			}};
+			if (m_dlss) {
+				render_buffer.enable_dlss(m_window_res);
+				m_aperture_size = 0.0f;
+			} else {
+				render_buffer.disable_dlss();
+			}
+
+			auto render_res = render_buffer.in_resolution();
+			if (render_res.isZero() || (m_train && m_training_step == 0)) {
+				render_res = m_window_res/16;
+			} else {
+				render_res = render_res.cwiseMin(m_window_res);
+			}
+
+			float render_time_per_fullres_frame = m_render_ms.val() / (float)render_res.x() / (float)render_res.y() * (float)m_window_res.x() * (float)m_window_res.y();
+
+			// Make sure we don't starve training with slow rendering
+			float factor = std::sqrt(1000.0f / m_dynamic_res_target_fps / render_time_per_fullres_frame);
+			if (!m_dynamic_res) {
+				factor = 8.f/(float)m_fixed_res_factor;
+			}
+
+			factor = tcnn::clamp(factor, 1.0f/16.0f, 1.0f);
+
+			if (factor > m_last_render_res_factor * 1.2f || factor < m_last_render_res_factor * 0.8f || factor == 1.0f || !m_dynamic_res) {
+				render_res = (m_window_res.cast<float>() * factor).cast<int>().cwiseMin(m_window_res).cwiseMax(m_window_res/16);
+				m_last_render_res_factor = factor;
+			}
+
+			if (render_buffer.dlss()) {
+				render_res = render_buffer.dlss()->clamp_resolution(render_res);
+				render_buffer.dlss()->update_feature(render_res, render_buffer.dlss()->is_hdr(), render_buffer.dlss()->sharpen());
+			}
+
+			render_buffer.resize(render_res);
 		}
 
-		auto render_res = render_buffer.in_resolution();
-		if (render_res.isZero() || (m_train && m_training_step == 0)) {
-			render_res = m_window_res/16;
-		} else {
-			render_res = render_res.cwiseMin(m_window_res);
-		}
-
-		float render_time_per_fullres_frame = m_render_ms.val() / (float)render_res.x() / (float)render_res.y() * (float)m_window_res.x() * (float)m_window_res.y();
-
-		// Make sure we don't starve training with slow rendering
-		float factor = std::sqrt(1000.0f / m_dynamic_res_target_fps / render_time_per_fullres_frame);
-		if (!m_dynamic_res) {
-			factor = 8.f/(float)m_fixed_res_factor;
-		}
-
-		factor = tcnn::clamp(factor, 1.0f/16.0f, 1.0f);
-
-		if (factor > m_last_render_res_factor * 1.2f || factor < m_last_render_res_factor * 0.8f || factor == 1.0f || !m_dynamic_res) {
-			render_res = (m_window_res.cast<float>() * factor).cast<int>().cwiseMin(m_window_res).cwiseMax(m_window_res/16);
-			m_last_render_res_factor = factor;
-		}
-
-		if (render_buffer.dlss()) {
-			render_res = render_buffer.dlss()->clamp_resolution(render_res);
-		}
-
-		render_buffer.resize(render_res);
 		render_frame(m_smoothed_camera, m_smoothed_camera, Eigen::Vector4f::Zero(), render_buffer);
 
 #ifdef NGP_GUI
@@ -1880,6 +1890,9 @@ void Testbed::init_window(int resw, int resh, bool hidden, bool second_window) {
 	try {
 		vulkan_and_ngx_init();
 		m_dlss_supported = true;
+		if (m_testbed_mode == ETestbedMode::Nerf) {
+			m_dlss = true;
+		}
 	} catch (const std::runtime_error& e) {
 		tlog::warning() << "Could not initialize Vulkan and NGX. DLSS not supported. (" << e.what() << ")";
 	}
@@ -2082,7 +2095,6 @@ bool Testbed::frame() {
 #ifdef NGP_GUI
 	if (m_render_window) {
 		if (m_gui_redraw) {
-			// Gather histogram statistics of the encoding in use
 			if (m_gather_histograms) {
 				gather_histograms();
 			}
@@ -2469,6 +2481,35 @@ void Testbed::reset_network(bool clear_density_grid) {
 Testbed::Testbed(ETestbedMode mode)
 : m_testbed_mode(mode)
 {
+	if (!(__CUDACC_VER_MAJOR__ > 10 || (__CUDACC_VER_MAJOR__ == 10 && __CUDACC_VER_MINOR__ >= 2))) {
+		throw std::runtime_error{"Testbed required CUDA 10.2 or later."};
+	}
+
+#ifdef NGP_GUI
+	// Ensure we're running on the GPU that'll host our GUI. To do so, try creating a dummy
+	// OpenGL context, figure out the GPU it's running on, and then kill that context again.
+	if (glfwInit()) {
+		glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+		GLFWwindow* offscreen_context = glfwCreateWindow(640, 480, "", NULL, NULL);
+
+		if (offscreen_context) {
+			glfwMakeContextCurrent(offscreen_context);
+
+			int gl_device = -1;
+			unsigned int device_count = 0;
+			if (cudaGLGetDevices(&device_count, &gl_device, 1, cudaGLDeviceListAll) == cudaSuccess) {
+				if (device_count > 0 && gl_device != -1) {
+					set_cuda_device(gl_device);
+				}
+			}
+
+			glfwDestroyWindow(offscreen_context);
+		}
+
+		glfwTerminate();
+	}
+#endif
+
 	uint32_t compute_capability = cuda_compute_capability();
 	if (compute_capability < MIN_GPU_ARCH) {
 		tlog::warning() << "Insufficient compute capability " << compute_capability << " detected.";
@@ -2504,10 +2545,6 @@ Testbed::Testbed(ETestbedMode mode)
 	};
 
 	reset_camera();
-
-	if (!(__CUDACC_VER_MAJOR__ > 10 || (__CUDACC_VER_MAJOR__ == 10 && __CUDACC_VER_MINOR__ >= 2))) {
-		throw std::runtime_error{"Testbed required CUDA 10.2 or later."};
-	}
 
 	set_exposure(0);
 	set_min_level(0.f);
@@ -2711,7 +2748,7 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 					}
 				}
 				distance_fun_t distance_fun =
-					m_render_ground_truth ? (distance_fun_t)[&](uint32_t n_elements, const GPUMemory<Vector3f>& positions, GPUMemory<float>& distances, cudaStream_t stream) {
+					m_render_ground_truth ? (distance_fun_t)[&](uint32_t n_elements, const Vector3f* positions, float* distances, cudaStream_t stream) {
 						if (n_elements == 0) {
 							return;
 						}
@@ -2731,35 +2768,35 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 							m_sdf.triangle_bvh->signed_distance_gpu(
 								n_elements,
 								m_sdf.mesh_sdf_mode,
-								(Vector3f*)positions.data(),
-								distances.data(),
+								(Vector3f*)positions,
+								distances,
 								m_sdf.triangles_gpu.data(),
 								false,
 								m_stream.get()
 							);
 						}
-					} : (distance_fun_t)[&](uint32_t n_elements, const GPUMemory<Vector3f>& positions, GPUMemory<float>& distances, cudaStream_t stream) {
+					} : (distance_fun_t)[&](uint32_t n_elements, const Vector3f* positions, float* distances, cudaStream_t stream) {
 						if (n_elements == 0) {
 							return;
 						}
 						n_elements = next_multiple(n_elements, tcnn::batch_size_granularity);
-						GPUMatrix<float> positions_matrix((float*)positions.data(), 3, n_elements);
-						GPUMatrix<float, RM> distances_matrix(distances.data(), 1, n_elements);
+						GPUMatrix<float> positions_matrix((float*)positions, 3, n_elements);
+						GPUMatrix<float, RM> distances_matrix(distances, 1, n_elements);
 						m_network->inference(stream, positions_matrix, distances_matrix);
 					};
 
 				normals_fun_t normals_fun =
-					m_render_ground_truth ? (normals_fun_t)[&](uint32_t n_elements, const GPUMemory<Vector3f>& positions, GPUMemory<Vector3f>& normals, cudaStream_t stream) {
+					m_render_ground_truth ? (normals_fun_t)[&](uint32_t n_elements, const Vector3f* positions, Vector3f* normals, cudaStream_t stream) {
 						// NO-OP. Normals will automatically be populated by raytrace
-					} : (normals_fun_t)[&](uint32_t n_elements, const GPUMemory<Vector3f>& positions, GPUMemory<Vector3f>& normals, cudaStream_t stream) {
+					} : (normals_fun_t)[&](uint32_t n_elements, const Vector3f* positions, Vector3f* normals, cudaStream_t stream) {
 						if (n_elements == 0) {
 							return;
 						}
 
 						n_elements = next_multiple(n_elements, tcnn::batch_size_granularity);
 
-						GPUMatrix<float> positions_matrix((float*)positions.data(), 3, n_elements);
-						GPUMatrix<float> normals_matrix((float*)normals.data(), 3, n_elements);
+						GPUMatrix<float> positions_matrix((float*)positions, 3, n_elements);
+						GPUMatrix<float> normals_matrix((float*)normals, 3, n_elements);
 						m_network->input_gradient(stream, 0, positions_matrix, normals_matrix);
 					};
 

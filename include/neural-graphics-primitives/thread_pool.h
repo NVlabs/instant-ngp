@@ -41,8 +41,6 @@ public:
     auto enqueueTask(F&& f, bool highPriority = false) -> std::future<std::result_of_t <F()>> {
         using return_type = std::result_of_t<F()>;
 
-        ++mNumTasksInSystem;
-
         auto task = std::make_shared<std::packaged_task<return_type()>>(std::forward<F>(f));
 
         auto res = task->get_future();
@@ -63,13 +61,8 @@ public:
 
     void startThreads(size_t num);
     void shutdownThreads(size_t num);
+	void setNThreads(size_t num);
 
-    size_t numTasksInSystem() const {
-        return mNumTasksInSystem;
-    }
-
-    void waitUntilFinished();
-    void waitUntilFinishedFor(const std::chrono::microseconds Duration);
     void flushQueue();
 
     template <typename Int, typename F>
@@ -109,10 +102,6 @@ private:
     std::deque<std::function<void()>> mTaskQueue;
     std::mutex mTaskQueueMutex;
     std::condition_variable mWorkerCondition;
-
-    std::atomic<size_t> mNumTasksInSystem;
-    std::mutex mSystemBusyMutex;
-    std::condition_variable mSystemBusyCondition;
 };
 
 NGP_NAMESPACE_END

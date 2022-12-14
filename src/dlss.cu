@@ -417,7 +417,7 @@ void vulkan_and_ngx_init() {
 		throw std::runtime_error{fmt::format("DLSS not available: {}", ngx_error_string(ngx_result))};
 	}
 
-	tlog::success() << "Initialized Vulkan and NGX on device #" << device_id << ": " << physical_device_properties.deviceName;
+	tlog::success() << "Initialized Vulkan and NGX on GPU #" << device_id << ": " << physical_device_properties.deviceName;
 }
 
 size_t dlss_allocated_bytes() {
@@ -878,6 +878,10 @@ public:
 		return m_specs.quality;
 	}
 
+	Vector2i out_resolution() const {
+		return m_specs.out_resolution;
+	}
+
 	Vector2i clamp_resolution(const Vector2i& resolution) const {
 		return m_specs.clamp_resolution(resolution);
 	}
@@ -895,21 +899,44 @@ private:
 
 class Dlss : public IDlss {
 public:
-	Dlss(const Eigen::Vector2i& out_resolution)
+	Dlss(const Eigen::Vector2i& max_out_resolution)
 	:
-	m_out_resolution{out_resolution},
+	m_max_out_resolution{max_out_resolution},
 	// Allocate all buffers at output resolution and use dynamic sub-rects
 	// to use subsets of them. This avoids re-allocations when using DLSS
 	// with dynamically changing input resolution.
-	m_frame_buffer{out_resolution, 4},
-	m_depth_buffer{out_resolution, 1},
-	m_mvec_buffer{out_resolution, 2},
+	m_frame_buffer{max_out_resolution, 4},
+	m_depth_buffer{max_out_resolution, 1},
+	m_mvec_buffer{max_out_resolution, 2},
 	m_exposure_buffer{{1, 1}, 1},
-	m_output_buffer{out_resolution, 4}
+	m_output_buffer{max_out_resolution, 4}
 	{
+		// Various quality modes of DLSS
 		for (int i = 0; i < (int)EDlssQuality::NumDlssQualitySettings; ++i) {
 			try {
-				auto specs = dlss_feature_specs(out_resolution, (EDlssQuality)i);
+				auto specs = dlss_feature_specs(max_out_resolution, (EDlssQuality)i);
+
+				// Only emplace the specs if the feature can be created in practice!
+				DlssFeature{specs, true, true};
+				DlssFeature{specs, true, false};
+				DlssFeature{specs, false, true};
+				DlssFeature{specs, false, false};
+				m_dlss_specs.emplace_back(specs);
+			} catch (...) {}
+		}
+
+		// For super insane performance requirements (more than 3x upscaling) try UltraPerformance
+		// with reduced output resolutions for 4.5x, 6x, 9x.
+		std::vector<Vector2i> reduced_out_resolutions = {
+			max_out_resolution / 3 * 2,
+			max_out_resolution / 2,
+			max_out_resolution / 3,
+			// max_out_resolution / 4,
+		};
+
+		for (const auto& out_resolution : reduced_out_resolutions) {
+			try {
+				auto specs = dlss_feature_specs(out_resolution, EDlssQuality::UltraPerformance);
 
 				// Only emplace the specs if the feature can be created in practice!
 				DlssFeature{specs, true, true};
@@ -926,6 +953,27 @@ public:
 		m_dlss_feature = nullptr;
 	}
 
+	void update_feature(const Vector2i& in_resolution, bool is_hdr, bool sharpen) override {
+		CUDA_CHECK_THROW(cudaDeviceSynchronize());
+
+		DlssFeatureSpecs specs;
+		bool found = false;
+		for (const auto& s : m_dlss_specs) {
+			if (s.distance(in_resolution) == 0.0f) {
+				specs = s;
+				found = true;
+			}
+		}
+
+		if (!found) {
+			throw std::runtime_error{"Dlss::run called with invalid input resolution."};
+		}
+
+		if (!m_dlss_feature || m_dlss_feature->is_hdr() != is_hdr || m_dlss_feature->sharpen() != sharpen || m_dlss_feature->quality() != specs.quality || m_dlss_feature->out_resolution() != specs.out_resolution) {
+			m_dlss_feature.reset(new DlssFeature{specs.out_resolution, is_hdr, sharpen, specs.quality});
+		}
+	}
+
 	void run(
 		const Vector2i& in_resolution,
 		bool is_hdr,
@@ -935,23 +983,7 @@ public:
 	) override {
 		CUDA_CHECK_THROW(cudaDeviceSynchronize());
 
-		EDlssQuality quality;
-		bool found = false;
-		for (const auto& specs : m_dlss_specs) {
-			if (specs.distance(in_resolution) == 0.0f) {
-				quality = specs.quality;
-				found = true;
-			}
-		}
-
-		if (!found) {
-			throw std::runtime_error{"Dlss::run called with invalid input resolution."};
-		}
-
-		bool sharpen = sharpening != 0.0f;
-		if (!m_dlss_feature || m_dlss_feature->is_hdr() != is_hdr || m_dlss_feature->sharpen() != sharpen || m_dlss_feature->quality() != quality) {
-			m_dlss_feature.reset(new DlssFeature{m_out_resolution, is_hdr, sharpen, quality});
-		}
+		update_feature(in_resolution, is_hdr, sharpening != 0.0f);
 
 		m_dlss_feature->run(
 			in_resolution,
@@ -1001,11 +1033,19 @@ public:
 	}
 
 	Vector2i out_resolution() const override {
-		return m_out_resolution;
+		return m_dlss_feature ? m_dlss_feature->out_resolution() : m_max_out_resolution;
+	}
+
+	Vector2i max_out_resolution() const override {
+		return m_max_out_resolution;
 	}
 
 	bool is_hdr() const override {
 		return m_dlss_feature && m_dlss_feature->is_hdr();
+	}
+
+	bool sharpen() const override {
+		return m_dlss_feature && m_dlss_feature->sharpen();
 	}
 
 	EDlssQuality quality() const override {
@@ -1022,7 +1062,7 @@ private:
 	VulkanTexture m_exposure_buffer;
 	VulkanTexture m_output_buffer;
 
-	Vector2i m_out_resolution;
+	Vector2i m_max_out_resolution;
 };
 
 std::shared_ptr<IDlss> dlss_init(const Eigen::Vector2i& out_resolution) {

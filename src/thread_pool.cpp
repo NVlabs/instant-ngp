@@ -28,7 +28,6 @@ ThreadPool::ThreadPool(size_t maxNumThreads, bool force) {
 		maxNumThreads = min((size_t)thread::hardware_concurrency(), maxNumThreads);
 	}
 	startThreads(maxNumThreads);
-	mNumTasksInSystem.store(0);
 }
 
 ThreadPool::~ThreadPool() {
@@ -59,16 +58,6 @@ void ThreadPool::startThreads(size_t num) {
 				lock.unlock();
 
 				task();
-
-				mNumTasksInSystem--;
-
-				{
-					unique_lock<mutex> localLock{mSystemBusyMutex};
-
-					if (mNumTasksInSystem == 0) {
-						mSystemBusyCondition.notify_all();
-					}
-				}
 			}
 		});
 	}
@@ -90,30 +79,16 @@ void ThreadPool::shutdownThreads(size_t num) {
 	}
 }
 
-void ThreadPool::waitUntilFinished() {
-	unique_lock<mutex> lock{mSystemBusyMutex};
-
-	if (mNumTasksInSystem == 0) {
-		return;
+void ThreadPool::setNThreads(size_t num) {
+	if (mNumThreads > num) {
+		shutdownThreads(mNumThreads - num);
+	} else if (mNumThreads < num) {
+		startThreads(num - mNumThreads);
 	}
-
-	mSystemBusyCondition.wait(lock);
-}
-
-void ThreadPool::waitUntilFinishedFor(const chrono::microseconds Duration) {
-	unique_lock<mutex> lock{mSystemBusyMutex};
-
-	if (mNumTasksInSystem == 0) {
-		return;
-	}
-
-	mSystemBusyCondition.wait_for(lock, Duration);
 }
 
 void ThreadPool::flushQueue() {
 	lock_guard<mutex> lock{mTaskQueueMutex};
-
-	mNumTasksInSystem -= mTaskQueue.size();
 	mTaskQueue.clear();
 }
 

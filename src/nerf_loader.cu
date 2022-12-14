@@ -582,7 +582,6 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 					throw std::runtime_error{"Could not open image file: "s + std::string{stbi_failure_reason()}};
 				}
 
-
 				fs::path alphapath = basepath / fmt::format("{}.alpha.{}", frame["file_path"], path.extension());
 				if (alphapath.exists()) {
 					int wa = 0, ha = 0;
@@ -613,7 +612,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 					}
 					dst.mask_color = 0x00FF00FF; // HOT PINK
 					for (int i = 0; i < dst.res.prod(); ++i) {
-						if (mask_img[i*4] != 0) {
+						if (mask_img[i*4] != 0 || mask_img[i*4+1] != 0 || mask_img[i*4+2] != 0) {
 							*(uint32_t*)&img[i*4] = dst.mask_color;
 						}
 					}

@@ -741,12 +741,15 @@ void CudaRenderBuffer::overlay_false_color(Vector2i training_resolution, bool to
 	);
 }
 
-void CudaRenderBuffer::enable_dlss(const Eigen::Vector2i& out_res) {
+void CudaRenderBuffer::enable_dlss(const Eigen::Vector2i& max_out_res) {
 #ifdef NGP_VULKAN
-	if (!m_dlss || m_dlss->out_resolution() != out_res) {
-		m_dlss = dlss_init(out_res);
+	if (!m_dlss || m_dlss->max_out_resolution() != max_out_res) {
+		m_dlss = dlss_init(max_out_res);
 	}
-	resize(in_resolution());
+
+	if (m_dlss) {
+		resize(m_dlss->clamp_resolution(in_resolution()));
+	}
 #else
 	throw std::runtime_error{"NGP was compiled without Vulkan/NGX/DLSS support."};
 #endif
