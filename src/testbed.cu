@@ -209,7 +209,7 @@ void Testbed::set_visualized_dim(int dim) {
 }
 
 void Testbed::translate_camera(const Vector3f& rel) {
-	m_camera.col(3) += m_camera.block<3,3>(0,0) * rel * m_bounding_radius;
+	m_camera.col(3) += m_camera.block<3, 3>(0, 0) * rel * m_bounding_radius;
 	reset_accumulation(true);
 }
 
@@ -524,7 +524,7 @@ void Testbed::imgui() {
 			}
 			ImGui::SameLine();
 			ImGui::PushItemWidth(400.f);
-			ImGui::InputText("File", opt_extr_filename_buf, sizeof(opt_extr_filename_buf));
+			ImGui::InputText("File##Extrinsics file path", opt_extr_filename_buf, sizeof(opt_extr_filename_buf));
 			ImGui::PopItemWidth();
 			ImGui::SameLine();
 			ImGui::Checkbox("Quaternion format", &export_extrinsics_in_quat_format);
@@ -1019,7 +1019,7 @@ void Testbed::imgui() {
 		}
 		ImGui::SameLine();
 		ImGui::Checkbox("w/ Optimizer State", &m_include_optimizer_state_in_snapshot);
-		ImGui::InputText("File", snapshot_filename_buf, sizeof(snapshot_filename_buf));
+		ImGui::InputText("File##Snapshot file path", snapshot_filename_buf, sizeof(snapshot_filename_buf));
 	}
 
 	if (m_testbed_mode == ETestbedMode::Nerf || m_testbed_mode == ETestbedMode::Sdf) {
@@ -1451,7 +1451,7 @@ void Testbed::mouse_drag(const Vector2f& rel, int button) {
 
 			m_image.pos += rel;
 			if (m_fps_camera) {
-				m_camera.block<3,3>(0,0) = rot * m_camera.block<3,3>(0,0);
+				m_camera.block<3, 3>(0, 0) = rot * m_camera.block<3, 3>(0, 0);
 			} else {
 				// Turntable
 				auto old_look_at = look_at();
@@ -2082,7 +2082,6 @@ bool Testbed::frame() {
 #ifdef NGP_GUI
 	if (m_render_window) {
 		if (m_gui_redraw) {
-			// Gather histogram statistics of the encoding in use
 			if (m_gather_histograms) {
 				gather_histograms();
 			}

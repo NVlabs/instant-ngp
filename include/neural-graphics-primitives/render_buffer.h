@@ -95,11 +95,11 @@ public:
 
 	GLuint texture();
 
-	cudaSurfaceObject_t surface() override ;
+	cudaSurfaceObject_t surface() override;
 
-	cudaArray_t array() override ;
+	cudaArray_t array() override;
 
-	void blit_from_cuda_mapping() ;
+	void blit_from_cuda_mapping();
 
 	const std::string& texture_name() const { return m_texture_name; }
 
@@ -162,7 +162,9 @@ public:
 	CudaRenderBuffer(const std::shared_ptr<SurfaceProvider>& surf) : m_surface_provider{surf} {}
 
 	CudaRenderBuffer(const CudaRenderBuffer& other) = delete;
+	CudaRenderBuffer& operator=(const CudaRenderBuffer& other) = delete;
 	CudaRenderBuffer(CudaRenderBuffer&& other) = default;
+	CudaRenderBuffer& operator=(CudaRenderBuffer&& other) = default;
 
 	cudaSurfaceObject_t surface() {
 		return m_surface_provider->surface();
@@ -184,6 +186,10 @@ public:
 
 	uint32_t spp() const {
 		return m_spp;
+	}
+
+	void set_spp(uint32_t value) {
+		m_spp = value;
 	}
 
 	Eigen::Array4f* frame_buffer() const {
@@ -249,7 +255,7 @@ public:
 		}
 	}
 
-	void enable_dlss(const Eigen::Vector2i& out_res);
+	void enable_dlss(const Eigen::Vector2i& max_out_res);
 	void disable_dlss();
 	void set_dlss_sharpening(float value) {
 		m_dlss_sharpening = value;

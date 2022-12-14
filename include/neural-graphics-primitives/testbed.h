@@ -790,7 +790,7 @@ public:
 	float m_render_near_distance = 0.0f;
 	float m_slice_plane_z = 0.0f;
 	bool m_floor_enable = false;
-	inline float get_floor_y() const { return m_floor_enable ? m_aabb.min.y()+0.001f : -10000.f; }
+	inline float get_floor_y() const { return m_floor_enable ? m_aabb.min.y() + 0.001f : -10000.f; }
 	BoundingBox m_raw_aabb;
 	BoundingBox m_aabb;
 	BoundingBox m_render_aabb;
