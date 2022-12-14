@@ -1693,40 +1693,51 @@ void Testbed::train_and_render(bool skip_rendering) {
 
 		auto& render_buffer = m_render_surfaces.front();
 
-		if (m_dlss) {
-			render_buffer.enable_dlss(m_window_res);
-			m_aperture_size = 0.0f;
-		} else {
-			render_buffer.disable_dlss();
+		{
+			// Don't count the time being spent allocating buffers and resetting DLSS as part of the frame time.
+			// Otherwise the dynamic resolution calculations for following frames will be thrown out of whack
+			// and may even start oscillating.
+			auto skip_start = std::chrono::steady_clock::now();
+			ScopeGuard skip_timing_guard{[&]() {
+				start += std::chrono::steady_clock::now() - skip_start;
+			}};
+			if (m_dlss) {
+				render_buffer.enable_dlss(m_window_res);
+				m_aperture_size = 0.0f;
+			} else {
+				render_buffer.disable_dlss();
+			}
+
+			auto render_res = render_buffer.in_resolution();
+			if (render_res.isZero() || (m_train && m_training_step == 0)) {
+				render_res = m_window_res/16;
+			} else {
+				render_res = render_res.cwiseMin(m_window_res);
+			}
+
+			float render_time_per_fullres_frame = m_render_ms.val() / (float)render_res.x() / (float)render_res.y() * (float)m_window_res.x() * (float)m_window_res.y();
+
+			// Make sure we don't starve training with slow rendering
+			float factor = std::sqrt(1000.0f / m_dynamic_res_target_fps / render_time_per_fullres_frame);
+			if (!m_dynamic_res) {
+				factor = 8.f/(float)m_fixed_res_factor;
+			}
+
+			factor = tcnn::clamp(factor, 1.0f/16.0f, 1.0f);
+
+			if (factor > m_last_render_res_factor * 1.2f || factor < m_last_render_res_factor * 0.8f || factor == 1.0f || !m_dynamic_res) {
+				render_res = (m_window_res.cast<float>() * factor).cast<int>().cwiseMin(m_window_res).cwiseMax(m_window_res/16);
+				m_last_render_res_factor = factor;
+			}
+
+			if (render_buffer.dlss()) {
+				render_res = render_buffer.dlss()->clamp_resolution(render_res);
+				render_buffer.dlss()->update_feature(render_res, render_buffer.dlss()->is_hdr(), render_buffer.dlss()->sharpen());
+			}
+
+			render_buffer.resize(render_res);
 		}
 
-		auto render_res = render_buffer.in_resolution();
-		if (render_res.isZero() || (m_train && m_training_step == 0)) {
-			render_res = m_window_res/16;
-		} else {
-			render_res = render_res.cwiseMin(m_window_res);
-		}
-
-		float render_time_per_fullres_frame = m_render_ms.val() / (float)render_res.x() / (float)render_res.y() * (float)m_window_res.x() * (float)m_window_res.y();
-
-		// Make sure we don't starve training with slow rendering
-		float factor = std::sqrt(1000.0f / m_dynamic_res_target_fps / render_time_per_fullres_frame);
-		if (!m_dynamic_res) {
-			factor = 8.f/(float)m_fixed_res_factor;
-		}
-
-		factor = tcnn::clamp(factor, 1.0f/16.0f, 1.0f);
-
-		if (factor > m_last_render_res_factor * 1.2f || factor < m_last_render_res_factor * 0.8f || factor == 1.0f || !m_dynamic_res) {
-			render_res = (m_window_res.cast<float>() * factor).cast<int>().cwiseMin(m_window_res).cwiseMax(m_window_res/16);
-			m_last_render_res_factor = factor;
-		}
-
-		if (render_buffer.dlss()) {
-			render_res = render_buffer.dlss()->clamp_resolution(render_res);
-		}
-
-		render_buffer.resize(render_res);
 		render_frame(m_smoothed_camera, m_smoothed_camera, Eigen::Vector4f::Zero(), render_buffer);
 
 #ifdef NGP_GUI
