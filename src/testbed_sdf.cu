@@ -567,15 +567,10 @@ __global__ void init_rays_with_payload_kernel_sdf(
 	}
 
 	SdfPayload& payload = payloads[idx];
-	if (!aabb.contains(ray.o)) {
-		payload.alive = false;
-		return;
-	}
-
 	payload.dir = ray.d;
 	payload.idx = idx;
 	payload.n_steps = 0;
-	payload.alive = true;
+	payload.alive = aabb.contains(ray.o);
 }
 
 __host__ __device__ uint32_t sample_discrete(float uniform_sample, const float* __restrict__ cdf, int length) {
