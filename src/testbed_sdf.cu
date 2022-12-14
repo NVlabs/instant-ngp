@@ -550,12 +550,13 @@ __global__ void init_rays_with_payload_kernel_sdf(
 
 	if (octree_nodes && !TriangleOctree::contains(octree_nodes, max_depth, ray.o)) {
 		t = max(0.0f, TriangleOctree::ray_intersect(octree_nodes, max_depth, ray.o, ray.d));
-		if (ray.o.y() > floor_y && ray.d.y()<0.f) {
-			float floor_dist = -(ray.o.y() - floor_y)/ray.d.y();
-			if (floor_dist>0.f) {
-				t=min(t,floor_dist);
+		if (ray.o.y() > floor_y && ray.d.y() < 0.f) {
+			float floor_dist = -(ray.o.y() - floor_y) / ray.d.y();
+			if (floor_dist > 0.f) {
+				t = min(t, floor_dist);
 			}
 		}
+
 		ray.o = ray.o + (t + 1e-6f) * ray.d;
 	}
 
@@ -591,7 +592,8 @@ __global__ void sample_uniform_on_triangle_kernel(uint32_t n_elements, const flo
 	sampled_positions[i] = triangles[tri_idx].sample_uniform_position(sample.tail<2>());
 }
 
-void Testbed::SphereTracer::init_rays_from_camera(uint32_t sample_index,
+void Testbed::SphereTracer::init_rays_from_camera(
+	uint32_t sample_index,
 	const Vector2i& resolution,
 	const Vector2f& focal_length,
 	const Matrix<float, 3, 4>& camera_matrix,
@@ -613,15 +615,15 @@ void Testbed::SphereTracer::init_rays_from_camera(uint32_t sample_index,
 ) {
 	// Make sure we have enough memory reserved to render at the requested resolution
 	size_t n_pixels = (size_t)resolution.x() * resolution.y();
-	enlarge(n_pixels);
+	enlarge(n_pixels, stream);
 
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)resolution.x(), threads.x), div_round_up((uint32_t)resolution.y(), threads.y), 1 };
 	init_rays_with_payload_kernel_sdf<<<blocks, threads, 0, stream>>>(
 		sample_index,
-		m_rays[0].pos.data(),
-		m_rays[0].distance.data(),
-		m_rays[0].payload.data(),
+		m_rays[0].pos,
+		m_rays[0].distance,
+		m_rays[0].payload,
 		resolution,
 		focal_length,
 		camera_matrix,
@@ -644,7 +646,7 @@ void Testbed::SphereTracer::init_rays_from_camera(uint32_t sample_index,
 }
 
 void Testbed::SphereTracer::init_rays_from_data(uint32_t n_elements, const RaysSdfSoa& data, cudaStream_t stream) {
-	enlarge(n_elements);
+	enlarge(n_elements, stream);
 	m_rays[0].copy_from_other_async(n_elements, data, stream);
 	m_n_rays_initialized = n_elements;
 }
@@ -658,11 +660,11 @@ uint32_t Testbed::SphereTracer::trace_bvh(TriangleBvh* bvh, const Triangle* tria
 	}
 
 	// Abuse the normal buffer to temporarily hold ray directions
-	parallel_for_gpu(stream, n_alive, [payloads=m_rays[0].payload.data(), normals=m_rays[0].normal.data()] __device__ (size_t i) {
+	parallel_for_gpu(stream, n_alive, [payloads=m_rays[0].payload, normals=m_rays[0].normal] __device__ (size_t i) {
 		normals[i] = payloads[i].dir;
 	});
 
-	bvh->ray_trace_gpu(n_alive, m_rays[0].pos.data(), m_rays[0].normal.data(), triangles, stream);
+	bvh->ray_trace_gpu(n_alive, m_rays[0].pos, m_rays[0].normal, triangles, stream);
 	return n_alive;
 }
 
@@ -681,7 +683,7 @@ uint32_t Testbed::SphereTracer::trace(
 		return 0;
 	}
 
-	CUDA_CHECK_THROW(cudaMemsetAsync(m_hit_counter.data(), 0, sizeof(uint32_t), stream));
+	CUDA_CHECK_THROW(cudaMemsetAsync(m_hit_counter, 0, sizeof(uint32_t), stream));
 
 	const uint32_t STEPS_INBETWEEN_COMPACTION = 4;
 
@@ -700,29 +702,29 @@ uint32_t Testbed::SphereTracer::trace(
 
 		// Compact rays that did not diverge yet
 		{
-			CUDA_CHECK_THROW(cudaMemsetAsync(m_alive_counter.data(), 0, sizeof(uint32_t), stream));
+			CUDA_CHECK_THROW(cudaMemsetAsync(m_alive_counter, 0, sizeof(uint32_t), stream));
 			if (m_trace_shadow_rays) {
 				linear_kernel(compact_kernel_shadow_sdf, 0, stream,
 					n_alive,
 					zero_offset,
-					rays_tmp.pos.data(), rays_tmp.distance.data(), rays_tmp.payload.data(), rays_tmp.prev_distance.data(), rays_tmp.total_distance.data(), rays_tmp.min_visibility.data(),
-					rays_current.pos.data(), rays_current.distance.data(), rays_current.payload.data(), rays_current.prev_distance.data(), rays_current.total_distance.data(), rays_current.min_visibility.data(),
-					m_rays_hit.pos.data(), m_rays_hit.distance.data(), m_rays_hit.payload.data(), m_rays_hit.prev_distance.data(), m_rays_hit.total_distance.data(), m_rays_hit.min_visibility.data(),
+					rays_tmp.pos, rays_tmp.distance, rays_tmp.payload, rays_tmp.prev_distance, rays_tmp.total_distance, rays_tmp.min_visibility,
+					rays_current.pos, rays_current.distance, rays_current.payload, rays_current.prev_distance, rays_current.total_distance, rays_current.min_visibility,
+					m_rays_hit.pos, m_rays_hit.distance, m_rays_hit.payload, m_rays_hit.prev_distance, m_rays_hit.total_distance, m_rays_hit.min_visibility,
 					aabb,
-					m_alive_counter.data(), m_hit_counter.data()
+					m_alive_counter, m_hit_counter
 				);
 			} else {
 				linear_kernel(compact_kernel_sdf, 0, stream,
 					n_alive,
 					zero_offset,
-					rays_tmp.pos.data(), rays_tmp.distance.data(), rays_tmp.payload.data(),
-					rays_current.pos.data(), rays_current.distance.data(), rays_current.payload.data(),
-					m_rays_hit.pos.data(), m_rays_hit.distance.data(), m_rays_hit.payload.data(),
+					rays_tmp.pos, rays_tmp.distance, rays_tmp.payload,
+					rays_current.pos, rays_current.distance, rays_current.payload,
+					m_rays_hit.pos, m_rays_hit.distance, m_rays_hit.payload,
 					aabb,
-					m_alive_counter.data(), m_hit_counter.data()
+					m_alive_counter, m_hit_counter
 				);
 			}
-			CUDA_CHECK_THROW(cudaMemcpyAsync(&n_alive, m_alive_counter.data(), sizeof(uint32_t), cudaMemcpyDeviceToHost, stream));
+			CUDA_CHECK_THROW(cudaMemcpyAsync(&n_alive, m_alive_counter, sizeof(uint32_t), cudaMemcpyDeviceToHost, stream));
 			CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
 		}
 
@@ -735,9 +737,9 @@ uint32_t Testbed::SphereTracer::trace(
 			linear_kernel(advance_pos_kernel_sdf, 0, stream,
 				n_alive,
 				zero_offset,
-				rays_current.pos.data(),
-				rays_current.distance.data(),
-				rays_current.payload.data(),
+				rays_current.pos,
+				rays_current.distance,
+				rays_current.payload,
 				aabb,
 				floor_y,
 				octree ? octree->nodes_gpu() : nullptr,
@@ -745,9 +747,9 @@ uint32_t Testbed::SphereTracer::trace(
 				distance_scale,
 				maximum_distance,
 				m_shadow_sharpness,
-				m_trace_shadow_rays ? rays_current.prev_distance.data() : nullptr,
-				m_trace_shadow_rays ? rays_current.total_distance.data() : nullptr,
-				m_trace_shadow_rays ? rays_current.min_visibility.data() : nullptr
+				m_trace_shadow_rays ? rays_current.prev_distance : nullptr,
+				m_trace_shadow_rays ? rays_current.total_distance : nullptr,
+				m_trace_shadow_rays ? rays_current.min_visibility : nullptr
 			);
 		}
 
@@ -755,36 +757,67 @@ uint32_t Testbed::SphereTracer::trace(
 	}
 
 	uint32_t n_hit;
-	CUDA_CHECK_THROW(cudaMemcpyAsync(&n_hit, m_hit_counter.data(), sizeof(uint32_t), cudaMemcpyDeviceToHost, stream));
+	CUDA_CHECK_THROW(cudaMemcpyAsync(&n_hit, m_hit_counter, sizeof(uint32_t), cudaMemcpyDeviceToHost, stream));
 	CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
 	return n_hit;
 }
 
-void Testbed::SphereTracer::enlarge(size_t n_elements) {
+void Testbed::SphereTracer::enlarge(size_t n_elements, cudaStream_t stream) {
 	n_elements = next_multiple(n_elements, size_t(tcnn::batch_size_granularity));
-	m_rays[0].enlarge(n_elements);
-	m_rays[1].enlarge(n_elements);
-	m_rays_hit.enlarge(n_elements);
+	auto scratch = allocate_workspace_and_distribute<
+		Vector3f, Vector3f, float, float, float, float, SdfPayload, // m_rays[0]
+		Vector3f, Vector3f, float, float, float, float, SdfPayload, // m_rays[1]
+		Vector3f, Vector3f, float, float, float, float, SdfPayload, // m_rays_hit
+
+		uint32_t,
+		uint32_t
+	>(
+		stream, &m_scratch_alloc,
+		n_elements, n_elements, n_elements, n_elements, n_elements, n_elements, n_elements,
+		n_elements, n_elements, n_elements, n_elements, n_elements, n_elements, n_elements,
+		n_elements, n_elements, n_elements, n_elements, n_elements, n_elements, n_elements,
+		32, // 2 full cache lines to ensure no overlap
+		32  // 2 full cache lines to ensure no overlap
+	);
+
+	m_rays[0].set(std::get<0>(scratch), std::get<1>(scratch), std::get<2>(scratch), std::get<3>(scratch), std::get<4>(scratch), std::get<5>(scratch), std::get<6>(scratch));
+	m_rays[1].set(std::get<7>(scratch), std::get<8>(scratch), std::get<9>(scratch), std::get<10>(scratch), std::get<11>(scratch), std::get<12>(scratch), std::get<13>(scratch));
+	m_rays_hit.set(std::get<14>(scratch), std::get<15>(scratch), std::get<16>(scratch), std::get<17>(scratch), std::get<18>(scratch), std::get<19>(scratch), std::get<20>(scratch));
+
+	m_hit_counter = std::get<21>(scratch);
+	m_alive_counter = std::get<22>(scratch);
 }
 
-void Testbed::FiniteDifferenceNormalsApproximator::enlarge(uint32_t n_elements) {
-	dx.enlarge(n_elements);
-	dy.enlarge(n_elements);
-	dz.enlarge(n_elements);
+void Testbed::FiniteDifferenceNormalsApproximator::enlarge(uint32_t n_elements, cudaStream_t stream) {
+	n_elements = next_multiple(n_elements, tcnn::batch_size_granularity);
+	auto scratch = allocate_workspace_and_distribute<
+		Vector3f, Vector3f, Vector3f,
+		float, float, float,
+		float, float, float
+	>(
+		stream, &m_scratch_alloc,
+		n_elements, n_elements, n_elements,
+		n_elements, n_elements, n_elements,
+		n_elements, n_elements, n_elements
+	);
 
-	dist_dx_pos.enlarge(n_elements);
-	dist_dy_pos.enlarge(n_elements);
-	dist_dz_pos.enlarge(n_elements);
+	dx = std::get<0>(scratch);
+	dy = std::get<1>(scratch);
+	dz = std::get<2>(scratch);
 
-	dist_dx_neg.enlarge(n_elements);
-	dist_dy_neg.enlarge(n_elements);
-	dist_dz_neg.enlarge(n_elements);
+	dist_dx_pos = std::get<3>(scratch);
+	dist_dy_pos = std::get<4>(scratch);
+	dist_dz_pos = std::get<5>(scratch);
+
+	dist_dx_neg = std::get<6>(scratch);
+	dist_dy_neg = std::get<7>(scratch);
+	dist_dz_neg = std::get<8>(scratch);
 }
 
-void Testbed::FiniteDifferenceNormalsApproximator::normal(uint32_t n_elements, const distance_fun_t& distance_function, GPUMemory<Vector3f>& pos, GPUMemory<Vector3f>& normal, float epsilon, cudaStream_t stream) {
-	enlarge(n_elements);
+void Testbed::FiniteDifferenceNormalsApproximator::normal(uint32_t n_elements, const distance_fun_t& distance_function, const Vector3f* pos, Vector3f* normal, float epsilon, cudaStream_t stream) {
+	enlarge(n_elements, stream);
 
-	parallel_for_gpu(stream, n_elements, [pos=pos.data(), dx=dx.data(), dy=dy.data(), dz=dz.data(), epsilon] __device__ (size_t i) {
+	parallel_for_gpu(stream, n_elements, [pos=pos, dx=dx, dy=dy, dz=dz, epsilon] __device__ (size_t i) {
 		Vector3f p = pos[i];
 		dx[i] = Vector3f{p.x() + epsilon, p.y(), p.z()};
 		dy[i] = Vector3f{p.x(), p.y() + epsilon, p.z()};
@@ -795,7 +828,7 @@ void Testbed::FiniteDifferenceNormalsApproximator::normal(uint32_t n_elements, c
 	distance_function(n_elements, dy, dist_dy_pos, stream);
 	distance_function(n_elements, dz, dist_dz_pos, stream);
 
-	parallel_for_gpu(stream, n_elements, [pos=pos.data(), dx=dx.data(), dy=dy.data(), dz=dz.data(), epsilon] __device__ (size_t i) {
+	parallel_for_gpu(stream, n_elements, [pos=pos, dx=dx, dy=dy, dz=dz, epsilon] __device__ (size_t i) {
 		Vector3f p = pos[i];
 		dx[i] = Vector3f{p.x() - epsilon, p.y(), p.z()};
 		dy[i] = Vector3f{p.x(), p.y() - epsilon, p.z()};
@@ -806,7 +839,7 @@ void Testbed::FiniteDifferenceNormalsApproximator::normal(uint32_t n_elements, c
 	distance_function(n_elements, dy, dist_dy_neg, stream);
 	distance_function(n_elements, dz, dist_dz_neg, stream);
 
-	parallel_for_gpu(stream, n_elements, [normal=normal.data(), dist_dx_pos=dist_dx_pos.data(), dist_dx_neg=dist_dx_neg.data(), dist_dy_pos=dist_dy_pos.data(), dist_dy_neg=dist_dy_neg.data(), dist_dz_pos=dist_dz_pos.data(), dist_dz_neg=dist_dz_neg.data()] __device__ (size_t i) {
+	parallel_for_gpu(stream, n_elements, [normal=normal, dist_dx_pos=dist_dx_pos, dist_dx_neg=dist_dx_neg, dist_dy_pos=dist_dy_pos, dist_dy_neg=dist_dy_neg, dist_dz_pos=dist_dz_pos, dist_dz_neg=dist_dz_neg] __device__ (size_t i) {
 		normal[i] = {dist_dx_pos[i] - dist_dx_neg[i], dist_dy_pos[i] - dist_dy_neg[i], dist_dz_pos[i] - dist_dz_neg[i]};
 	});
 }
@@ -827,8 +860,7 @@ void Testbed::render_sdf(
 	}
 	auto* octree_ptr = m_sdf.uses_takikawa_encoding || m_sdf.use_triangle_octree ? m_sdf.triangle_octree.get() : nullptr;
 
-	// Reserve the memory for max-res rendering to prevent stuttering
-	m_sdf.tracer.enlarge(max_res.x() * max_res.y());
+	SphereTracer tracer;
 
 	uint32_t n_octree_levels = octree_ptr ? octree_ptr->depth() : 0;
 	if (m_render_ground_truth && m_sdf.groundtruth_mode == ESDFGroundTruthMode::SDFBricks) {
@@ -837,7 +869,7 @@ void Testbed::render_sdf(
 
 	BoundingBox sdf_bounding_box = m_aabb;
 	sdf_bounding_box.inflate(m_sdf.zero_offset);
-	m_sdf.tracer.init_rays_from_camera(
+	tracer.init_rays_from_camera(
 		render_buffer.spp(),
 		render_buffer.in_resolution(),
 		focal_length,
@@ -881,22 +913,22 @@ void Testbed::render_sdf(
 
 	uint32_t n_hit;
 	if (m_render_mode == ERenderMode::Slice) {
-		n_hit = m_sdf.tracer.n_rays_initialized();
+		n_hit = tracer.n_rays_initialized();
 	} else {
-		n_hit = trace(m_sdf.tracer);
+		n_hit = trace(tracer);
 	}
-	RaysSdfSoa& rays_hit = m_render_mode == ERenderMode::Slice || gt_raytrace ? m_sdf.tracer.rays_init() : m_sdf.tracer.rays_hit();
+	RaysSdfSoa& rays_hit = m_render_mode == ERenderMode::Slice || gt_raytrace ? tracer.rays_init() : tracer.rays_hit();
 
 	if (m_render_mode == ERenderMode::Slice) {
 		if (m_visualized_dimension == -1) {
 			distance_function(n_hit, rays_hit.pos, rays_hit.distance, stream);
-			extract_dimension_pos_neg_kernel<float><<<n_blocks_linear(n_hit*3), n_threads_linear, 0, stream>>>(n_hit*3, 0, 1, 3, rays_hit.distance.data(), CM, (float*)rays_hit.normal.data());
+			extract_dimension_pos_neg_kernel<float><<<n_blocks_linear(n_hit*3), n_threads_linear, 0, stream>>>(n_hit*3, 0, 1, 3, rays_hit.distance, CM, (float*)rays_hit.normal);
 		} else {
 			// Store colors in the normal buffer
 			uint32_t n_elements = next_multiple(n_hit, tcnn::batch_size_granularity);
 
-			GPUMatrix<float> positions_matrix((float*)rays_hit.pos.data(), 3, n_elements);
-			GPUMatrix<float> colors_matrix((float*)rays_hit.normal.data(), 3, n_elements);
+			GPUMatrix<float> positions_matrix((float*)rays_hit.pos, 3, n_elements);
+			GPUMatrix<float> colors_matrix((float*)rays_hit.normal, 3, n_elements);
 			m_network->visualize_activation(stream, m_visualized_layer, m_visualized_dimension, positions_matrix, colors_matrix);
 		}
 	}
@@ -906,45 +938,47 @@ void Testbed::render_sdf(
 		if (m_sdf.analytic_normals || gt_raytrace) {
 			normals_function(n_hit, rays_hit.pos, rays_hit.normal, stream);
 		} else {
-			// Prevent spurious enlargements by reserving enough memory to hold a full-res image in any case.
-			m_sdf.fd_normals.enlarge(render_buffer.in_resolution().x() * render_buffer.in_resolution().y());
 			float fd_normals_epsilon = m_sdf.fd_normals_epsilon;
 			if (m_render_ground_truth && m_sdf.groundtruth_mode == ESDFGroundTruthMode::SDFBricks && m_sdf.brick_smooth_normals) {
 				fd_normals_epsilon = exp2f(-float(n_octree_levels)) * (1.f/(m_sdf.brick_res-1)); // in sdf brick mode, use one voxel as the normal central difference radius
 			}
-			m_sdf.fd_normals.normal(n_hit, distance_function, rays_hit.pos, rays_hit.normal, fd_normals_epsilon, stream);
+
+			FiniteDifferenceNormalsApproximator fd_normals;
+			fd_normals.normal(n_hit, distance_function, rays_hit.pos, rays_hit.normal, fd_normals_epsilon, stream);
 		}
 
 		if (render_mode == ERenderMode::Shade && n_hit > 0) {
 			// Shadow rays towards the sun
-			m_sdf.shadow_tracer.init_rays_from_data(n_hit, rays_hit, stream);
-			m_sdf.shadow_tracer.set_trace_shadow_rays(true);
-			m_sdf.shadow_tracer.set_shadow_sharpness(m_sdf.shadow_sharpness);
-			RaysSdfSoa& shadow_rays_init = m_sdf.shadow_tracer.rays_init();
+			SphereTracer shadow_tracer;
+
+			shadow_tracer.init_rays_from_data(n_hit, rays_hit, stream);
+			shadow_tracer.set_trace_shadow_rays(true);
+			shadow_tracer.set_shadow_sharpness(m_sdf.shadow_sharpness);
+			RaysSdfSoa& shadow_rays_init = shadow_tracer.rays_init();
 			linear_kernel(prepare_shadow_rays, 0, stream,
 				n_hit,
 				m_sun_dir.normalized(),
-				shadow_rays_init.pos.data(),
-				shadow_rays_init.normal.data(),
-				shadow_rays_init.distance.data(),
-				shadow_rays_init.prev_distance.data(),
-				shadow_rays_init.total_distance.data(),
-				shadow_rays_init.min_visibility.data(),
-				shadow_rays_init.payload.data(),
+				shadow_rays_init.pos,
+				shadow_rays_init.normal,
+				shadow_rays_init.distance,
+				shadow_rays_init.prev_distance,
+				shadow_rays_init.total_distance,
+				shadow_rays_init.min_visibility,
+				shadow_rays_init.payload,
 				sdf_bounding_box,
 				octree_ptr ? octree_ptr->nodes_gpu() : nullptr,
 				n_octree_levels
 			);
-			uint32_t n_hit_shadow = trace(m_sdf.shadow_tracer);
-			auto& shadow_rays_hit = gt_raytrace ? m_sdf.shadow_tracer.rays_init() : m_sdf.shadow_tracer.rays_hit();
+			uint32_t n_hit_shadow = trace(shadow_tracer);
+			auto& shadow_rays_hit = gt_raytrace ? shadow_tracer.rays_init() : shadow_tracer.rays_hit();
 
 			linear_kernel(write_shadow_ray_result, 0, stream,
 				n_hit_shadow,
 				sdf_bounding_box,
-				shadow_rays_hit.pos.data(),
-				shadow_rays_hit.payload.data(),
-				shadow_rays_hit.min_visibility.data(),
-				rays_hit.distance.data()
+				shadow_rays_hit.pos,
+				shadow_rays_hit.payload,
+				shadow_rays_hit.min_visibility,
+				rays_hit.distance
 			);
 
 			// todo: Reflection rays?
@@ -953,8 +987,8 @@ void Testbed::render_sdf(
 		// HACK: Store colors temporarily in the normal buffer
 		uint32_t n_elements = next_multiple(n_hit, tcnn::batch_size_granularity);
 
-		GPUMatrix<float> positions_matrix((float*)rays_hit.pos.data(), 3, n_elements);
-		GPUMatrix<float> colors_matrix((float*)rays_hit.normal.data(), 3, n_elements);
+		GPUMatrix<float> positions_matrix((float*)rays_hit.pos, 3, n_elements);
+		GPUMatrix<float> colors_matrix((float*)rays_hit.normal, 3, n_elements);
 		m_network->visualize_activation(stream, m_visualized_layer, m_visualized_dimension, positions_matrix, colors_matrix);
 	}
 
@@ -967,17 +1001,18 @@ void Testbed::render_sdf(
 		m_sun_dir.normalized(),
 		m_up_dir.normalized(),
 		camera_matrix,
-		rays_hit.pos.data(),
-		rays_hit.normal.data(),
-		rays_hit.distance.data(),
-		rays_hit.payload.data(),
+		rays_hit.pos,
+		rays_hit.normal,
+		rays_hit.distance,
+		rays_hit.payload,
 		render_buffer.frame_buffer(),
 		render_buffer.depth_buffer()
 	);
 
 	if (render_mode == ERenderMode::Cost) {
 		std::vector<SdfPayload> payloads_final_cpu(n_hit);
-		rays_hit.payload.copy_to_host(payloads_final_cpu, n_hit);
+		CUDA_CHECK_THROW(cudaMemcpyAsync(payloads_final_cpu.data(), rays_hit.payload, n_hit * sizeof(SdfPayload), cudaMemcpyDeviceToHost, stream));
+		CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
 		size_t total_n_steps = 0;
 		for (uint32_t i = 0; i < n_hit; ++i) {
 			total_n_steps += payloads_final_cpu[i].n_steps;

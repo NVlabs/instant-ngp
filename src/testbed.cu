@@ -2710,7 +2710,7 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 					}
 				}
 				distance_fun_t distance_fun =
-					m_render_ground_truth ? (distance_fun_t)[&](uint32_t n_elements, const GPUMemory<Vector3f>& positions, GPUMemory<float>& distances, cudaStream_t stream) {
+					m_render_ground_truth ? (distance_fun_t)[&](uint32_t n_elements, const Vector3f* positions, float* distances, cudaStream_t stream) {
 						if (n_elements == 0) {
 							return;
 						}
@@ -2730,35 +2730,35 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 							m_sdf.triangle_bvh->signed_distance_gpu(
 								n_elements,
 								m_sdf.mesh_sdf_mode,
-								(Vector3f*)positions.data(),
-								distances.data(),
+								(Vector3f*)positions,
+								distances,
 								m_sdf.triangles_gpu.data(),
 								false,
 								m_stream.get()
 							);
 						}
-					} : (distance_fun_t)[&](uint32_t n_elements, const GPUMemory<Vector3f>& positions, GPUMemory<float>& distances, cudaStream_t stream) {
+					} : (distance_fun_t)[&](uint32_t n_elements, const Vector3f* positions, float* distances, cudaStream_t stream) {
 						if (n_elements == 0) {
 							return;
 						}
 						n_elements = next_multiple(n_elements, tcnn::batch_size_granularity);
-						GPUMatrix<float> positions_matrix((float*)positions.data(), 3, n_elements);
-						GPUMatrix<float, RM> distances_matrix(distances.data(), 1, n_elements);
+						GPUMatrix<float> positions_matrix((float*)positions, 3, n_elements);
+						GPUMatrix<float, RM> distances_matrix(distances, 1, n_elements);
 						m_network->inference(stream, positions_matrix, distances_matrix);
 					};
 
 				normals_fun_t normals_fun =
-					m_render_ground_truth ? (normals_fun_t)[&](uint32_t n_elements, const GPUMemory<Vector3f>& positions, GPUMemory<Vector3f>& normals, cudaStream_t stream) {
+					m_render_ground_truth ? (normals_fun_t)[&](uint32_t n_elements, const Vector3f* positions, Vector3f* normals, cudaStream_t stream) {
 						// NO-OP. Normals will automatically be populated by raytrace
-					} : (normals_fun_t)[&](uint32_t n_elements, const GPUMemory<Vector3f>& positions, GPUMemory<Vector3f>& normals, cudaStream_t stream) {
+					} : (normals_fun_t)[&](uint32_t n_elements, const Vector3f* positions, Vector3f* normals, cudaStream_t stream) {
 						if (n_elements == 0) {
 							return;
 						}
 
 						n_elements = next_multiple(n_elements, tcnn::batch_size_granularity);
 
-						GPUMatrix<float> positions_matrix((float*)positions.data(), 3, n_elements);
-						GPUMatrix<float> normals_matrix((float*)normals.data(), 3, n_elements);
+						GPUMatrix<float> positions_matrix((float*)positions, 3, n_elements);
+						GPUMatrix<float> normals_matrix((float*)normals, 3, n_elements);
 						m_network->input_gradient(stream, 0, positions_matrix, normals_matrix);
 					};
 

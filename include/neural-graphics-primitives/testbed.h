@@ -69,12 +69,12 @@ public:
 	void load_training_data(const std::string& data_path);
 	void clear_training_data();
 
-	using distance_fun_t = std::function<void(uint32_t, const tcnn::GPUMemory<Eigen::Vector3f>&, tcnn::GPUMemory<float>&, cudaStream_t)>;
-	using normals_fun_t = std::function<void(uint32_t, const tcnn::GPUMemory<Eigen::Vector3f>&, tcnn::GPUMemory<Eigen::Vector3f>&, cudaStream_t)>;
+	using distance_fun_t = std::function<void(uint32_t, const Eigen::Vector3f*, float*, cudaStream_t)>;
+	using normals_fun_t = std::function<void(uint32_t, const Eigen::Vector3f*, Eigen::Vector3f*, cudaStream_t)>;
 
 	class SphereTracer {
 	public:
-		SphereTracer() : m_hit_counter(1), m_alive_counter(1) {}
+		SphereTracer() {}
 
 		void init_rays_from_camera(
 			uint32_t spp,
@@ -111,7 +111,7 @@ public:
 			uint32_t n_octree_levels,
 			cudaStream_t stream
 		);
-		void enlarge(size_t n_elements);
+		void enlarge(size_t n_elements, cudaStream_t stream);
 		RaysSdfSoa& rays_hit() { return m_rays_hit; }
 		RaysSdfSoa& rays_init() { return m_rays[0];	}
 		uint32_t n_rays_initialized() const { return m_n_rays_initialized; }
@@ -120,16 +120,19 @@ public:
 	private:
 		RaysSdfSoa m_rays[2];
 		RaysSdfSoa m_rays_hit;
-		tcnn::GPUMemory<uint32_t> m_hit_counter;
-		tcnn::GPUMemory<uint32_t> m_alive_counter;
+		uint32_t* m_hit_counter;
+		uint32_t* m_alive_counter;
+
 		uint32_t m_n_rays_initialized = 0;
 		float m_shadow_sharpness = 2048.f;
 		bool m_trace_shadow_rays = false;
+
+		tcnn::GPUMemoryArena::Allocation m_scratch_alloc;
 	};
 
 	class NerfTracer {
 	public:
-		NerfTracer() : m_hit_counter(1), m_alive_counter(1) {}
+		NerfTracer() {}
 
 		void init_rays_from_camera(
 			uint32_t spp,
@@ -193,38 +196,36 @@ public:
 		RaysNerfSoa& rays_init() { return m_rays[0]; }
 		uint32_t n_rays_initialized() const { return m_n_rays_initialized; }
 
-		void clear() {
-			m_scratch_alloc = {};
-		}
-
 	private:
 		RaysNerfSoa m_rays[2];
 		RaysNerfSoa m_rays_hit;
 		precision_t* m_network_output;
 		float* m_network_input;
-		tcnn::GPUMemory<uint32_t> m_hit_counter;
-		tcnn::GPUMemory<uint32_t> m_alive_counter;
+		uint32_t* m_hit_counter;
+		uint32_t* m_alive_counter;
 		uint32_t m_n_rays_initialized = 0;
 		tcnn::GPUMemoryArena::Allocation m_scratch_alloc;
 	};
 
 	class FiniteDifferenceNormalsApproximator {
 	public:
-		void enlarge(uint32_t n_elements);
-		void normal(uint32_t n_elements, const distance_fun_t& distance_function, tcnn::GPUMemory<Eigen::Vector3f>& pos, tcnn::GPUMemory<Eigen::Vector3f>& normal, float epsilon, cudaStream_t stream);
+		void enlarge(uint32_t n_elements, cudaStream_t stream);
+		void normal(uint32_t n_elements, const distance_fun_t& distance_function, const Eigen::Vector3f* pos, Eigen::Vector3f* normal, float epsilon, cudaStream_t stream);
 
 	private:
-		tcnn::GPUMemory<Eigen::Vector3f> dx;
-		tcnn::GPUMemory<Eigen::Vector3f> dy;
-		tcnn::GPUMemory<Eigen::Vector3f> dz;
+		Eigen::Vector3f* dx;
+		Eigen::Vector3f* dy;
+		Eigen::Vector3f* dz;
 
-		tcnn::GPUMemory<float> dist_dx_pos;
-		tcnn::GPUMemory<float> dist_dy_pos;
-		tcnn::GPUMemory<float> dist_dz_pos;
+		float* dist_dx_pos;
+		float* dist_dy_pos;
+		float* dist_dz_pos;
 
-		tcnn::GPUMemory<float> dist_dx_neg;
-		tcnn::GPUMemory<float> dist_dy_neg;
-		tcnn::GPUMemory<float> dist_dz_neg;
+		float* dist_dx_neg;
+		float* dist_dy_neg;
+		float* dist_dz_neg;
+
+		tcnn::GPUMemoryArena::Allocation m_scratch_alloc;
 	};
 
 	struct LevelStats {
@@ -532,8 +533,6 @@ public:
 	bool m_gui_redraw = true;
 
 	struct Nerf {
-		NerfTracer tracer;
-
 		struct Training {
 			NerfDataset dataset;
 			int n_images_for_training = 0; // how many images to train from, as a high watermark compared to the dataset size
@@ -640,9 +639,6 @@ public:
 
 		uint32_t max_cascade = 0;
 
-		tcnn::GPUMemory<float> vis_input;
-		tcnn::GPUMemory<Eigen::Array4f> vis_rgba;
-
 		ENerfActivation rgb_activation = ENerfActivation::Exponential;
 		ENerfActivation density_activation = ENerfActivation::Exponential;
 
@@ -666,8 +662,6 @@ public:
 	} m_nerf;
 
 	struct Sdf {
-		SphereTracer tracer;
-		SphereTracer shadow_tracer;
 		float shadow_sharpness = 2048.0f;
 		float maximum_distance = 0.00005f;
 		float fd_normals_epsilon = 0.0005f;
@@ -675,8 +669,6 @@ public:
 		ESDFGroundTruthMode groundtruth_mode = ESDFGroundTruthMode::RaytracedMesh;
 
 		BRDFParams brdf;
-
-		FiniteDifferenceNormalsApproximator fd_normals;
 
 		// Mesh data
 		EMeshSdfMode mesh_sdf_mode = EMeshSdfMode::Raystab;
@@ -764,7 +756,7 @@ public:
 		tcnn::GPUMemory<char> nanovdb_grid;
 		tcnn::GPUMemory<uint8_t> bitgrid;
 		float global_majorant = 1.f;
-		Eigen::Vector3f world2index_offset = {0,0,0};
+		Eigen::Vector3f world2index_offset = {0, 0, 0};
 		float world2index_scale = 1.f;
 
 		struct Training {
