@@ -144,4 +144,4 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: Windows binaries for ${{ matrix.recommended_gpus }}
-          path: ${{ env.build_dir }}/testbed.exe
+          path: ${{ env.build_dir }}/instant-ngp.exe

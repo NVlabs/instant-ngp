@@ -84,7 +84,7 @@ The `aabb_scale` parameter is the most important `instant-ngp` specific paramete
 Assuming success, you can now train your NeRF model as follows, starting in the `instant-ngp` folder:
 
 ```sh
-instant-ngp$ ./build/testbed --mode nerf --scene [path to training data folder containing transforms.json]
+instant-ngp$ ./build/instant-ngp --mode nerf --scene [path to training data folder containing transforms.json]
 ```
 
 ### Record3D
@@ -102,7 +102,7 @@ With an >=iPhone 12 Pro, one can use [Record3D](https://record3d.app/) to collec
 
 5. Launch Instant-NGP training:
 	```
-	./build/testbed --scene path/to/data
+	./build/instant-ngp --scene path/to/data
 	```
 
 ## Tips for NeRF training data

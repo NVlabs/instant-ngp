@@ -28,8 +28,8 @@ namespace fs = ::filesystem;
 
 int main(int argc, char** argv) {
 	ArgumentParser parser{
-		"neural graphics primitives\n"
-		"version " NGP_VERSION,
+		"Instant Neural Graphics Primitives\n"
+		"Version " NGP_VERSION,
 		"",
 	};
 
@@ -99,7 +99,7 @@ int main(int argc, char** argv) {
 	Flag version_flag{
 		parser,
 		"VERSION",
-		"Display the version of neural graphics primitives.",
+		"Display the version of instant neural graphics primitives.",
 		{'v', "version"},
 	};
 
@@ -121,7 +121,7 @@ int main(int argc, char** argv) {
 	}
 
 	if (version_flag) {
-		tlog::none() << "neural graphics primitives version " NGP_VERSION;
+		tlog::none() << "Instant Neural Graphics Primitives v" NGP_VERSION;
 		return 0;
 	}
 

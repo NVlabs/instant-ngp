@@ -10,7 +10,7 @@ cmake_minimum_required(VERSION 3.18)
 
 project(instant-ngp
 	VERSION 1.0
-	DESCRIPTION "Instant neural graphics primitives"
+	DESCRIPTION "Instant Neural Graphics Primitives"
 	LANGUAGES C CXX CUDA
 )
 set(NGP_VERSION "${CMAKE_PROJECT_VERSION}")
@@ -116,8 +116,8 @@ if (NGP_BUILD_WITH_GUI)
 		set(NGP_VULKAN OFF)
 		if (NGP_BUILD_WITH_VULKAN)
 			message(WARNING
-				"Vulkan was not found. Neural graphics primitives will still compile "
-				"and run correctly, but DLSS will not be supported."
+				"Vulkan was not found. Instant neural graphics primitives will still "
+				"compile and run correctly, but DLSS will not be supported."
 			)
 		endif()
 	endif()
@@ -279,8 +279,8 @@ target_include_directories(ngp PUBLIC ${NGP_INCLUDE_DIRECTORIES})
 target_link_directories(ngp PUBLIC ${NGP_LINK_DIRECTORIES})
 target_link_libraries(ngp PUBLIC ${NGP_LIBRARIES} tiny-cuda-nn)
 
-add_executable(testbed src/main.cu)
-target_link_libraries(testbed PRIVATE ngp)
+add_executable(instant-ngp src/main.cu)
+target_link_libraries(instant-ngp PRIVATE ngp)
 
 # Copy DLSS shared libraries
 if (NGP_VULKAN)
@@ -291,14 +291,14 @@ if (NGP_VULKAN)
 	endif()
 
 	if (MSVC)
-		add_custom_command(TARGET testbed POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/${NGX_BUILD_DIR}/nvngx_dlss.dll" $<TARGET_FILE_DIR:testbed>
+		add_custom_command(TARGET instant-ngp POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/${NGX_BUILD_DIR}/nvngx_dlss.dll" $<TARGET_FILE_DIR:instant-ngp>
 			COMMAND_EXPAND_LISTS
 		)
 	else()
 		file(GLOB DLSS_SOS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64/${NGX_BUILD_DIR}/libnvidia-ngx-dlss.so.*")
-		add_custom_command(TARGET testbed POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy ${DLSS_SOS} $<TARGET_FILE_DIR:testbed>
+		add_custom_command(TARGET instant-ngp POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy ${DLSS_SOS} $<TARGET_FILE_DIR:instant-ngp>
 			COMMAND_EXPAND_LISTS
 		)
 	endif()
