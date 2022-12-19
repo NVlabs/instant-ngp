@@ -64,7 +64,6 @@ jobs:
         working-directory: ${{ env.build_dir }}
         run: cmake --build . --target all --verbose -j `nproc`
 
-
   build_windows:
     name: Build on Windows
     runs-on: ${{ matrix.os }}
@@ -124,3 +123,8 @@ jobs:
       - name: Build
         working-directory: ${{ env.build_dir }}
         run: cmake --build . --config ${{ env.config }} --target ALL_BUILD --verbose
+      - name: Upload executable
+        uses: actions/upload-artifact@v3
+        with:
+          name: Windows binary for CC ${{ matrix.arch }}
+          path: ${{ env.build_dir }}/testbed.exe
