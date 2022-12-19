@@ -181,22 +181,10 @@ if (OPENMP_FOUND)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 endif()
 
-find_package(OptiX)
-# set OptiX_INSTALL_DIR via your environment if it's not found automatically
-
-if ((OptiX_FOUND OR OptiX_INCLUDE) AND NGP_BUILD_WITH_OPTIX)
+if (NGP_BUILD_WITH_OPTIX)
 	set(NGP_OPTIX ON)
-	list(APPEND NGP_INCLUDE_DIRECTORIES "${OptiX_INCLUDE}")
+	list(APPEND NGP_INCLUDE_DIRECTORIES "dependencies/optix")
 	list(APPEND NGP_DEFINITIONS -DNGP_OPTIX)
-else()
-	set(NGP_OPTIX OFF)
-	if (NGP_BUILD_WITH_OPTIX)
-		message(WARNING
-			"OptiX was not found. Neural graphics primitives will still compile "
-			"and run correctly. However, SDF training in 'raystab' and 'pathescape' "
-			"modes will be significantly slower."
-		)
-	endif()
 endif()
 
 find_package(Python 3.7 COMPONENTS Interpreter Development)
