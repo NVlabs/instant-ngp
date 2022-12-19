@@ -58,11 +58,18 @@ jobs:
           cuda: ${{ matrix.cuda }}
         run: ./dependencies/cuda-cmake-github-actions/scripts/actions/install_cuda_ubuntu.sh
         shell: bash
+      - name: Prepare Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.0
+        with:
+          vulkan-query-version: 1.3.204.0
+          vulkan-components: Vulkan-Headers, Vulkan-Loader
+          vulkan-use-cache: true
       - name: CMake
         run: cmake . -B ${{ env.build_dir }} -DCMAKE_BUILD_TYPE=${{ env.config }}
       - name: Build
         working-directory: ${{ env.build_dir }}
         run: cmake --build . --target all --verbose -j `nproc`
+
 
   build_windows:
     name: Build on Windows
@@ -118,6 +125,12 @@ jobs:
           visual_studio: ${{ matrix.visual_studio }}
         shell: powershell
         run: .\dependencies\cuda-cmake-github-actions\scripts\actions\install_cuda_windows.ps1
+      - name: Prepare Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.0
+        with:
+          vulkan-query-version: 1.3.204.0
+          vulkan-components: Vulkan-Headers, Vulkan-Loader
+          vulkan-use-cache: true
       - name: CMake
         run: cmake . -B ${{ env.build_dir }} -G "${{ matrix.visual_studio }}" -A x64
       - name: Build
