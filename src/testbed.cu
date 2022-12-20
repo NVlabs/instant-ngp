@@ -1905,7 +1905,7 @@ void Testbed::init_window(int resw, int resh, bool hidden, bool second_window) {
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 	glfwWindowHint(GLFW_VISIBLE, hidden ? GLFW_FALSE : GLFW_TRUE);
-	std::string title = "Neural graphics primitives (";
+	std::string title = "Instant Neural Graphics Primitives v" NGP_VERSION " (";
 	switch (m_testbed_mode) {
 		case ETestbedMode::Image: title += "Image"; break;
 		case ETestbedMode::Sdf: title += "SDF"; break;
