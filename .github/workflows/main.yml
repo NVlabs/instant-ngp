@@ -81,19 +81,19 @@ jobs:
             cuda: "11.5.1"
             arch: 86
             python: "3.11"
-            recommended_gpus: "RTX 3000 and 4000 series (Ampere and Ada)"
+            recommended_gpus: "RTX 3000 & 4000 (Ampere & Ada)"
           - os: windows-2019
             visual_studio: "Visual Studio 16 2019"
             cuda: "11.5.1"
             arch: 75
             python: "3.10"
-            recommended_gpus: "RTX 2000 series (Turing)"
+            recommended_gpus: "RTX 2000 (Turing)"
           - os: windows-2019
             visual_studio: "Visual Studio 16 2019"
             cuda: "11.5.1"
             arch: 70
             python: "3.9"
-            recommended_gpus: "GTX 1000 series (Pascal)"
+            recommended_gpus: "GTX 1000 (Pascal)"
           - os: windows-2019
             visual_studio: "Visual Studio 16 2019"
             cuda: "11.5.1"
@@ -141,7 +141,7 @@ jobs:
         if: ${{ matrix.recommended_gpus }}
         uses: actions/upload-artifact@v3
         with:
-          name: "Instant NGP for ${{ matrix.recommended_gpus }}.zip"
+          name: Instant NGP for ${{ matrix.recommended_gpus }}
           path: |
             README.md
             LICENSE.txt
