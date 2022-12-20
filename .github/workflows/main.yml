@@ -139,9 +139,15 @@ jobs:
       - name: Build
         working-directory: ${{ env.build_dir }}
         run: cmake --build . --config ${{ env.config }} --target ALL_BUILD --verbose
+      - name: zip Binaries, Configs, and Datasets
+        if: ${{ matrix.recommended_gpus }}
+        uses: vimtor/action-zip@v1
+        with:
+          files: README.md LICENSE.txt ${{ env.build_dir }}/instant-ngp.exe ${{ env.build_dir }}/nvngx_dlss.dll configs/ docs/nerf_dataset_tips.md docs/assets_readme/ data/
+          dest: "Instant NGP for ${{ matrix.recommended_gpus }}.zip"
       - name: Upload binaries
         if: ${{ matrix.recommended_gpus }}
         uses: actions/upload-artifact@v3
         with:
-          name: Windows binaries for ${{ matrix.recommended_gpus }}
-          path: ${{ env.build_dir }}/instant-ngp.exe
+          name: Windows release for ${{ matrix.recommended_gpus }}
+          path: ./*.zip
