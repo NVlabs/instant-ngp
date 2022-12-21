@@ -69,7 +69,7 @@ set(CUDA_LINK_LIBRARIES_KEYWORD PUBLIC)
 set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
 
 if (MSVC)
-	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-bigobj")
+	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=/bigobj")
 else()
 	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-mf16c")
 	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-Wno-float-conversion")
