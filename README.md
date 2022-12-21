@@ -21,11 +21,14 @@ For business inquiries, please submit the [NVIDIA research licensing form](https
 
 - An __NVIDIA GPU__; tensor cores increase performance when available. All shown results come from an RTX 3090.
 - A __C++14__ capable compiler. The following choices are recommended and have been tested:
-  - __Windows:__ Visual Studio 2019
-  - __Linux:__ GCC/G++ 7.5 or higher
-- __[CUDA](https://developer.nvidia.com/cuda-toolkit) v10.2 or higher__ and __[CMake](https://cmake.org/) v3.21 or higher__.
+  - __Windows:__ Visual Studio 2019 or 2022
+  - __Linux:__ GCC/G++ 8 or higher
+- A recent version of __[CUDA](https://developer.nvidia.com/cuda-toolkit)__. The following choices are recommended and have been tested:
+  - __Windows:__ CUDA 11.5 or higher
+  - __Linux:__ CUDA 10.2 or higher
+- __[CMake](https://cmake.org/) v3.21 or higher__.
 - __(optional) [Python](https://www.python.org/) 3.7 or higher__ for interactive bindings. Also, run `pip install -r requirements.txt`.
-- __(optional) [OptiX](https://developer.nvidia.com/optix) 7.3 or higher__ for faster mesh SDF training. Set the environment variable `OptiX_INSTALL_DIR` to the installation directory if it is not discovered automatically.
+- __(optional) [OptiX](https://developer.nvidia.com/optix) 7.3 or higher__ for faster mesh SDF training.
 - __(optional) [Vulkan SDK](https://vulkan.lunarg.com/)__ for DLSS support.
 
 
@@ -68,7 +71,8 @@ instant-ngp$ cmake . -B build
 instant-ngp$ cmake --build build --config RelWithDebInfo -j
 ```
 
-If the build fails, please consult [this list of possible fixes](https://github.com/NVlabs/instant-ngp#troubleshooting-compile-errors) before opening an issue.
+If compilation fails inexplicably or takes longer than an hour, you might be running out of memory. Try running the above command without `-j` in that case.
+If this does not help, please consult [this list of possible fixes](https://github.com/NVlabs/instant-ngp#troubleshooting-compile-errors) before opening an issue.
 
 If the build succeeds, you can now run the code via the `build/instant-ngp` executable or the `scripts/run.py` script described below.
 
