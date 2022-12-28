@@ -100,10 +100,10 @@ void Testbed::load_training_data(const std::string& data_path) {
 	}
 
 	switch (m_testbed_mode) {
-		case ETestbedMode::Nerf:  load_nerf(); break;
-		case ETestbedMode::Sdf:   load_mesh(); break;
-		case ETestbedMode::Image: load_image(); break;
-		case ETestbedMode::Volume:load_volume(); break;
+		case ETestbedMode::Nerf:   load_nerf(); break;
+		case ETestbedMode::Sdf:    load_mesh(); break;
+		case ETestbedMode::Image:  load_image(); break;
+		case ETestbedMode::Volume: load_volume(); break;
 		default: throw std::runtime_error{"Invalid testbed mode."};
 	}
 
