@@ -205,6 +205,7 @@ endif()
 list(APPEND NGP_SOURCES
 	${GUI_SOURCES}
 	src/camera_path.cu
+	src/common.cu
 	src/common_device.cu
 	src/marching_cubes.cu
 	src/nerf_loader.cu

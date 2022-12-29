@@ -43,7 +43,7 @@ int main(int argc, char** argv) {
 	ValueFlag<string> mode_flag{
 		parser,
 		"MODE",
-		"Mode can be 'nerf', 'sdf', or 'image' or 'volume'. Inferred from the scene if unspecified.",
+		"Deprecated. Do not use.",
 		{'m', "mode"},
 	};
 
@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
 	ValueFlag<string> scene_flag{
 		parser,
 		"SCENE",
-		"The scene to load. Can be NeRF dataset, a *.obj mesh for training a SDF, an image, or a *.nvdb volume.",
+		"The scene to load. Can be NeRF dataset, a *.obj/*.ply mesh for training a SDF, an image, or a *.nvdb volume.",
 		{'s', "scene"},
 	};
 
@@ -103,6 +103,12 @@ int main(int argc, char** argv) {
 		{'v', "version"},
 	};
 
+	PositionalList<string> files{
+		parser,
+		"files",
+		"Files to be loaded. Can be a scene, network config, snapshot, camera path, or a combination of those.",
+	};
+
 	// Parse command line arguments and react to parsing
 	// errors using exceptions.
 	try {
@@ -126,99 +132,32 @@ int main(int argc, char** argv) {
 	}
 
 	try {
-		ETestbedMode mode;
-		if (!mode_flag) {
-			if (!scene_flag) {
-				tlog::error() << "Must specify either a mode or a scene";
-				return 1;
-			}
-
-			fs::path scene_path = get(scene_flag);
-			if (!scene_path.exists()) {
-				tlog::error() << "Scene path " << scene_path << " does not exist.";
-				return 1;
-			}
-
-			if (scene_path.is_directory() || equals_case_insensitive(scene_path.extension(), "json")) {
-				mode = ETestbedMode::Nerf;
-			} else if (equals_case_insensitive(scene_path.extension(), "obj") || equals_case_insensitive(scene_path.extension(), "stl")) {
-				mode = ETestbedMode::Sdf;
-			} else if (equals_case_insensitive(scene_path.extension(), "nvdb")) {
-				mode = ETestbedMode::Volume;
-			} else {
-				mode = ETestbedMode::Image;
-			}
-		} else {
-			auto mode_str = get(mode_flag);
-			if (equals_case_insensitive(mode_str, "nerf")) {
-				mode = ETestbedMode::Nerf;
-			} else if (equals_case_insensitive(mode_str, "sdf")) {
-				mode = ETestbedMode::Sdf;
-			} else if (equals_case_insensitive(mode_str, "image")) {
-				mode = ETestbedMode::Image;
-			} else if (equals_case_insensitive(mode_str, "volume")) {
-				mode = ETestbedMode::Volume;
-			} else {
-				tlog::error() << "Mode must be one of 'nerf', 'sdf', 'image', and 'volume'.";
-				return 1;
-			}
+		if (mode_flag) {
+			tlog::warning() << "The '--mode' argument is no longer in use. It has no effect. The mode is automatically chosen based on the scene.";
 		}
 
-		Testbed testbed{mode};
+		Testbed testbed;
+
+		for (auto file : get(files)) {
+			testbed.load_file(file);
+		}
 
 		if (scene_flag) {
-			fs::path scene_path = get(scene_flag);
-			if (!scene_path.exists()) {
-				tlog::error() << "Scene path " << scene_path << " does not exist.";
-				return 1;
-			}
-			testbed.load_training_data(scene_path.str());
-		}
-
-		std::string mode_str;
-		switch (mode) {
-			case ETestbedMode::Nerf:   mode_str = "nerf";   break;
-			case ETestbedMode::Sdf:    mode_str = "sdf";    break;
-			case ETestbedMode::Image:  mode_str = "image";  break;
-			case ETestbedMode::Volume: mode_str = "volume"; break;
+			testbed.load_training_data(get(scene_flag));
 		}
 
 		if (snapshot_flag) {
-			// Load network from a snapshot if one is provided
-			fs::path snapshot_path = get(snapshot_flag);
-			if (!snapshot_path.exists()) {
-				tlog::error() << "Snapshot path " << snapshot_path << " does not exist.";
-				return 1;
-			}
-
-			testbed.load_snapshot(snapshot_path.str());
-			testbed.m_train = false;
-		} else {
-			// Otherwise, load the network config and prepare for training
-			fs::path network_config_path = fs::path{"configs"}/mode_str;
-			if (network_config_flag) {
-				auto network_config_str = get(network_config_flag);
-				if ((network_config_path/network_config_str).exists()) {
-					network_config_path = network_config_path/network_config_str;
-				} else {
-					network_config_path = network_config_str;
-				}
-			} else {
-				network_config_path = network_config_path/"base.json";
-			}
-
-			if (!network_config_path.exists()) {
-				tlog::error() << "Network config path " << network_config_path << " does not exist.";
-				return 1;
-			}
-
-			testbed.reload_network_from_file(network_config_path.str());
-			testbed.m_train = !no_train_flag;
+			testbed.load_snapshot(get(snapshot_flag));
+		} else if (network_config_flag) {
+			testbed.reload_network_from_file(get(network_config_flag));
 		}
 
+		testbed.m_train = !no_train_flag;
+
+#ifdef NGP_GUI
 		bool gui = !no_gui_flag;
-#ifndef NGP_GUI
-		gui = false;
+#else
+		bool gui = false;
 #endif
 
 		if (gui) {

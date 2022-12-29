@@ -168,10 +168,6 @@ __global__ void compute_sharpness(Eigen::Vector2i sharpness_resolution, Eigen::V
 	*sharpness_data = (variance_of_laplacian) ; // / max(0.00001f,tot_lum*tot_lum); // var / (tot+0.001f);
 }
 
-bool ends_with(const std::string& str, const std::string& suffix) {
-	return str.size() >= suffix.size() && 0 == str.compare(str.size()-suffix.size(), suffix.size(), suffix);
-}
-
 NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale, bool is_hdr) {
 	NerfDataset result{};
 	result.n_images = n_images;

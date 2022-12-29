@@ -61,13 +61,15 @@ class GLTexture;
 class Testbed {
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-	Testbed(ETestbedMode mode);
+	Testbed(ETestbedMode mode = ETestbedMode::None);
 	~Testbed();
 	Testbed(ETestbedMode mode, const std::string& data_path) : Testbed(mode) { load_training_data(data_path); }
 	Testbed(ETestbedMode mode, const std::string& data_path, const std::string& network_config_path) : Testbed(mode, data_path) { reload_network_from_file(network_config_path); }
 	Testbed(ETestbedMode mode, const std::string& data_path, const nlohmann::json& network_config) : Testbed(mode, data_path) { reload_network_from_json(network_config); }
 	void load_training_data(const std::string& data_path);
 	void clear_training_data();
+
+	void set_mode(ETestbedMode mode);
 
 	using distance_fun_t = std::function<void(uint32_t, const Eigen::Vector3f*, float*, cudaStream_t)>;
 	using normals_fun_t = std::function<void(uint32_t, const Eigen::Vector3f*, Eigen::Vector3f*, cudaStream_t)>;
@@ -284,8 +286,9 @@ public:
 	void render_image(CudaRenderBuffer& render_buffer, cudaStream_t stream);
 	void render_frame(const Eigen::Matrix<float, 3, 4>& camera_matrix0, const Eigen::Matrix<float, 3, 4>& camera_matrix1, const Eigen::Vector4f& nerf_rolling_shutter, CudaRenderBuffer& render_buffer, bool to_srgb = true) ;
 	void visualize_nerf_cameras(ImDrawList* list, const Eigen::Matrix<float, 4, 4>& world2proj);
+	filesystem::path find_network_config(const filesystem::path& network_config_path);
 	nlohmann::json load_network_config(const filesystem::path& network_config_path);
-	void reload_network_from_file(const std::string& network_config_path);
+	void reload_network_from_file(const std::string& network_config_path = "");
 	void reload_network_from_json(const nlohmann::json& json, const std::string& config_base_path=""); // config_base_path is needed so that if the passed in json uses the 'parent' feature, we know where to look... be sure to use a filename, or if a directory, end with a trailing slash
 	void reset_accumulation(bool due_to_camera_movement = false, bool immediate_redraw = true);
 	void redraw_next_frame() {
@@ -306,7 +309,7 @@ public:
 	void translate_camera(const Eigen::Vector3f& rel);
 	void mouse_drag(const Eigen::Vector2f& rel, int button);
 	void mouse_wheel(Eigen::Vector2f m, float delta);
-	void handle_file(const std::string& file);
+	void load_file(const std::string& file);
 	void set_nerf_camera_matrix(const Eigen::Matrix<float, 3, 4>& cam);
 	Eigen::Vector3f look_at() const;
 	void set_look_at(const Eigen::Vector3f& pos);
@@ -463,7 +466,7 @@ public:
 	bool m_training_data_available = false;
 	bool m_render = true;
 	int m_max_spp = 0;
-	ETestbedMode m_testbed_mode = ETestbedMode::Sdf;
+	ETestbedMode m_testbed_mode = ETestbedMode::None;
 	bool m_max_level_rand_training = false;
 
 	// Rendering stuff
@@ -844,7 +847,7 @@ public:
 	bool m_train_network = true;
 
 	filesystem::path m_data_path;
-	filesystem::path m_network_config_path;
+	filesystem::path m_network_config_path = "base.json";
 
 	nlohmann::json m_network_config;
 

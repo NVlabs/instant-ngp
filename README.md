@@ -16,6 +16,7 @@ To get started with NVIDIA Instant NeRF, check out the [blog post](https://devel
 
 For business inquiries, please submit the [NVIDIA research licensing form](https://www.nvidia.com/en-us/research/inquiries/).
 
+
 ## Windows binary release
 
 If you have Windows and if you do not need Python bindings, you can download one of the following binary releases and then jump directly to the [usage instructions](https://github.com/NVlabs/instant-ngp#interactive-training-and-rendering). These releases are automatically regenerated whenever the code gets updated, so you can be sure that they have the latest features.
@@ -25,6 +26,7 @@ If you have Windows and if you do not need Python bindings, you can download one
 - [**GTX 1000 series, Titan Xp, Quadro P1000&ndash;P6000**, and other Pascal cards](https://nightly.link/NVlabs/instant-ngp/workflows/main/master/Instant%20NGP%20for%20GTX%201000%20%28Pascal%29.zip)
 
 If you use Linux, or want the Python bindings, or if your GPU is not listed above (e.g. Hopper, Volta, or Maxwell generations), use the following step-by-step instructions to compile __instant-ngp__ yourself.
+
 
 ## Requirements
 
@@ -37,7 +39,7 @@ If you use Linux, or want the Python bindings, or if your GPU is not listed abov
   - __Linux:__ CUDA 10.2 or higher
 - __[CMake](https://cmake.org/) v3.21 or higher__.
 - __(optional) [Python](https://www.python.org/) 3.7 or higher__ for interactive bindings. Also, run `pip install -r requirements.txt`.
-- __(optional) [OptiX](https://developer.nvidia.com/optix) 7.3 or higher__ for faster mesh SDF training.
+- __(optional) [OptiX](https://developer.nvidia.com/optix) 7.6 or higher__ for faster mesh SDF training.
 - __(optional) [Vulkan SDK](https://vulkan.lunarg.com/)__ for DLSS support.
 
 
@@ -49,7 +51,7 @@ sudo apt-get install build-essential git python3-dev python3-pip libopenexr-dev 
 
 Alternatively, if you are using Arch or Arch derivatives, install the following packages
 ```sh
-sudo pacman -S base-devel cmake openexr libxi glfw openmp libxinerama libxcursor
+sudo pacman -S cuda base-devel cmake openexr libxi glfw openmp libxinerama libxcursor
 ```
 
 We also recommend installing [CUDA](https://developer.nvidia.com/cuda-toolkit) and [OptiX](https://developer.nvidia.com/optix) in `/usr/local/` and adding the CUDA installation to your PATH.
@@ -58,11 +60,6 @@ For example, if you have CUDA 11.4, add the following to your `~/.bashrc`
 ```sh
 export PATH="/usr/local/cuda-11.4/bin:$PATH"
 export LD_LIBRARY_PATH="/usr/local/cuda-11.4/lib64:$LD_LIBRARY_PATH"
-```
-
-For Arch and derivatives,
-```sh
-sudo pacman -S cuda
 ```
 
 
@@ -112,13 +109,13 @@ Let's start using __instant-ngp__; more information about the GUI and other scri
 One test scene is provided in this repository, using a small number of frames from a casually captured phone video:
 
 ```sh
-instant-ngp$ ./build/instant-ngp --scene data/nerf/fox
+instant-ngp$ ./build/instant-ngp data/nerf/fox
 ```
 
 On Windows you need to reverse the slashes here (and below), i.e.:
 
 ```sh
-instant-ngp> .\build\instant-ngp --scene data\nerf\fox
+instant-ngp> .\build\instant-ngp data\nerf\fox
 ```
 
 <img src="docs/assets_readme/fox.png"/>
@@ -127,7 +124,7 @@ Alternatively, download any NeRF-compatible scene (e.g. from the [NeRF authors' 
 Now you can run:
 
 ```sh
-instant-ngp$ ./build/instant-ngp --scene data/nerf_synthetic/lego/transforms_train.json
+instant-ngp$ ./build/instant-ngp data/nerf_synthetic/lego/transforms_train.json
 ```
 
 **[To prepare your own dataset for use with our NeRF implementation, click here.](docs/nerf_dataset_tips.md)** See also [this video](https://www.youtube.com/watch?v=8GbENSmdVeE) for a guided walkthrough.
@@ -135,7 +132,7 @@ instant-ngp$ ./build/instant-ngp --scene data/nerf_synthetic/lego/transforms_tra
 ### SDF armadillo
 
 ```sh
-instant-ngp$ ./build/instant-ngp --scene data/sdf/armadillo.obj
+instant-ngp$ ./build/instant-ngp data/sdf/armadillo.obj
 ```
 
 <img src="docs/assets_readme/armadillo.png"/>
@@ -143,7 +140,7 @@ instant-ngp$ ./build/instant-ngp --scene data/sdf/armadillo.obj
 ### Image of Einstein
 
 ```sh
-instant-ngp$ ./build/instant-ngp --scene data/image/albert.exr
+instant-ngp$ ./build/instant-ngp data/image/albert.exr
 ```
 
 <img src="docs/assets_readme/albert.png"/>
@@ -151,7 +148,7 @@ instant-ngp$ ./build/instant-ngp --scene data/image/albert.exr
 To reproduce the gigapixel results, download, for example, [the Tokyo image](https://www.flickr.com/photos/trevor_dobson_inefekt69/29314390837) and convert it to `.bin` using the `scripts/convert_image.py` script. This custom format improves compatibility and loading speed when resolution is high. Now you can run:
 
 ```sh
-instant-ngp$ ./build/instant-ngp --scene data/image/tokyo.bin
+instant-ngp$ ./build/instant-ngp data/image/tokyo.bin
 ```
 
 
@@ -160,7 +157,7 @@ instant-ngp$ ./build/instant-ngp --scene data/image/tokyo.bin
 Download the [nanovdb volume for the Disney cloud](https://drive.google.com/drive/folders/1SuycSAOSG64k2KLV7oWgyNWyCvZAkafK?usp=sharing), which is derived [from here](https://disneyanimation.com/data-sets/?drawer=/resources/clouds/) ([CC BY-SA 3.0](https://media.disneyanimation.com/uploads/production/data_set_asset/6/asset/License_Cloud.pdf)).
 
 ```sh
-instant-ngp$ ./build/instant-ngp --mode volume --scene data/volume/wdas_cloud_quarter.nvdb
+instant-ngp$ ./build/instant-ngp data/volume/wdas_cloud_quarter.nvdb
 ```
 <img src="docs/assets_readme/cloud.png"/>
 
@@ -204,7 +201,7 @@ For an example of how the `./build/instant-ngp` application can be implemented a
 Here is a typical command line using `scripts/run.py` to generate a 5-second flythrough of the fox dataset to the (default) file `video.mp4`, after using the GUI to save a (default) NeRF snapshot `base.msgpack` and a set of camera key frames: (see [this video](https://www.youtube.com/watch?v=8GbENSmdVeE) for a guided walkthrough)
 
 ```sh
-instant-ngp$ python scripts/run.py --mode nerf --scene data/nerf/fox --load_snapshot data/nerf/fox/base.msgpack --video_camera_path data/nerf/fox/base_cam.json --video_n_seconds 5 --video_fps 60 --width 1920 --height 1080
+instant-ngp$ python scripts/run.py data/nerf/fox/base.msgpack --video_camera_path data/nerf/fox/base_cam.json --video_n_seconds 5 --video_fps 60 --width 1920 --height 1080
 ```
 
 If you'd rather build new models from the hash encoding and fast neural networks, consider the [__tiny-cuda-nn__'s PyTorch extension](https://github.com/nvlabs/tiny-cuda-nn#pytorch-extension).

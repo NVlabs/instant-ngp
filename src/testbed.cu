@@ -85,18 +85,24 @@ json merge_parent_network_config(const json &child, const fs::path &child_filena
 	return parent;
 }
 
-static bool ends_with(const std::string& str, const std::string& ending) {
-	if (ending.length() > str.length()) {
-		return false;
+void Testbed::load_training_data(const std::string& data_path_str) {
+	fs::path data_path = data_path_str;
+	if (!data_path.exists()) {
+		throw std::runtime_error{fmt::format("Data path '{}' does not exist.", data_path.str())};
 	}
-	return std::equal(std::rbegin(ending), std::rend(ending), std::rbegin(str));
-}
 
-void Testbed::load_training_data(const std::string& data_path) {
+	// Automatically determine the mode from the first scene that's loaded
+	ETestbedMode scene_mode = mode_from_scene(data_path.str());
+	if (scene_mode == ETestbedMode::None) {
+		throw std::runtime_error{fmt::format("Unknown scene format for path '{}'.", data_path.str())};
+	}
+
+	set_mode(scene_mode);
+
 	m_data_path = data_path;
 
 	if (!m_data_path.exists()) {
-		throw std::runtime_error{fmt::format("Data path {} does not exist.", m_data_path.str())};
+		throw std::runtime_error{fmt::format("Data path '{}' does not exist.", m_data_path.str())};
 	}
 
 	switch (m_testbed_mode) {
@@ -115,16 +121,67 @@ void Testbed::clear_training_data() {
 	m_nerf.training.dataset.metadata.clear();
 }
 
+void Testbed::set_mode(ETestbedMode mode) {
+	if (mode == m_testbed_mode) {
+		return;
+	}
+
+	// Reset mode-specific members
+	m_image = {};
+	m_mesh = {};
+	m_nerf = {};
+	m_sdf = {};
+	m_volume = {};
+
+	// Kill training-related things
+	m_encoding = {};
+	m_loss = {};
+	m_network = {};
+	m_nerf_network = {};
+	m_optimizer = {};
+	m_trainer = {};
+	m_envmap = {};
+	m_distortion = {};
+	m_training_data_available = false;
+
+	// Reset paths that might be attached to the chosen mode
+	m_data_path = {};
+
+	m_testbed_mode = mode;
+
+	reset_camera();
+}
+
+fs::path Testbed::find_network_config(const fs::path& network_config_path) {
+	if (network_config_path.exists()) {
+		return network_config_path;
+	}
+
+	// The following resolution steps do not work if the path is absolute. Treat it as nonexistent.
+	if (network_config_path.is_absolute()) {
+		return network_config_path;
+	}
+
+	fs::path candidate = fs::path{"configs"}/to_string(m_testbed_mode)/network_config_path;
+	if (candidate.exists()) {
+		return candidate;
+	}
+
+	candidate = fs::path{"../"}/candidate;
+	if (candidate.exists()) {
+		return candidate;
+	}
+
+	return network_config_path;
+}
+
 json Testbed::load_network_config(const fs::path& network_config_path) {
-	if (!network_config_path.empty()) {
-		m_network_config_path = network_config_path;
-	}
-
-	tlog::info() << "Loading network config from: " << network_config_path;
-
+	bool is_snapshot = equals_case_insensitive(network_config_path.extension(), "msgpack");
 	if (network_config_path.empty() || !network_config_path.exists()) {
-		throw std::runtime_error{fmt::format("Network config {} does not exist.", network_config_path.str())};
+		throw std::runtime_error{fmt::format("Network {} '{}' does not exist.", is_snapshot ? "snapshot" : "config", network_config_path.str())};
 	}
+
+	tlog::info() << "Loading network " << (is_snapshot ? "snapshot" : "config") << " from: " << network_config_path;
 
 	json result;
 	if (equals_case_insensitive(network_config_path.extension(), "json")) {
@@ -140,13 +197,38 @@ json Testbed::load_network_config(const fs::path& network_config_path) {
 	return result;
 }
 
-void Testbed::reload_network_from_file(const std::string& network_config_path) {
-	if (!network_config_path.empty()) {
-		m_network_config_path = network_config_path;
+void Testbed::reload_network_from_file(const std::string& network_config_path_string) {
+	if (!network_config_path_string.empty()) {
+		fs::path candidate = find_network_config(network_config_path_string);
+		if (candidate.exists()) {
+			// Store the path _argument_ in the member variable. E.g. for the base config,
+			// it'll store `base.json`, even though the loaded config will be
+			// config/<mode>/base.json. This has the benefit of switching to the
+			// appropriate config when switching modes.
+			m_network_config_path = network_config_path_string;
+		}
 	}
 
-	m_network_config = load_network_config(m_network_config_path);
-	reset_network();
+	// If the testbed mode hasn't been decided yet, don't load a network yet, but
+	// still keep track of the requested config (see above).
+	if (m_testbed_mode == ETestbedMode::None) {
+		return;
+	}
+
+	fs::path full_network_config_path = find_network_config(m_network_config_path);
+	bool is_snapshot = equals_case_insensitive(full_network_config_path.extension(), "msgpack");
+
+	if (!full_network_config_path.exists()) {
+		tlog::warning() << "Network " << (is_snapshot ? "snapshot" : "config") << " path '" << full_network_config_path << "' does not exist.";
+	} else {
+		m_network_config = load_network_config(full_network_config_path);
+	}
+
+	// Reset training if we haven't loaded a snapshot of an already trained model, in which case, presumably the network
+	// configuration changed and the user is interested in seeing how it trains from scratch.
+	if (!is_snapshot) {
+		reset_network();
+	}
 }
 
 void Testbed::reload_network_from_json(const json& json, const std::string& config_base_path) {
@@ -156,36 +238,55 @@ void Testbed::reload_network_from_json(const json& json, const std::string& conf
 	reset_network();
 }
 
-void Testbed::handle_file(const std::string& file) {
-	if (ends_with(file, ".msgpack")) {
-		load_snapshot(file);
+void Testbed::load_file(const std::string& file_path) {
+	if (!fs::path{file_path}.exists()) {
+		// If the path doesn't exist, but a network config can be resolved, load that.
+		if (ends_with_case_insensitive(file_path, ".json") && find_network_config(file_path).exists()) {
+			reload_network_from_file(file_path);
+			return;
+		}
+
+		tlog::error() << "File '" << file_path << "' does not exist.";
+		return;
 	}
-	else if (ends_with(file, ".json")) {
-		reload_network_from_file(file);
-	} else if (ends_with(file, ".obj") || ends_with(file, ".stl")) {
-		m_data_path = file;
-		m_testbed_mode = ETestbedMode::Sdf;
-		load_mesh();
-	} else if (ends_with(file, ".exr") || ends_with(file, ".bin")) {
-		m_data_path = file;
-		m_testbed_mode = ETestbedMode::Image;
-		try {
-			load_image();
-		} catch (std::runtime_error& e) {
-			tlog::error() << "Failed to open image: " << e.what();
+
+	if (ends_with_case_insensitive(file_path, ".msgpack")) {
+		load_snapshot(file_path);
+		return;
+	}
+
+	// If we get a json file, we need to parse it to determine its purpose.
+	if (ends_with_case_insensitive(file_path, ".json")) {
+		json file;
+		{
+			std::ifstream f{file_path};
+			file = json::parse(f, nullptr, true, true);
+		}
+
+		// Snapshot in json format... inefficient, but technically supported.
+		if (file.contains("snapshot")) {
+			load_snapshot(file_path);
 			return;
 		}
-	} else if (ends_with(file, ".nvdb")) {
-		m_data_path = file;
-		m_testbed_mode = ETestbedMode::Volume;
-		try {
-			load_volume();
-		} catch (std::runtime_error& e) {
-			tlog::error() << "Failed to open volume: " << e.what();
+
+		// Regular network config
+		if (file.contains("parent") || file.contains("network") || file.contains("encoding") || file.contains("loss") || file.contains("optimizer")) {
+			reload_network_from_file(file_path);
 			return;
 		}
-	} else {
-		tlog::error() << "Tried to open unknown file type: " << file;
+
+		// Camera path
+		if (file.contains("path")) {
+			load_camera_path(file_path);
+			return;
+		}
+	}
+
+	// If the dragged file isn't any of the above, assume that it's training data
+	try {
+		load_training_data(file_path);
+	} catch (std::runtime_error& e) {
+		tlog::error() << "Failed to load training data: " << e.what();
 	}
 }
 
@@ -529,7 +630,7 @@ void Testbed::imgui() {
 			ImGui::Checkbox("Quaternion format", &export_extrinsics_in_quat_format);
 		}
 		if (imgui_colored_button("Reset training", 0.f)) {
-			reload_network_from_file("");
+			reload_network_from_file();
 		}
 		ImGui::SameLine();
 		ImGui::DragInt("Seed", (int*)&m_seed, 1.0f, 0, std::numeric_limits<int>::max());
@@ -1306,23 +1407,33 @@ bool Testbed::keyboard_event() {
 		set_exposure(m_exposure + (shift ? -0.5f : 0.5f));
 		redraw_next_frame();
 	}
+
 	if (ImGui::IsKeyPressed('R')) {
 		if (shift) {
 			reset_camera();
 		} else {
-			reload_network_from_file("");
+			reload_network_from_file();
 		}
 	}
-	if (ImGui::IsKeyPressed('O')) {
-		m_nerf.training.render_error_overlay = !m_nerf.training.render_error_overlay;
-	}
-	if (ImGui::IsKeyPressed('G')) {
-		m_render_ground_truth = !m_render_ground_truth;
-		reset_accumulation();
-		if (m_render_ground_truth) {
-			m_nerf.training.view = find_best_training_view(m_nerf.training.view);
+
+	if (m_training_data_available) {
+		if (ImGui::IsKeyPressed('O')) {
+			m_nerf.training.render_error_overlay = !m_nerf.training.render_error_overlay;
+		}
+
+		if (ImGui::IsKeyPressed('G')) {
+			m_render_ground_truth = !m_render_ground_truth;
+			reset_accumulation();
+			if (m_render_ground_truth) {
+				m_nerf.training.view = find_best_training_view(m_nerf.training.view);
+			}
+		}
+
+		if (ImGui::IsKeyPressed('T')) {
+			set_train(!m_train);
 		}
 	}
+
 	if (ImGui::IsKeyPressed('.')) {
 		if (m_single_view) {
 			if (m_visualized_dimension == m_network->width(m_visualized_layer)-1 && m_visualized_layer < m_network->num_forward_activations()-1) {
@@ -1335,6 +1446,7 @@ bool Testbed::keyboard_event() {
 			set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer+1)));
 		}
 	}
+
 	if (ImGui::IsKeyPressed(',')) {
 		if (m_single_view) {
 			if (m_visualized_dimension == 0 && m_visualized_layer > 0) {
@@ -1347,14 +1459,14 @@ bool Testbed::keyboard_event() {
 			set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer-1)));
 		}
 	}
+
 	if (ImGui::IsKeyPressed('M')) {
 		m_single_view = !m_single_view;
 		set_visualized_dim(-1);
 		reset_accumulation();
 	}
-	if (ImGui::IsKeyPressed('T')) {
-		set_train(!m_train);
-	}
+
+
 	if (ImGui::IsKeyPressed('N')) {
 		m_sdf.analytic_normals = !m_sdf.analytic_normals;
 		reset_accumulation();
@@ -1389,29 +1501,37 @@ bool Testbed::keyboard_event() {
 	if (ImGui::IsKeyDown('W')) {
 		translate_vec.z() += 1.0f;
 	}
+
 	if (ImGui::IsKeyDown('A')) {
 		translate_vec.x() += -1.0f;
 	}
+
 	if (ImGui::IsKeyDown('S')) {
 		translate_vec.z() += -1.0f;
 	}
+
 	if (ImGui::IsKeyDown('D')) {
 		translate_vec.x() += 1.0f;
 	}
+
 	if (ImGui::IsKeyDown(' ')) {
 		translate_vec.y() += -1.0f;
 	}
+
 	if (ImGui::IsKeyDown('C')) {
 		translate_vec.y() += 1.0f;
 	}
+
 	translate_vec *= m_camera_velocity * m_frame_ms.val() / 1000.0f;
 	if (shift) {
 		translate_vec *= 5;
 	}
+
 	if (translate_vec != Vector3f::Zero()) {
 		m_fps_camera = true;
 		translate_camera(translate_vec);
 	}
+
 	return false;
 }
 
@@ -1661,6 +1781,15 @@ void Testbed::train_and_render(bool skip_rendering) {
 		train(m_training_batch_size);
 	}
 
+	// If we don't have a trainer, as can happen when having loaded training data or changed modes without having
+	// explicitly loaded a new neural network.
+	if (m_testbed_mode != ETestbedMode::None && !m_network) {
+		reload_network_from_file();
+		if (!m_network) {
+			throw std::runtime_error{"Unable to reload neural network."};
+		}
+	}
+
 	if (m_mesh.optimize_mesh) {
 		optimise_mesh_step(1);
 	}
@@ -1905,14 +2034,7 @@ void Testbed::init_window(int resw, int resh, bool hidden, bool second_window) {
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 	glfwWindowHint(GLFW_VISIBLE, hidden ? GLFW_FALSE : GLFW_TRUE);
-	std::string title = "Instant Neural Graphics Primitives v" NGP_VERSION " (";
-	switch (m_testbed_mode) {
-		case ETestbedMode::Image: title += "Image"; break;
-		case ETestbedMode::Sdf: title += "SDF"; break;
-		case ETestbedMode::Nerf: title += "NeRF"; break;
-		case ETestbedMode::Volume: title += "Volume"; break;
-	}
-	title += ")";
+	std::string title = "Instant Neural Graphics Primitives";
 	m_glfw_window = glfwCreateWindow(m_window_res.x(), m_window_res.y(), title.c_str(), NULL, NULL);
 	if (m_glfw_window == NULL) {
 		throw std::runtime_error{"GLFW window could not be created."};
@@ -1939,7 +2061,7 @@ void Testbed::init_window(int resw, int resh, bool hidden, bool second_window) {
 
 		testbed->redraw_gui_next_frame();
 		for (int i = 0; i < count; i++) {
-			testbed->handle_file(paths[i]);
+			testbed->load_file(paths[i]);
 		}
 	});
 
@@ -2117,8 +2239,8 @@ fs::path Testbed::training_data_path() const {
 }
 
 bool Testbed::want_repl() {
-	bool b=m_want_repl;
-	m_want_repl=false;
+	bool b = m_want_repl;
+	m_want_repl = false;
 	return b;
 }
 
@@ -2275,6 +2397,11 @@ void Testbed::reset_network(bool clear_density_grid) {
 
 	m_nerf.training.reset_camera_extrinsics();
 
+	if (clear_density_grid) {
+		m_nerf.density_grid.memset(0);
+		m_nerf.density_grid_bitfield.memset(0);
+	}
+
 	m_loss_graph_samples = 0;
 
 	// Default config
@@ -2425,17 +2552,17 @@ void Testbed::reset_network(bool clear_density_grid) {
 				tcnn::string_to_interpolation_type(encoding_config.value("interpolation", "linear"))
 			));
 
-			m_network = std::make_shared<NetworkWithInputEncoding<precision_t>>(m_encoding, dims.n_output, network_config);
 			m_sdf.uses_takikawa_encoding = true;
 		} else {
 			m_encoding.reset(create_encoding<precision_t>(dims.n_input, encoding_config));
-			m_network = std::make_shared<NetworkWithInputEncoding<precision_t>>(m_encoding, dims.n_output, network_config);
+
 			m_sdf.uses_takikawa_encoding = false;
 			if (m_sdf.octree_depth_target == 0 && encoding_config.contains("n_levels")) {
 				m_sdf.octree_depth_target = encoding_config["n_levels"];
 			}
 		}
 
+		m_network = std::make_shared<NetworkWithInputEncoding<precision_t>>(m_encoding, dims.n_output, network_config);
 		n_encoding_params = m_encoding->n_params();
 
 		tlog::info()
@@ -2472,15 +2599,9 @@ void Testbed::reset_network(bool clear_density_grid) {
 		}
 	}
 
-	if (clear_density_grid) {
-		m_nerf.density_grid.memset(0);
-		m_nerf.density_grid_bitfield.memset(0);
-	}
 }
 
-Testbed::Testbed(ETestbedMode mode)
-: m_testbed_mode(mode)
-{
+Testbed::Testbed(ETestbedMode mode) {
 	if (!(__CUDACC_VER_MAJOR__ > 10 || (__CUDACC_VER_MAJOR__ == 10 && __CUDACC_VER_MINOR__ >= 2))) {
 		throw std::runtime_error{"Testbed required CUDA 10.2 or later."};
 	}
@@ -2544,11 +2665,12 @@ Testbed::Testbed(ETestbedMode mode)
 		}},
 	};
 
-	reset_camera();
-
+	set_mode(mode);
 	set_exposure(0);
 	set_min_level(0.f);
 	set_max_level(1.f);
+
+	reset_camera();
 }
 
 Testbed::~Testbed() {
@@ -2562,6 +2684,19 @@ void Testbed::train(uint32_t batch_size) {
 	if (!m_training_data_available) {
 		m_train = false;
 		return;
+	}
+
+	if (m_testbed_mode == ETestbedMode::None) {
+		throw std::runtime_error{"Cannot train without a mode."};
+	}
+
+	// If we don't have a trainer, as can happen when having loaded training data or changed modes without having
+	// explicitly loaded a new neural network.
+	if (!m_trainer) {
+		reload_network_from_file();
+		if (!m_trainer) {
+			throw std::runtime_error{"Unable to create a neural network trainer."};
+		}
 	}
 
 	if (!m_dlss) {
@@ -2714,9 +2849,8 @@ void Testbed::render_frame(const Matrix<float, 3, 4>& camera_matrix0, const Matr
 	Vector2f focal_length = calc_focal_length(render_buffer.in_resolution(), m_fov_axis, m_zoom);
 	Vector2f screen_center = render_screen_center();
 
-	if (m_quilting_dims != Vector2i::Ones() && m_quilting_dims != Vector2i{2, 1}) {
-		// In the case of a holoplay lenticular screen, m_scale represents the inverse distance of the head above the display.
-		m_parallax_shift.z() = 1.0f / m_scale;
+	if (!m_network) {
+		return;
 	}
 
 	switch (m_testbed_mode) {
@@ -3025,6 +3159,7 @@ void Testbed::save_snapshot(const std::string& filepath_string, bool include_opt
 
 	auto& snapshot = m_network_config["snapshot"];
 	snapshot["version"] = SNAPSHOT_FORMAT_VERSION;
+	snapshot["mode"] = to_string(m_testbed_mode);
 
 	if (m_testbed_mode == ETestbedMode::Nerf) {
 		snapshot["density_grid_size"] = NERF_GRIDSIZE();
@@ -3063,10 +3198,21 @@ void Testbed::load_snapshot(const std::string& filepath_string) {
 		throw std::runtime_error{fmt::format("File {} does not contain a snapshot.", filepath_string)};
 	}
 
+	m_network_config_path = filepath_string;
+
 	const auto& snapshot = config["snapshot"];
 
 	if (snapshot.value("version", 0) < SNAPSHOT_FORMAT_VERSION) {
-		throw std::runtime_error{"Snapshot uses an old format."};
+		throw std::runtime_error{"Snapshot uses an old format and can not be loaded."};
+	}
+
+	if (snapshot.contains("mode")) {
+		set_mode(mode_from_string(snapshot["mode"]));
+	} else if (snapshot.contains("nerf")) {
+		// To be able to load old NeRF snapshots that don't specify their mode yet
+		set_mode(ETestbedMode::Nerf);
+	} else if (m_testbed_mode == ETestbedMode::None) {
+		throw std::runtime_error{"Unknown snapshot mode. Snapshot must be regenerated with a new version of instant-ngp."};
 	}
 
 	m_aabb = snapshot.value("aabb", m_aabb);
