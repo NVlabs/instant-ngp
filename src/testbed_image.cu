@@ -384,7 +384,7 @@ void Testbed::load_image() {
 
 void Testbed::load_exr_image() {
 	if (!m_data_path.exists()) {
-		throw std::runtime_error{m_data_path.str() + " does not exist."};
+		throw std::runtime_error{fmt::format("Image file '{}' does not exist.", m_data_path.str())};
 	}
 
 	tlog::info() << "Loading EXR image from " << m_data_path;
@@ -399,7 +399,7 @@ void Testbed::load_exr_image() {
 
 void Testbed::load_stbi_image() {
 	if (!m_data_path.exists()) {
-		throw std::runtime_error{m_data_path.str() + " does not exist."};
+		throw std::runtime_error{fmt::format("Image file '{}' does not exist.", m_data_path.str())};
 	}
 
 	tlog::info() << "Loading STBI image from " << m_data_path;
@@ -415,7 +415,7 @@ void Testbed::load_stbi_image() {
 
 void Testbed::load_binary_image() {
 	if (!m_data_path.exists()) {
-		throw std::runtime_error{m_data_path.str() + " does not exist."};
+		throw std::runtime_error{fmt::format("Image file '{}' does not exist.", m_data_path.str())};
 	}
 
 	tlog::info() << "Loading binary image from " << m_data_path;

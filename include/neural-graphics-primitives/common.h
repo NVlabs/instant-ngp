@@ -53,7 +53,16 @@
 #include <chrono>
 #include <functional>
 
+#if defined(__NVCC__) || (defined(__clang__) && defined(__CUDA__))
+#define NGP_HOST_DEVICE __host__ __device__
+#else
+#define NGP_HOST_DEVICE
+#endif
+
 NGP_NAMESPACE_BEGIN
+
+bool ends_with(const std::string& str, const std::string& ending);
+bool ends_with_case_insensitive(const std::string& str, const std::string& ending);
 
 using Vector2i32 = Eigen::Matrix<uint32_t, 2, 1>;
 using Vector3i16 = Eigen::Matrix<uint16_t, 3, 1>;
@@ -155,7 +164,12 @@ enum class ETestbedMode : int {
 	Sdf,
 	Image,
 	Volume,
+	None,
 };
+
+ETestbedMode mode_from_scene(const std::string& scene);
+ETestbedMode mode_from_string(const std::string& str);
+std::string to_string(ETestbedMode);
 
 enum class ESDFGroundTruthMode : int {
 	RaytracedMesh,
@@ -184,12 +198,6 @@ struct Lens {
 	ELensMode mode = ELensMode::Perspective;
 	float params[7] = {};
 };
-
-#if defined(__NVCC__) || (defined(__clang__) && defined(__CUDA__))
-#define NGP_HOST_DEVICE __host__ __device__
-#else
-#define NGP_HOST_DEVICE
-#endif
 
 inline NGP_HOST_DEVICE float sign(float x) {
 	return copysignf(1.0, x);

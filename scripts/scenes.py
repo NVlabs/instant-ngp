@@ -12,7 +12,6 @@ import os
 
 from common import *
 
-
 def ours_real_converted(path, frameidx):
 	return {
 		"data_dir"      : os.path.join(NERF_DATA_FOLDER, path),
@@ -74,7 +73,6 @@ scenes_nerf = {
 	"stump"   : mipnerf_360("stump", frameidx=0),
 }
 
-
 def ours_mesh(name, up = [0,1,0], infolder=True):
 	return {
 		"data_dir"      : os.path.join(SDF_DATA_FOLDER, f"{name}") if infolder else SDF_DATA_FOLDER,
@@ -85,7 +83,6 @@ def ours_mesh(name, up = [0,1,0], infolder=True):
 scenes_sdf = {
 	"armadillo"     : ours_mesh("armadillo", infolder=False),
 }
-
 
 def ours_image(name, infolder=True):
 	data_dir = os.path.join(IMAGE_DATA_FOLDER, f"{name}") if infolder else IMAGE_DATA_FOLDER
@@ -105,7 +102,6 @@ def ours_image(name, infolder=True):
 scenes_image = {
 	"albert"        : ours_image("albert", False),
 }
-
 
 
 def ours_volume(name, ds):
@@ -225,20 +221,8 @@ def setup_colored_sdf(testbed, scene, softshadow=True):
 	testbed.sdf.shadow_sharpness = 16 if softshadow else 2048
 	testbed.scale = testbed.scale * 1.13
 
-def default_snapshot_filename(scene):
+def default_snapshot_filename(scene_info):
 	filename = "base.msgpack"
-	if scene["dataset"]:
-		filename = f"{os.path.splitext(scene['dataset'])[0]}_{filename}"
-	return os.path.join(scene["data_dir"], filename)
-
-def mode_from_scene(scene):
-	if scene in scenes_sdf:
-		return "sdf"
-	elif scene in scenes_nerf:
-		return "nerf"
-	elif scene in scenes_image:
-		return "image"
-	elif scene in scenes_volume:
-		return "volume"
-	else:
-		return ""
+	if scene_info["dataset"]:
+		filename = f"{os.path.splitext(scene_info['dataset'])[0]}_{filename}"
+	return os.path.join(scene_info["data_dir"], filename)
