@@ -38,7 +38,7 @@ jobs:
           - os: ubuntu-18.04
             cuda: "10.2"
             arch: 37
-            python: "3.6"
+            python: "3.7"
     env:
       build_dir: "build"
       config: "Release"
@@ -108,7 +108,7 @@ jobs:
             visual_studio: "Visual Studio 16 2019"
             cuda: "11.5.1"
             arch: 37
-            python: "3.6"
+            python: "3.7"
     env:
       build_dir: "build"
       config: "Release"
