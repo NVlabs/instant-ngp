@@ -129,7 +129,7 @@ public:
 
 			int last_n_nodes = n_nodes;
 			n_nodes = node_counter;
-			pool.parallelFor<int>(last_n_nodes, node_counter, [&](size_t parent_idx) {
+			pool.parallel_for<int>(last_n_nodes, node_counter, [&](size_t parent_idx) {
 				Vector3i16 child_pos_base = m_nodes[parent_idx].pos * (uint16_t)2;
 				float size = std::scalbnf(1.0f, -depth-1);
 

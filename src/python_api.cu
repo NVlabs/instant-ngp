@@ -209,8 +209,7 @@ py::array_t<float> Testbed::screenshot(bool linear) const {
 	float* data = (float*)buf.ptr;
 
 	// Linear, alpha premultiplied, Y flipped
-	ThreadPool pool;
-	pool.parallelFor<size_t>(0, m_window_res.y(), [&](size_t y) {
+	ThreadPool{}.parallel_for<size_t>(0, m_window_res.y(), [&](size_t y) {
 		size_t base = y * m_window_res.x();
 		size_t base_reverse = (m_window_res.y() - y - 1) * m_window_res.x();
 		for (uint32_t x = 0; x < m_window_res.x(); ++x) {

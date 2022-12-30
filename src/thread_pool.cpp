@@ -23,36 +23,36 @@ using namespace std;
 ThreadPool::ThreadPool()
 : ThreadPool{thread::hardware_concurrency()} {}
 
-ThreadPool::ThreadPool(size_t maxNumThreads, bool force) {
+ThreadPool::ThreadPool(size_t max_num_threads, bool force) {
 	if (!force) {
-		maxNumThreads = min((size_t)thread::hardware_concurrency(), maxNumThreads);
+		max_num_threads = min((size_t)thread::hardware_concurrency(), max_num_threads);
 	}
-	startThreads(maxNumThreads);
+	start_threads(max_num_threads);
 }
 
 ThreadPool::~ThreadPool() {
-	shutdownThreads(mThreads.size());
+	shutdown_threads(m_threads.size());
 }
 
-void ThreadPool::startThreads(size_t num) {
-	mNumThreads += num;
-	for (size_t i = mThreads.size(); i < mNumThreads; ++i) {
-		mThreads.emplace_back([this, i] {
+void ThreadPool::start_threads(size_t num) {
+	m_num_threads += num;
+	for (size_t i = m_threads.size(); i < m_num_threads; ++i) {
+		m_threads.emplace_back([this, i] {
 			while (true) {
-				unique_lock<mutex> lock{mTaskQueueMutex};
+				unique_lock<mutex> lock{m_task_queue_mutex};
 
 				// look for a work item
-				while (i < mNumThreads && mTaskQueue.empty()) {
+				while (i < m_num_threads && m_task_queue.empty()) {
 					// if there are none wait for notification
-					mWorkerCondition.wait(lock);
+					m_worker_condition.wait(lock);
 				}
 
-				if (i >= mNumThreads) {
+				if (i >= m_num_threads) {
 					break;
 				}
 
-				function<void()> task{move(mTaskQueue.front())};
-				mTaskQueue.pop_front();
+				function<void()> task{move(m_task_queue.front())};
+				m_task_queue.pop_front();
 
 				// Unlock the lock, so we can process the task without blocking other threads
 				lock.unlock();
@@ -63,33 +63,33 @@ void ThreadPool::startThreads(size_t num) {
 	}
 }
 
-void ThreadPool::shutdownThreads(size_t num) {
-	auto numToClose = min(num, mNumThreads);
+void ThreadPool::shutdown_threads(size_t num) {
+	auto num_to_close = min(num, m_num_threads);
 
 	{
-		lock_guard<mutex> lock{mTaskQueueMutex};
-		mNumThreads -= numToClose;
+		lock_guard<mutex> lock{m_task_queue_mutex};
+		m_num_threads -= num_to_close;
 	}
 
 	// Wake up all the threads to have them quit
-	mWorkerCondition.notify_all();
-	for (auto i = 0u; i < numToClose; ++i) {
-		mThreads.back().join();
-		mThreads.pop_back();
+	m_worker_condition.notify_all();
+	for (auto i = 0u; i < num_to_close; ++i) {
+		m_threads.back().join();
+		m_threads.pop_back();
 	}
 }
 
-void ThreadPool::setNThreads(size_t num) {
-	if (mNumThreads > num) {
-		shutdownThreads(mNumThreads - num);
-	} else if (mNumThreads < num) {
-		startThreads(num - mNumThreads);
+void ThreadPool::set_n_threads(size_t num) {
+	if (m_num_threads > num) {
+		shutdown_threads(m_num_threads - num);
+	} else if (m_num_threads < num) {
+		start_threads(num - m_num_threads);
 	}
 }
 
-void ThreadPool::flushQueue() {
-	lock_guard<mutex> lock{mTaskQueueMutex};
-	mTaskQueue.clear();
+void ThreadPool::flush_queue() {
+	lock_guard<mutex> lock{m_task_queue_mutex};
+	m_task_queue.clear();
 }
 
 NGP_NAMESPACE_END

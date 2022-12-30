@@ -1048,7 +1048,7 @@ void save_rgba_grid_to_png_sequence(const GPUMemory<Array4f>& rgba, const char* 
 	auto progress = tlog::progress(res3d.z());
 
 	std::atomic<int> n_saved{0};
-	ThreadPool{}.parallelFor<int>(0, res3d.z(), [&](int z) {
+	ThreadPool{}.parallel_for<int>(0, res3d.z(), [&](int z) {
 		uint8_t* pngpixels = (uint8_t*)malloc(size_t(w) * size_t(h) * 4);
 		uint8_t* dst = pngpixels;
 		for (int y = 0; y < h; ++y) {
