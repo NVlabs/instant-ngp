@@ -66,7 +66,6 @@ jobs:
         working-directory: ${{ env.build_dir }}
         run: cmake --build . --target all --verbose -j `nproc`
 
-
   build_windows:
     name: Build on Windows
     runs-on: ${{ matrix.os }}
