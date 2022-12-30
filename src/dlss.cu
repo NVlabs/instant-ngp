@@ -33,6 +33,16 @@ static_assert(false, "DLSS can only be compiled when both Vulkan and GUI support
 #ifdef _WIN32
 #  include <vulkan/vulkan_win32.h>
 #endif
+
+// NGX's macro `NVSDK_NGX_FAILED` results in a change of sign, which does not affect correctness.
+// Thus, suppress the corresponding warning.
+#ifdef __NVCC__
+#  ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
+#    pragma nv_diag_suppress = integer_sign_change
+#  else
+#    pragma diag_suppress = integer_sign_change
+#  endif
+#endif
 #include <nvsdk_ngx_vk.h>
 #include <nvsdk_ngx_helpers.h>
 #include <nvsdk_ngx_helpers_vk.h>
@@ -62,13 +72,11 @@ std::string ngx_error_string(NVSDK_NGX_Result result) {
 	return converter.to_bytes(wstr);
 };
 
-#define NGP_NVSDK_NGX_FAILED(value) (((value) & 0xFFF00000) == (uint32_t)NVSDK_NGX_Result_Fail)
-
 /// Checks the result of a NVSDK_NGX_XXXXXX call and throws an error on failure
 #define NGX_CHECK_THROW(x)                                                                                            \
 	do {                                                                                                              \
 		NVSDK_NGX_Result result = x;                                                                                  \
-		if (NGP_NVSDK_NGX_FAILED(result))                                                                                 \
+		if (NVSDK_NGX_FAILED(result))                                                                                 \
 			throw std::runtime_error(std::string(FILE_LINE " " #x " failed with error ") + ngx_error_string(result)); \
 	} while(0)
 
