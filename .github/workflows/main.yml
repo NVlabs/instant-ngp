@@ -145,6 +145,7 @@ jobs:
           path: |
             README.md
             LICENSE.txt
+            ${{ env.build_dir }}/cudart64*.dll
             ${{ env.build_dir }}/instant-ngp.exe
             ${{ env.build_dir }}/nvngx_dlss.dll
             configs/
