@@ -85,6 +85,7 @@ list(APPEND CUDA_NVCC_FLAGS "--expt-relaxed-constexpr")
 
 set(TCNN_BUILD_BENCHMARK OFF)
 set(TCNN_BUILD_EXAMPLES OFF)
+set(TCNN_ALLOW_CUBLAS_CUSOLVER OFF)
 add_subdirectory(dependencies/tiny-cuda-nn)
 
 set(CMAKE_CUDA_ARCHITECTURES ${TCNN_CUDA_ARCHITECTURES})
@@ -314,8 +315,8 @@ if (Python_FOUND)
 	pybind11_extension(pyngp)
 
 	if (MSVC)
-		# Copy dlls needed at runtime
-		file(GLOB CUDA_DLLS "${CUDA_COMPILER_BIN}/cublas*.dll" "${CUDA_COMPILER_BIN}/cudart64*.dll" "${CUDA_COMPILER_BIN}/cusolver64*.dll")
+		# Copy CUDA runtime DLLs to the build directory so that Python can find them.
+		file(GLOB CUDA_DLLS "${CUDA_COMPILER_BIN}/cudart64*.dll")
 		if (CUDA_DLLS)
 			add_custom_command(TARGET pyngp POST_BUILD
 				COMMAND ${CMAKE_COMMAND} -E copy ${CUDA_DLLS} $<TARGET_FILE_DIR:pyngp>
