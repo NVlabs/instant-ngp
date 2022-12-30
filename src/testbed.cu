@@ -864,12 +864,17 @@ void Testbed::imgui() {
 			accum_reset |= ImGui::Checkbox("Apply lens distortion", &m_nerf.render_with_lens_distortion);
 
 			if (m_nerf.render_with_lens_distortion) {
-				accum_reset |= ImGui::Combo("Lens mode", (int*)&m_nerf.render_lens.mode, "Perspective\0OpenCV\0F-Theta\0LatLong\0");
+				accum_reset |= ImGui::Combo("Lens mode", (int*)&m_nerf.render_lens.mode, LensModeStr);
 				if (m_nerf.render_lens.mode == ELensMode::OpenCV) {
 					accum_reset |= ImGui::InputFloat("k1", &m_nerf.render_lens.params[0], 0.f, 0.f, "%.5f");
 					accum_reset |= ImGui::InputFloat("k2", &m_nerf.render_lens.params[1], 0.f, 0.f, "%.5f");
 					accum_reset |= ImGui::InputFloat("p1", &m_nerf.render_lens.params[2], 0.f, 0.f, "%.5f");
 					accum_reset |= ImGui::InputFloat("p2", &m_nerf.render_lens.params[3], 0.f, 0.f, "%.5f");
+				} else if (m_nerf.render_lens.mode == ELensMode::OpenCVFisheye) {
+					accum_reset |= ImGui::InputFloat("k1", &m_nerf.render_lens.params[0], 0.f, 0.f, "%.5f");
+					accum_reset |= ImGui::InputFloat("k2", &m_nerf.render_lens.params[1], 0.f, 0.f, "%.5f");
+					accum_reset |= ImGui::InputFloat("k3", &m_nerf.render_lens.params[2], 0.f, 0.f, "%.5f");
+					accum_reset |= ImGui::InputFloat("k4", &m_nerf.render_lens.params[3], 0.f, 0.f, "%.5f");
 				} else if (m_nerf.render_lens.mode == ELensMode::FTheta) {
 					accum_reset |= ImGui::InputFloat("width", &m_nerf.render_lens.params[5], 0.f, 0.f, "%.0f");
 					accum_reset |= ImGui::InputFloat("height", &m_nerf.render_lens.params[6], 0.f, 0.f, "%.0f");

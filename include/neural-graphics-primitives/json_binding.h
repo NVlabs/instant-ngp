@@ -82,10 +82,17 @@ inline void from_json(const nlohmann::json& j, BoundingBox& box) {
 
 inline void to_json(nlohmann::json& j, const Lens& lens) {
 	if (lens.mode == ELensMode::OpenCV) {
+		j["is_fisheye"] = false;
 		j["k1"] = lens.params[0];
 		j["k2"] = lens.params[1];
 		j["p1"] = lens.params[2];
 		j["p2"] = lens.params[3];
+	} else if (lens.mode == ELensMode::OpenCVFisheye) {
+		j["is_fisheye"] = true;
+		j["k1"] = lens.params[0];
+		j["k2"] = lens.params[1];
+		j["k3"] = lens.params[2];
+		j["k4"] = lens.params[3];
 	} else if (lens.mode == ELensMode::FTheta) {
 		j["ftheta_p0"] = lens.params[0];
 		j["ftheta_p1"] = lens.params[1];
@@ -99,11 +106,19 @@ inline void to_json(nlohmann::json& j, const Lens& lens) {
 
 inline void from_json(const nlohmann::json& j, Lens& lens) {
 	if (j.contains("k1")) {
-		lens.mode = ELensMode::OpenCV;
-		lens.params[0] = j.at("k1");
-		lens.params[1] = j.at("k2");
-		lens.params[2] = j.at("p1");
-		lens.params[3] = j.at("p2");
+		if (j.value("is_fisheye", false)) {
+			lens.mode = ELensMode::OpenCVFisheye;
+			lens.params[0] = j.at("k1");
+			lens.params[1] = j.at("k2");
+			lens.params[2] = j.at("k3");
+			lens.params[3] = j.at("k4");
+		} else {
+			lens.mode = ELensMode::OpenCV;
+			lens.params[0] = j.at("k1");
+			lens.params[1] = j.at("k2");
+			lens.params[2] = j.at("p1");
+			lens.params[3] = j.at("p2");
+		}
 	} else if (j.contains("ftheta_p0")) {
 		lens.mode = ELensMode::FTheta;
 		lens.params[0] = j.at("ftheta_p0");

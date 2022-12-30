@@ -314,6 +314,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.value("OpenCV", ELensMode::OpenCV)
 		.value("FTheta", ELensMode::FTheta)
 		.value("LatLong", ELensMode::LatLong)
+		.value("OpenCVFisheye", ELensMode::OpenCVFisheye)
 		.export_values();
 
 	py::class_<BoundingBox>(m, "BoundingBox")
@@ -621,6 +622,8 @@ PYBIND11_MODULE(pyngp, m) {
 			py::arg("cx")=-0.5f, py::arg("cy")=-0.5f,
 			py::arg("k1")=0.f, py::arg("k2")=0.f,
 			py::arg("p1")=0.f, py::arg("p2")=0.f,
+			py::arg("k3")=0.f, py::arg("k4")=0.f,
+			py::arg("is_fisheye")=false,
 			"Set up the camera intrinsics for the given training image index."
 		)
 		.def("set_camera_extrinsics", &Testbed::Nerf::Training::set_camera_extrinsics,

@@ -192,7 +192,9 @@ enum class ELensMode : int {
 	OpenCV,
 	FTheta,
 	LatLong,
+	OpenCVFisheye,
 };
+static constexpr const char* LensModeStr = "Perspective\0OpenCV\0F-Theta\0LatLong\0OpenCV Fisheye\0\0";
 
 struct Lens {
 	ELensMode mode = ELensMode::Perspective;
