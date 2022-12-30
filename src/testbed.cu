@@ -2608,7 +2608,7 @@ void Testbed::reset_network(bool clear_density_grid) {
 
 Testbed::Testbed(ETestbedMode mode) {
 	if (!(__CUDACC_VER_MAJOR__ > 10 || (__CUDACC_VER_MAJOR__ == 10 && __CUDACC_VER_MINOR__ >= 2))) {
-		throw std::runtime_error{"Testbed required CUDA 10.2 or later."};
+		throw std::runtime_error{"Testbed requires CUDA 10.2 or later."};
 	}
 
 #ifdef NGP_GUI
@@ -2636,9 +2636,12 @@ Testbed::Testbed(ETestbedMode mode) {
 	}
 #endif
 
-	uint32_t compute_capability = cuda_compute_capability();
-	if (compute_capability < MIN_GPU_ARCH) {
-		tlog::warning() << "Insufficient compute capability " << compute_capability << " detected.";
+	int active_device = cuda_device();
+	int active_compute_capability = cuda_compute_capability();
+	tlog::success() << "Active GPU is #" << active_device << ": " << cuda_device_name() << " [" << active_compute_capability << "]";
+
+	if (active_compute_capability < MIN_GPU_ARCH) {
+		tlog::warning() << "Insufficient compute capability " << active_compute_capability << " detected.";
 		tlog::warning() << "This program was compiled for >=" << MIN_GPU_ARCH << " and may thus behave unexpectedly.";
 	}
 
