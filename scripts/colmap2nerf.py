@@ -36,8 +36,9 @@ def parse_args():
 	parser.add_argument("--aabb_scale", default=16, choices=["1", "2", "4", "8", "16", "32", "64", "128"], help="large scene scale factor. 1=scene fits in unit cube; power of 2 up to 16")
 	parser.add_argument("--skip_early", default=0, help="skip this many images from the start")
 	parser.add_argument("--keep_colmap_coords", action="store_true", help="keep transforms.json in COLMAP's original frame of reference (this will avoid reorienting and repositioning the scene for preview and rendering)")
-	parser.add_argument("--out", default="transforms.json", help="output path")
 	parser.add_argument("--vocab_path", default="", help="vocabulary tree path")
+	parser.add_argument("--out", default="", help="output path")
+	parser.add_argument("--num_threads", default=-1, help="number of threads to use for colmap")
 	args = parser.parse_args()
 	return args
 
@@ -85,7 +86,7 @@ def run_colmap(args):
 		sys.exit(1)
 	if os.path.exists(db):
 		os.remove(db)
-	do_system(f"colmap feature_extractor --ImageReader.camera_model {args.colmap_camera_model} --ImageReader.camera_params \"{args.colmap_camera_params}\" --SiftExtraction.estimate_affine_shape=true --SiftExtraction.domain_size_pooling=true --ImageReader.single_camera 1 --database_path {db} --image_path {images}")
+	do_system(f"colmap feature_extractor --ImageReader.camera_model {args.colmap_camera_model} --ImageReader.camera_params \"{args.colmap_camera_params}\" --SiftExtraction.estimate_affine_shape=true --SiftExtraction.domain_size_pooling=true, --SiftExtraction.num_threads {args.num_threads} --ImageReader.single_camera 1 --database_path {db} --image_path {images}")
 	match_cmd = f"colmap {args.colmap_matcher}_matcher --SiftMatching.guided_matching=true --database_path {db}"
 	if args.vocab_path:
 		match_cmd += f" --VocabTreeMatching.vocab_tree_path {args.vocab_path}"
@@ -157,15 +158,32 @@ def closest_point_2_lines(oa, da, ob, db): # returns point closest to both rays 
 
 if __name__ == "__main__":
 	args = parse_args()
-	if args.video_in != "":
-		run_ffmpeg(args)
-	if args.run_colmap:
-		run_colmap(args)
+
 	AABB_SCALE = int(args.aabb_scale)
 	SKIP_EARLY = int(args.skip_early)
-	IMAGE_FOLDER = args.images
-	TEXT_FOLDER = args.text
-	OUT_PATH = args.out
+	IMAGE_FOLDER = os.path.normpath(args.images)
+	TEXT_FOLDER = os.path.normpath(args.text)
+	VIDEO_FOLDER = os.path.dirname(args.video_in)
+
+	# Replace args with the normalized paths
+	args.images = IMAGE_FOLDER
+	args.text = TEXT_FOLDER
+
+	if args.video_in != "":
+		print("Extracting frames from video: " + args.video_in)
+		# The image folder is set here so that it can be accesed later on when building the transforms.json file
+		IMAGE_FOLDER = os.path.normpath(os.path.join(VIDEO_FOLDER, "images"))
+		run_ffmpeg(args)
+	else:
+		print("Using images from", IMAGE_FOLDER)
+
+	if args.run_colmap:
+		run_colmap(args)
+
+	if(args.out == ""):
+		OUT_PATH = os.path.dirname(IMAGE_FOLDER) + "/transforms.json"
+		OUT_PATH = os.path.normpath(OUT_PATH)
+
 	print(f"outputting to {OUT_PATH}...")
 	with open(os.path.join(TEXT_FOLDER,"cameras.txt"), "r") as f:
 		angle_x = math.pi / 2
@@ -252,10 +270,11 @@ if __name__ == "__main__":
 				elems=line.split(" ") # 1-4 is quat, 5-7 is trans, 9ff is filename (9, if filename contains no spaces)
 				#name = str(PurePosixPath(Path(IMAGE_FOLDER, elems[9])))
 				# why is this requireing a relitive path while using ^
+
 				image_rel = os.path.relpath(IMAGE_FOLDER)
-				name = str(f"./{image_rel}/{'_'.join(elems[9:])}")
-				b=sharpness(name)
-				print(name, "sharpness=",b)
+				name = os.path.normpath(str(f"./{image_rel}/{'_'.join(elems[9:])}"))
+				b = sharpness(name)
+				print(name, "sharpness=", b)
 				image_id = int(elems[0])
 				qvec = np.array(tuple(map(float, elems[1:5])))
 				tvec = np.array(tuple(map(float, elems[5:8])))
@@ -271,7 +290,13 @@ if __name__ == "__main__":
 
 					up += c2w[0:3,1]
 
-				frame={"file_path":name,"sharpness":b,"transform_matrix": c2w}
+				local_file_path = str(f"./{os.path.basename(IMAGE_FOLDER)}/{'_'.join(elems[9:])}")
+				local_file_path = os.path.normpath(local_file_path)
+				
+				#Convert it from OS native path to Posix path
+				local_file_path = str(PurePosixPath(Path(local_file_path)))
+
+				frame={"file_path":local_file_path,"sharpness":b,"transform_matrix": c2w}
 				out["frames"].append(frame)
 	nframes = len(out["frames"])
 
@@ -327,5 +352,6 @@ if __name__ == "__main__":
 		f["transform_matrix"] = f["transform_matrix"].tolist()
 	print(nframes,"frames")
 	print(f"writing {OUT_PATH}")
+
 	with open(OUT_PATH, "w") as outfile:
 		json.dump(out, outfile, indent=2)
