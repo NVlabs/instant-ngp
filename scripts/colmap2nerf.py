@@ -21,23 +21,23 @@ import os
 import shutil
 
 def parse_args():
-	parser = argparse.ArgumentParser(description="convert a text colmap export to nerf format transforms.json; optionally convert video to images, and optionally run colmap in the first place")
+	parser = argparse.ArgumentParser(description="Convert a text colmap export to nerf format transforms.json; optionally convert video to images, and optionally run colmap in the first place.")
 
-	parser.add_argument("--video_in", default="", help="run ffmpeg first to convert a provided video file into a set of images. uses the video_fps parameter also")
+	parser.add_argument("--video_in", default="", help="Run ffmpeg first to convert a provided video file into a set of images. Uses the video_fps parameter also.")
 	parser.add_argument("--video_fps", default=2)
-	parser.add_argument("--time_slice", default="", help="time (in seconds) in the format t1,t2 within which the images should be generated from the video. eg: \"--time_slice '10,300'\" will generate images only from 10th second to 300th second of the video")
+	parser.add_argument("--time_slice", default="", help="Time (in seconds) in the format t1,t2 within which the images should be generated from the video. E.g.: \"--time_slice '10,300'\" will generate images only from 10th second to 300th second of the video.")
 	parser.add_argument("--run_colmap", action="store_true", help="run colmap first on the image folder")
-	parser.add_argument("--colmap_matcher", default="sequential", choices=["exhaustive","sequential","spatial","transitive","vocab_tree"], help="select which matcher colmap should use. sequential for videos, exhaustive for adhoc images")
+	parser.add_argument("--colmap_matcher", default="sequential", choices=["exhaustive","sequential","spatial","transitive","vocab_tree"], help="Select which matcher colmap should use. Sequential for videos, exhaustive for ad-hoc images.")
 	parser.add_argument("--colmap_db", default="colmap.db", help="colmap database filename")
-	parser.add_argument("--colmap_camera_model", default="OPENCV", choices=["SIMPLE_PINHOLE", "PINHOLE", "SIMPLE_RADIAL", "RADIAL","OPENCV"], help="camera model")
-	parser.add_argument("--colmap_camera_params", default="", help="intrinsic parameters, depending on the chosen model.  Format: fx,fy,cx,cy,dist")
-	parser.add_argument("--images", default="images", help="input path to the images")
-	parser.add_argument("--text", default="colmap_text", help="input path to the colmap text files (set automatically if run_colmap is used)")
-	parser.add_argument("--aabb_scale", default=16, choices=["1", "2", "4", "8", "16", "32", "64", "128"], help="large scene scale factor. 1=scene fits in unit cube; power of 2 up to 16")
-	parser.add_argument("--skip_early", default=0, help="skip this many images from the start")
-	parser.add_argument("--keep_colmap_coords", action="store_true", help="keep transforms.json in COLMAP's original frame of reference (this will avoid reorienting and repositioning the scene for preview and rendering)")
-	parser.add_argument("--out", default="transforms.json", help="output path")
-	parser.add_argument("--vocab_path", default="", help="vocabulary tree path")
+	parser.add_argument("--colmap_camera_model", default="OPENCV", choices=["SIMPLE_PINHOLE", "PINHOLE", "SIMPLE_RADIAL", "RADIAL", "OPENCV", "SIMPLE_RADIAL_FISHEYE", "RADIAL_FISHEYE", "OPENCV_FISHEYE"], help="Camera model")
+	parser.add_argument("--colmap_camera_params", default="", help="Intrinsic parameters, depending on the chosen model. Format: fx,fy,cx,cy,dist")
+	parser.add_argument("--images", default="images", help="Input path to the images.")
+	parser.add_argument("--text", default="colmap_text", help="Input path to the colmap text files (set automatically if --run_colmap is used).")
+	parser.add_argument("--aabb_scale", default=16, choices=["1", "2", "4", "8", "16", "32", "64", "128"], help="Large scene scale factor. 1=scene fits in unit cube; power of 2 up to 128")
+	parser.add_argument("--skip_early", default=0, help="Skip this many images from the start.")
+	parser.add_argument("--keep_colmap_coords", action="store_true", help="Keep transforms.json in COLMAP's original frame of reference (this will avoid reorienting and repositioning the scene for preview and rendering).")
+	parser.add_argument("--out", default="transforms.json", help="Output path.")
+	parser.add_argument("--vocab_path", default="", help="Vocabulary tree path.")
 	args = parser.parse_args()
 	return args
 
@@ -182,10 +182,13 @@ if __name__ == "__main__":
 			fl_y = float(els[4])
 			k1 = 0
 			k2 = 0
+			k3 = 0
+			k4 = 0
 			p1 = 0
 			p2 = 0
 			cx = w / 2
 			cy = h / 2
+			is_fisheye = False
 			if els[1] == "SIMPLE_PINHOLE":
 				cx = float(els[5])
 				cy = float(els[6])
@@ -210,8 +213,28 @@ if __name__ == "__main__":
 				k2 = float(els[9])
 				p1 = float(els[10])
 				p2 = float(els[11])
+			elif els[1] == "SIMPLE_RADIAL_FISHEYE":
+				is_fisheye = True
+				cx = float(els[5])
+				cy = float(els[6])
+				k1 = float(els[7])
+			elif els[1] == "RADIAL_FISHEYE":
+				is_fisheye = True
+				cx = float(els[5])
+				cy = float(els[6])
+				k1 = float(els[7])
+				k2 = float(els[8])
+			elif els[1] == "OPENCV_FISHEYE":
+				is_fisheye = True
+				fl_y = float(els[5])
+				cx = float(els[6])
+				cy = float(els[7])
+				k1 = float(els[8])
+				k2 = float(els[9])
+				k3 = float(els[10])
+				k4 = float(els[11])
 			else:
-				print("unknown camera model ", els[1])
+				print("Unknown camera model ", els[1])
 			# fl = 0.5 * w / tan(0.5 * angle_x);
 			angle_x = math.atan(w / (fl_x * 2)) * 2
 			angle_y = math.atan(h / (fl_y * 2)) * 2
@@ -230,8 +253,11 @@ if __name__ == "__main__":
 			"fl_y": fl_y,
 			"k1": k1,
 			"k2": k2,
+			"k3": k3,
+			"k4": k4,
 			"p1": p1,
 			"p2": p2,
+			"is_fisheye": is_fisheye,
 			"cx": cx,
 			"cy": cy,
 			"w": w,
@@ -254,7 +280,7 @@ if __name__ == "__main__":
 				# why is this requireing a relitive path while using ^
 				image_rel = os.path.relpath(IMAGE_FOLDER)
 				name = str(f"./{image_rel}/{'_'.join(elems[9:])}")
-				b=sharpness(name)
+				b = sharpness(name)
 				print(name, "sharpness=",b)
 				image_id = int(elems[0])
 				qvec = np.array(tuple(map(float, elems[1:5])))
@@ -266,12 +292,12 @@ if __name__ == "__main__":
 				if not args.keep_colmap_coords:
 					c2w[0:3,2] *= -1 # flip the y and z axis
 					c2w[0:3,1] *= -1
-					c2w = c2w[[1,0,2,3],:] # swap y and z
+					c2w = c2w[[1,0,2,3],:]
 					c2w[2,:] *= -1 # flip whole world upside down
 
 					up += c2w[0:3,1]
 
-				frame={"file_path":name,"sharpness":b,"transform_matrix": c2w}
+				frame = {"file_path":name,"sharpness":b,"transform_matrix": c2w}
 				out["frames"].append(frame)
 	nframes = len(out["frames"])
 

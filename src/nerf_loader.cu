@@ -193,33 +193,23 @@ NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale, bool is_h
 void read_lens(const nlohmann::json& json, Lens& lens, Vector2f& principal_point, Vector4f& rolling_shutter) {
 	ELensMode mode = ELensMode::Perspective;
 
-	if (json.contains("k1")) {
-		lens.params[0] = json["k1"];
-		if (lens.params[0] != 0.f) {
-			mode = ELensMode::OpenCV;
+	ELensMode opencv_mode = json.value("is_fisheye", false) ? ELensMode::OpenCVFisheye : ELensMode::OpenCV;
+	auto read_opencv_parameter = [&](const std::string& name, size_t idx) {
+		if (json.contains(name)) {
+			lens.params[idx] = json[name];
+			if (lens.params[idx] != 0.f) {
+				mode = opencv_mode;
+			}
 		}
-	}
+	};
 
-	if (json.contains("k2")) {
-		lens.params[1] = json["k2"];
-		if (lens.params[1] != 0.f) {
-			mode = ELensMode::OpenCV;
-		}
-	}
+	read_opencv_parameter("k1", 0);
+	read_opencv_parameter("k2", 1);
+	read_opencv_parameter("k3", 2);
+	read_opencv_parameter("k4", 3);
 
-	if (json.contains("p1")) {
-		lens.params[2] = json["p1"];
-		if (lens.params[2] != 0.f) {
-			mode = ELensMode::OpenCV;
-		}
-	}
-
-	if (json.contains("p2")) {
-		lens.params[3] = json["p2"];
-		if (lens.params[3] != 0.f) {
-			mode = ELensMode::OpenCV;
-		}
-	}
+	read_opencv_parameter("p1", 2);
+	read_opencv_parameter("p2", 3);
 
 	if (json.contains("cx")) {
 		principal_point.x() = (float)json["cx"] / (float)json["w"];

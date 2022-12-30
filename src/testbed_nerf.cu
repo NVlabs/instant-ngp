@@ -378,9 +378,9 @@ __global__ void mark_untrained_density_grid(const uint32_t n_elements,  float* _
 
 	Vector3f pos = ((Vector3f{(float)x+0.5f, (float)y+0.5f, (float)z+0.5f}) / NERF_GRIDSIZE() - Vector3f::Constant(0.5f)) * scalbnf(1.0f, level) + Vector3f::Constant(0.5f);
 	float voxel_radius = 0.5f*SQRT3()*scalbnf(1.0f, level) / NERF_GRIDSIZE();
-	int count=0;
+	int count = 0;
 	for (uint32_t j=0; j < n_training_images; ++j) {
-		if (metadata[j].lens.mode == ELensMode::FTheta || metadata[j].lens.mode == ELensMode::LatLong) {
+		if (metadata[j].lens.mode == ELensMode::FTheta || metadata[j].lens.mode == ELensMode::LatLong || metadata[j].lens.mode == ELensMode::OpenCVFisheye) {
 			// not supported for now
 			count++;
 			break;
@@ -1164,6 +1164,8 @@ __global__ void generate_training_samples_nerf(
 
 			if (lens.mode == ELensMode::OpenCV) {
 				iterative_opencv_lens_undistortion(lens.params, &ray_unnormalized.d.x(), &ray_unnormalized.d.y());
+			} else if (lens.mode == ELensMode::OpenCVFisheye) {
+				iterative_opencv_fisheye_lens_undistortion(lens.params, &ray_unnormalized.d.x(), &ray_unnormalized.d.y());
 			}
 		}
 
@@ -2268,7 +2270,7 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 	NerfTracer tracer;
 
 	// Our motion vector code can't undo f-theta and grid distortions -- so don't render these if DLSS is enabled.
-	bool render_opencv_lens = m_nerf.render_with_lens_distortion && (!render_buffer.dlss() || m_nerf.render_lens.mode == ELensMode::OpenCV);
+	bool render_opencv_lens = m_nerf.render_with_lens_distortion && (!render_buffer.dlss() || m_nerf.render_lens.mode == ELensMode::OpenCV || m_nerf.render_lens.mode == ELensMode::OpenCVFisheye);
 	bool render_grid_distortion = m_nerf.render_with_lens_distortion && !render_buffer.dlss();
 
 	Lens lens = render_opencv_lens ? m_nerf.render_lens : Lens{};
@@ -2393,7 +2395,7 @@ void Testbed::render_nerf(CudaRenderBuffer& render_buffer, const Vector2i& max_r
 	}
 }
 
-void Testbed::Nerf::Training::set_camera_intrinsics(int frame_idx, float fx, float fy, float cx, float cy, float k1, float k2, float p1, float p2) {
+void Testbed::Nerf::Training::set_camera_intrinsics(int frame_idx, float fx, float fy, float cx, float cy, float k1, float k2, float p1, float p2, float k3, float k4, bool is_fisheye) {
 	if (frame_idx < 0 || frame_idx >= dataset.n_images) {
 		return;
 	}
@@ -2402,8 +2404,15 @@ void Testbed::Nerf::Training::set_camera_intrinsics(int frame_idx, float fx, flo
 	auto& m = dataset.metadata[frame_idx];
 	if (cx < 0.f) cx = -cx; else cx = cx / m.resolution.x();
 	if (cy < 0.f) cy = -cy; else cy = cy / m.resolution.y();
-	ELensMode mode = (k1 || k2 || p1 || p2) ? ELensMode::OpenCV : ELensMode::Perspective;
-	m.lens = { mode, k1, k2, p1, p2 };
+	m.lens = { ELensMode::Perspective };
+	if (k1 || k2 || k3 || k4 || p1 || p2) {
+		if (is_fisheye) {
+			m.lens = { ELensMode::OpenCVFisheye, k1, k2, k3, k4 };
+		} else {
+			m.lens = { ELensMode::OpenCV, k1, k2, p1, p2 };
+		}
+	}
+
 	m.principal_point = { cx, cy };
 	m.focal_length = { fx, fy };
 	dataset.update_metadata(frame_idx, frame_idx + 1);
@@ -2452,20 +2461,24 @@ void Testbed::Nerf::Training::export_camera_extrinsics(const std::string& filena
 	tlog::info() << "Saving a total of " << n_images_for_training << " poses to " << filename;
 	nlohmann::json trajectory;
 	for(int i = 0; i < n_images_for_training; ++i) {
-		nlohmann::json frame {{"id", i}};
+		nlohmann::json frame{{"id", i}};
 
 		const Eigen::Matrix<float, 3, 4> p_nerf = get_camera_extrinsics(i);
 		if (export_extrinsics_in_quat_format) {
 			// Assume 30 fps
 			frame["time"] =  i*0.033f;
 			// Convert the pose from NeRF to Quaternion format.
-			const Eigen::Matrix<float, 3, 3> conv_coords_l {{ 0.f,  1.f,  0.f},
-															{ 0.f,  0.f, -1.f},
-															{-1.f,  0.f,  0.f}};
-			const Eigen::Matrix<float, 4, 4> conv_coords_r {{ 1.f,  0.f,  0.f,  0.f},
-															{ 0.f, -1.f,  0.f,  0.f},
-															{ 0.f,  0.f, -1.f,  0.f},
-															{ 0.f,  0.f,  0.f,  1.f}};
+			const Eigen::Matrix<float, 3, 3> conv_coords_l{
+				{ 0.f,  1.f,  0.f},
+				{ 0.f,  0.f, -1.f},
+				{-1.f,  0.f,  0.f}
+			};
+			const Eigen::Matrix<float, 4, 4> conv_coords_r{
+				{ 1.f,  0.f,  0.f,  0.f},
+				{ 0.f, -1.f,  0.f,  0.f},
+				{ 0.f,  0.f, -1.f,  0.f},
+				{ 0.f,  0.f,  0.f,  1.f}
+			};
 			const Eigen::Matrix<float, 3, 4> p_quat = conv_coords_l * p_nerf * conv_coords_r;
 
 			const Eigen::Quaternionf rot_q {p_quat.block<3, 3>(0, 0)};
@@ -2478,7 +2491,7 @@ void Testbed::Nerf::Training::export_camera_extrinsics(const std::string& filena
 		trajectory.emplace_back(frame);
 	}
 	std::ofstream file(filename);
-    file << std::setw(2) << trajectory << std::endl;
+	file << std::setw(2) << trajectory << std::endl;
 }
 
 Eigen::Matrix<float, 3, 4> Testbed::Nerf::Training::get_camera_extrinsics(int frame_idx) {
@@ -2490,7 +2503,7 @@ Eigen::Matrix<float, 3, 4> Testbed::Nerf::Training::get_camera_extrinsics(int fr
 
 void Testbed::Nerf::Training::update_transforms(int first, int last) {
 	if (last < 0) {
-		last=dataset.n_images;
+		last = dataset.n_images;
 	}
 
 	if (last > dataset.n_images) {

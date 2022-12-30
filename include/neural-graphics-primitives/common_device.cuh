@@ -143,7 +143,7 @@ __device__ void deposit_image_gradient(const Eigen::Matrix<float, N_DIMS, 1>& va
 }
 
 template <typename T>
-__device__ __host__ inline void apply_opencv_lens_distortion(const T* extra_params, const T u, const T v, T* du, T* dv) {
+NGP_HOST_DEVICE inline void opencv_lens_distortion_delta(const T* extra_params, const T u, const T v, T* du, T* dv) {
 	const T k1 = extra_params[0];
 	const T k2 = extra_params[1];
 	const T p1 = extra_params[2];
@@ -159,7 +159,32 @@ __device__ __host__ inline void apply_opencv_lens_distortion(const T* extra_para
 }
 
 template <typename T>
-__device__ __host__ inline void iterative_opencv_lens_undistortion(const T* params, T* u, T* v) {
+NGP_HOST_DEVICE inline void opencv_fisheye_lens_distortion_delta(const T* extra_params, const T u, const T v, T* du, T* dv) {
+	const T k1 = extra_params[0];
+	const T k2 = extra_params[1];
+	const T k3 = extra_params[2];
+	const T k4 = extra_params[3];
+
+	const T r = std::sqrt(u * u + v * v);
+
+	if (r > T(std::numeric_limits<double>::epsilon())) {
+		const T theta = std::atan(r);
+		const T theta2 = theta * theta;
+		const T theta4 = theta2 * theta2;
+		const T theta6 = theta4 * theta2;
+		const T theta8 = theta4 * theta4;
+		const T thetad =
+			theta * (T(1) + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8);
+		*du = u * thetad / r - u;
+		*dv = v * thetad / r - v;
+	} else {
+		*du = T(0);
+		*dv = T(0);
+	}
+}
+
+template <typename T, typename F>
+NGP_HOST_DEVICE inline void iterative_lens_undistortion(const T* params, T* u, T* v, F distortion_fun) {
 	// Parameters for Newton iteration using numerical differentiation with
 	// central differences, 100 iterations should be enough even for complex
 	// camera models with higher order terms.
@@ -179,11 +204,11 @@ __device__ __host__ inline void iterative_opencv_lens_undistortion(const T* para
 	for (uint32_t i = 0; i < kNumIterations; ++i) {
 		const float step0 = std::max(std::numeric_limits<float>::epsilon(), std::abs(kRelStepSize * x(0)));
 		const float step1 = std::max(std::numeric_limits<float>::epsilon(), std::abs(kRelStepSize * x(1)));
-		apply_opencv_lens_distortion(params, x(0), x(1), &dx(0), &dx(1));
-		apply_opencv_lens_distortion(params, x(0) - step0, x(1), &dx_0b(0), &dx_0b(1));
-		apply_opencv_lens_distortion(params, x(0) + step0, x(1), &dx_0f(0), &dx_0f(1));
-		apply_opencv_lens_distortion(params, x(0), x(1) - step1, &dx_1b(0), &dx_1b(1));
-		apply_opencv_lens_distortion(params, x(0), x(1) + step1, &dx_1f(0), &dx_1f(1));
+		distortion_fun(params, x(0), x(1), &dx(0), &dx(1));
+		distortion_fun(params, x(0) - step0, x(1), &dx_0b(0), &dx_0b(1));
+		distortion_fun(params, x(0) + step0, x(1), &dx_0f(0), &dx_0f(1));
+		distortion_fun(params, x(0), x(1) - step1, &dx_1b(0), &dx_1b(1));
+		distortion_fun(params, x(0), x(1) + step1, &dx_1f(0), &dx_1f(1));
 		J(0, 0) = 1 + (dx_0f(0) - dx_0b(0)) / (2 * step0);
 		J(0, 1) = (dx_1f(0) - dx_1b(0)) / (2 * step1);
 		J(1, 0) = (dx_0f(1) - dx_0b(1)) / (2 * step0);
@@ -197,6 +222,16 @@ __device__ __host__ inline void iterative_opencv_lens_undistortion(const T* para
 
 	*u = x(0);
 	*v = x(1);
+}
+
+template <typename T>
+NGP_HOST_DEVICE inline void iterative_opencv_lens_undistortion(const T* params, T* u, T* v) {
+	iterative_lens_undistortion(params, u, v, opencv_lens_distortion_delta<T>);
+}
+
+template <typename T>
+NGP_HOST_DEVICE inline void iterative_opencv_fisheye_lens_undistortion(const T* params, T* u, T* v) {
+	iterative_lens_undistortion(params, u, v, opencv_fisheye_lens_distortion_delta<T>);
 }
 
 inline NGP_HOST_DEVICE Ray pixel_to_ray_pinhole(
@@ -290,8 +325,11 @@ inline NGP_HOST_DEVICE Ray pixel_to_ray(
 			(uv.y() - screen_center.y()) * (float)resolution.y() / focal_length.y(),
 			1.0f
 		};
+
 		if (lens.mode == ELensMode::OpenCV) {
 			iterative_opencv_lens_undistortion(lens.params, &dir.x(), &dir.y());
+		} else if (lens.mode == ELensMode::OpenCVFisheye) {
+			iterative_opencv_fisheye_lens_undistortion(lens.params, &dir.x(), &dir.y());
 		}
 	}
 	if (distortion_grid) {
@@ -334,21 +372,21 @@ inline NGP_HOST_DEVICE Eigen::Vector2f pos_to_pixel(
 	dir /= dir.z();
 	dir += head_pos * parallax_shift.z();
 
+	float du = 0.0f, dv = 0.0f;
 	if (lens.mode == ELensMode::OpenCV) {
-		float du, dv;
-		apply_opencv_lens_distortion(lens.params, dir.x(), dir.y(), &du, &dv);
-		dir.x() += du;
-		dir.y() += dv;
-	} else if (lens.mode == ELensMode::FTheta) {
-		assert(false);
-	}  else if (lens.mode == ELensMode::LatLong) {
-		assert(false);
+		opencv_lens_distortion_delta(lens.params, dir.x(), dir.y(), &du, &dv);
+	} else if (lens.mode == ELensMode::OpenCVFisheye) {
+		opencv_fisheye_lens_distortion_delta(lens.params, dir.x(), dir.y(), &du, &dv);
+	} else {
+		// No other type of distortion is permitted.
+		assert(lens.mode == ELensMode::Perspective);
 	}
 
-	return {
-		dir.x() * focal_length.x() + screen_center.x() * resolution.x(),
-		dir.y() * focal_length.y() + screen_center.y() * resolution.y(),
-	};
+	dir.x() += du;
+	dir.y() += dv;
+
+	Eigen::Vector2f uv = Eigen::Vector2f{dir.x(), dir.y()}.cwiseProduct(focal_length).cwiseQuotient(resolution.cast<float>()) + screen_center;
+	return uv.cwiseProduct(resolution.cast<float>());
 }
 
 inline NGP_HOST_DEVICE Eigen::Vector2f motion_vector_3d(
