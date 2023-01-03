@@ -136,8 +136,9 @@ jobs:
         with:
           name: Instant NGP for ${{ matrix.recommended_gpus }}
           path: |
-            README.md
             LICENSE.txt
+            README.md
+            requirements.txt
             ${{ env.build_dir }}/cudart64*.dll
             ${{ env.build_dir }}/instant-ngp.exe
             ${{ env.build_dir }}/nvngx_dlss.dll
@@ -145,3 +146,6 @@ jobs:
             docs/nerf_dataset_tips.md
             docs/assets_readme/
             data/
+            scripts/colmap2nerf.py
+            scripts/nsvf2nerf.py
+            scripts/record3d2nerf.py
