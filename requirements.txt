@@ -3,5 +3,6 @@ imageio
 numpy
 opencv-python-headless
 pybind11
+pyquaternion
 scipy
 tqdm
