@@ -3,7 +3,7 @@
 Our NeRF implementation expects initial camera parameters to be provided in a `transforms.json` file in a format compatible with [the original NeRF codebase](https://www.matthewtancik.com/nerf).
 We provide a script as a convenience, [scripts/colmap2nerf.py](/scripts/colmap2nerf.py), that can be used to process a video file or sequence of images, using the open source [COLMAP](https://colmap.github.io/) structure from motion software to extract the necessary camera data.
 
-If you are using Windows, you do not need to install COLMAP yourself; running [scripts/colmap2nerf.py](/scripts/colmap2nerf.py) will automatically download COLMAP for you.
+You can also generate camera data from Record3D (based on ARKit) using the [scripts/record3d2nerf.py](/scripts/record3d2nerf.py) script.
 
 The training process can be quite picky about the dataset.
 For example, it is important for the dataset to have good coverage, to not contain mislabelled camera data, and to not contain blurry frames (motion blur and defocus blur are both problematic).
@@ -54,8 +54,29 @@ See [nerf_loader.cu](src/nerf_loader.cu) for implementation details and addition
 ## Preparing new NeRF datasets
 
 To train on self-captured data, one has to process the data into an existing format supported by Instant-NGP. We provide scripts to support two complementary approaches:
-- [COLMAP](#COLMAP)
-- [Record3D](#Record3D) (based on ARKit)
+- [COLMAP](#COLMAP) to create a dataset from a set of photos or a video you took
+
+- [Record3D](#Record3D) to create a dataset with an iPhone 12 Pro or newer (based on ARKit)
+
+Both require [Python](https://www.python.org/) 3.7 or higher to be installed and available in your PATH.
+
+If you are using Debian based Linux distribution, install Python with
+```sh
+sudo apt-get install python3-dev python3-pip
+```
+
+Alternatively, if you are using Arch or Arch derivatives, install Python with
+```sh
+sudo pacman -S python python-pip
+```
+
+On Windows you can also install Python from the Microsoft Store, which will add Python to your PATH automatically.
+
+Then you need to install the required Python packages for running this software by to do so opening a Linux terminal / Windows Command Prompt and calling
+```sh
+pip install -r requirements.txt
+```
+
 
 ### COLMAP
 
