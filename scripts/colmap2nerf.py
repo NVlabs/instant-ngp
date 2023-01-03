@@ -9,6 +9,7 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 import argparse
+from glob import glob
 import os
 from pathlib import Path, PurePosixPath
 
@@ -19,6 +20,9 @@ import math
 import cv2
 import os
 import shutil
+
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+SCRIPTS_FOLDER = os.path.join(ROOT_DIR, "scripts")
 
 def parse_args():
 	parser = argparse.ArgumentParser(description="Convert a text colmap export to nerf format transforms.json; optionally convert video to images, and optionally run colmap in the first place.")
@@ -49,8 +53,21 @@ def do_system(arg):
 		sys.exit(err)
 
 def run_ffmpeg(args):
+	ffmpeg_binary = "ffmpeg"
+	if os.name == 'nt':
+		ffmpeg_glob = os.path.join(ROOT_DIR, "external", "ffmpeg", "*", "bin", "ffmpeg.exe")
+		candidates = glob(ffmpeg_glob)
+		if not candidates:
+			print("FFmpeg not found. Attempting to download FFmpeg from the internet.")
+			do_system(os.path.join(SCRIPTS_FOLDER, "download_ffmpeg.bat"))
+			candidates = glob(ffmpeg_glob)
+
+		if candidates:
+			ffmpeg_binary = candidates[0]
+
 	if not os.path.isabs(args.images):
 		args.images = os.path.join(os.path.dirname(args.video_in), args.images)
+
 	images = "\"" + args.images + "\""
 	video =  "\"" + args.video_in + "\""
 	fps = float(args.video_fps) or 1.0
@@ -69,9 +86,21 @@ def run_ffmpeg(args):
 	if time_slice:
 		start, end = time_slice.split(",")
 		time_slice_value = f",select='between(t\,{start}\,{end})'"
-	do_system(f"ffmpeg -i {video} -qscale:v 1 -qmin 1 -vf \"fps={fps}{time_slice_value}\" {images}/%04d.jpg")
+	do_system(f"{ffmpeg_binary} -i {video} -qscale:v 1 -qmin 1 -vf \"fps={fps}{time_slice_value}\" {images}/%04d.jpg")
 
 def run_colmap(args):
+	colmap_binary = "colmap"
+	if os.name == 'nt':
+		colmap_glob = os.path.join(ROOT_DIR, "external", "colmap", "*", "COLMAP.bat")
+		candidates = glob(colmap_glob)
+		if not candidates:
+			print("COLMAP not found. Attempting to download COLMAP from the internet.")
+			do_system(os.path.join(SCRIPTS_FOLDER, "download_colmap.bat"))
+			candidates = glob(colmap_glob)
+
+		if candidates:
+			colmap_binary = candidates[0]
+
 	db = args.colmap_db
 	images = "\"" + args.images + "\""
 	db_noext=str(Path(db).with_suffix(""))
@@ -85,8 +114,8 @@ def run_colmap(args):
 		sys.exit(1)
 	if os.path.exists(db):
 		os.remove(db)
-	do_system(f"colmap feature_extractor --ImageReader.camera_model {args.colmap_camera_model} --ImageReader.camera_params \"{args.colmap_camera_params}\" --SiftExtraction.estimate_affine_shape=true --SiftExtraction.domain_size_pooling=true --ImageReader.single_camera 1 --database_path {db} --image_path {images}")
-	match_cmd = f"colmap {args.colmap_matcher}_matcher --SiftMatching.guided_matching=true --database_path {db}"
+	do_system(f"{colmap_binary} feature_extractor --ImageReader.camera_model {args.colmap_camera_model} --ImageReader.camera_params \"{args.colmap_camera_params}\" --SiftExtraction.estimate_affine_shape=true --SiftExtraction.domain_size_pooling=true --ImageReader.single_camera 1 --database_path {db} --image_path {images}")
+	match_cmd = f"{colmap_binary} {args.colmap_matcher}_matcher --SiftMatching.guided_matching=true --database_path {db}"
 	if args.vocab_path:
 		match_cmd += f" --VocabTreeMatching.vocab_tree_path {args.vocab_path}"
 	do_system(match_cmd)
@@ -95,14 +124,14 @@ def run_colmap(args):
 	except:
 		pass
 	do_system(f"mkdir {sparse}")
-	do_system(f"colmap mapper --database_path {db} --image_path {images} --output_path {sparse}")
-	do_system(f"colmap bundle_adjuster --input_path {sparse}/0 --output_path {sparse}/0 --BundleAdjustment.refine_principal_point 1")
+	do_system(f"{colmap_binary} mapper --database_path {db} --image_path {images} --output_path {sparse}")
+	do_system(f"{colmap_binary} bundle_adjuster --input_path {sparse}/0 --output_path {sparse}/0 --BundleAdjustment.refine_principal_point 1")
 	try:
 		shutil.rmtree(text)
 	except:
 		pass
 	do_system(f"mkdir {text}")
-	do_system(f"colmap model_converter --input_path {sparse}/0 --output_path {text} --output_type TXT")
+	do_system(f"{colmap_binary} model_converter --input_path {sparse}/0 --output_path {text} --output_type TXT")
 
 def variance_of_laplacian(image):
 	return cv2.Laplacian(image, cv2.CV_64F).var()

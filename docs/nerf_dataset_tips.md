@@ -3,6 +3,8 @@
 Our NeRF implementation expects initial camera parameters to be provided in a `transforms.json` file in a format compatible with [the original NeRF codebase](https://www.matthewtancik.com/nerf).
 We provide a script as a convenience, [scripts/colmap2nerf.py](/scripts/colmap2nerf.py), that can be used to process a video file or sequence of images, using the open source [COLMAP](https://colmap.github.io/) structure from motion software to extract the necessary camera data.
 
+If you are using Windows, you do not need to install COLMAP yourself; running [scripts/colmap2nerf.py](/scripts/colmap2nerf.py) will automatically download COLMAP for you.
+
 The training process can be quite picky about the dataset.
 For example, it is important for the dataset to have good coverage, to not contain mislabelled camera data, and to not contain blurry frames (motion blur and defocus blur are both problematic).
 This document attempts to give a few tips.
@@ -57,8 +59,10 @@ To train on self-captured data, one has to process the data into an existing for
 
 ### COLMAP
 
-Make sure that you have installed [COLMAP](https://colmap.github.io/) and that it is available in your PATH. If you are using a video file as input, also be sure to install [FFmpeg](https://www.ffmpeg.org/) and make sure that it is available in your PATH.
+If you use Linux, make sure that you have installed [COLMAP](https://colmap.github.io/) and that it is available in your PATH. If you are using a video file as input, also be sure to install [FFmpeg](https://www.ffmpeg.org/) and make sure that it is available in your PATH.
 To check that this is the case, from a terminal window, you should be able to run `colmap` and `ffmpeg -?` and see some help text from each.
+
+If you use Windows, you do not need to install anything. COLMAP and FFmpeg will be downloaded automatically when running the following scripts.
 
 If you are training from a video file, run the [scripts/colmap2nerf.py](/scripts/colmap2nerf.py) script from the folder containing the video, with the following recommended parameters:
 
@@ -74,7 +78,7 @@ For training from images, place them in a subfolder called `images` and then use
 data-folder$ python [path-to-instant-ngp]/scripts/colmap2nerf.py --colmap_matcher exhaustive --run_colmap --aabb_scale 16
 ```
 
-The script will run FFmpeg and/or COLMAP as needed, followed by a conversion step to the required `transforms.json` format, which will be written in the current directory. 
+The script will run (and install, if you use Windows) FFmpeg and COLMAP as needed, followed by a conversion step to the required `transforms.json` format, which will be written in the current directory. 
 
 By default, the script invokes colmap with the "sequential matcher", which is suitable for images taken from a smoothly changing camera path, as in a video. The exhaustive matcher is more appropriate if the images are in no particular order, as shown in the image example above.
 For more options, you can run the script with `--help`. For more advanced uses of COLMAP or for challenging scenes, please see the [COLMAP documentation](https://colmap.github.io/cli.html); you may need to modify the [scripts/colmap2nerf.py](/scripts/colmap2nerf.py) script itself.
