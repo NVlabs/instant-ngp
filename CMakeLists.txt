@@ -313,15 +313,15 @@ if (Python_FOUND)
 	target_link_libraries(pyngp PRIVATE ngp PUBLIC ${PYTHON_LIBRARIES} pybind11::module)
 	target_compile_definitions(pyngp PUBLIC -DNGP_PYTHON)
 	pybind11_extension(pyngp)
+endif()
 
-	if (MSVC)
-		# Copy CUDA runtime DLLs to the build directory so that Python can find them.
-		file(GLOB CUDA_DLLS "${CUDA_COMPILER_BIN}/cudart64*.dll")
-		if (CUDA_DLLS)
-			add_custom_command(TARGET pyngp POST_BUILD
-				COMMAND ${CMAKE_COMMAND} -E copy ${CUDA_DLLS} $<TARGET_FILE_DIR:pyngp>
-				COMMAND_EXPAND_LISTS
-			)
-		endif()
+if (MSVC)
+	# Copy CUDA runtime DLLs to the build directory so that Python can find them.
+	file(GLOB CUDA_DLLS "${CUDA_COMPILER_BIN}/cudart64*.dll")
+	if (CUDA_DLLS)
+		add_custom_command(TARGET pyngp POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy ${CUDA_DLLS} $<TARGET_FILE_DIR:pyngp>
+			COMMAND_EXPAND_LISTS
+		)
 	endif()
 endif()
