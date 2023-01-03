@@ -40,11 +40,11 @@ std::vector<Vector3f> load_obj(const std::string& filename) {
 	bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename.c_str());
 
 	if (!warn.empty()) {
-		tlog::warning() << "Obj: " << warn;
+		tlog::warning() << warn << " while loading '" << filename << "'";
 	}
 
 	if (!err.empty()) {
-		throw std::runtime_error{fmt::format("Error loading obj: {}", err)};
+		throw std::runtime_error{fmt::format("Error loading '{}': {}", filename, err)};
 	}
 
 	std::vector<Vector3f> result;
