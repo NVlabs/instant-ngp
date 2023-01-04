@@ -321,11 +321,15 @@ public:
 		return os;
 	}
 
-	bool remove_file() {
+	bool remove_file() const {
 #if !defined(_WIN32)
 		return std::remove(str().c_str()) == 0;
 #else
-		return DeleteFileW(wstr().c_str()) != 0;
+		if (is_directory()) {
+			return RemoveDirectoryW(wstr().c_str()) != 0;
+		} else {
+			return DeleteFileW(wstr().c_str()) != 0;
+		}
 #endif
 	}
 
