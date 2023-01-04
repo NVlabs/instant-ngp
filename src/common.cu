@@ -18,10 +18,49 @@
 
 #include <filesystem/path.h>
 
+#ifndef _WIN32
+#  include <unistd.h>
+#  include <linux/limits.h>
+#endif
+
 using namespace tcnn;
 namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
+
+fs::path get_executable_dir() {
+#ifdef _WIN32
+	WCHAR path[MAX_PATH];
+	if (GetModuleFileNameW(NULL, path, MAX_PATH) == 0) {
+		return ".";
+	}
+#else
+	char path[PATH_MAX];
+	ssize_t count = readlink("/proc/self/exe", path, PATH_MAX);
+	if (count == -1) {
+		return ".";
+	}
+#endif
+	return fs::path{path}.parent_path();
+}
+
+filesystem::path get_root_dir() {
+	auto executable_dir = get_executable_dir();
+	fs::path exists_in_root_dir = "./scripts";
+	for (const auto& candidate : {
+		exists_in_root_dir,
+		fs::path{"../"}/exists_in_root_dir,
+		executable_dir/exists_in_root_dir,
+		executable_dir/".."/exists_in_root_dir,
+	}) {
+		if (candidate.exists()) {
+			return candidate.parent_path();
+		}
+	}
+
+	tlog::warning() << "Could not find root directory.";
+	return ".";
+}
 
 bool ends_with(const std::string& str, const std::string& ending) {
 	if (ending.length() > str.length()) {

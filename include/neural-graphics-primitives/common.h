@@ -50,6 +50,8 @@
 	#define NGP_PRAGMA_NO_UNROLL
 #endif
 
+#include <filesystem/path.h>
+
 #include <chrono>
 #include <functional>
 
@@ -60,6 +62,9 @@
 #endif
 
 NGP_NAMESPACE_BEGIN
+
+filesystem::path get_executable_dir();
+filesystem::path get_root_dir();
 
 bool ends_with(const std::string& str, const std::string& ending);
 bool ends_with_case_insensitive(const std::string& str, const std::string& ending);

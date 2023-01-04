@@ -176,12 +176,7 @@ fs::path Testbed::find_network_config(const fs::path& network_config_path) {
 		return network_config_path;
 	}
 
-	fs::path candidate = fs::path{"configs"}/to_string(m_testbed_mode)/network_config_path;
-	if (candidate.exists()) {
-		return candidate;
-	}
-
-	candidate = fs::path{"../"}/candidate;
+	fs::path candidate = get_root_dir()/"configs"/to_string(m_testbed_mode)/network_config_path;
 	if (candidate.exists()) {
 		return candidate;
 	}
@@ -1973,9 +1968,8 @@ void Testbed::prepare_next_camera_path_frame() {
 
 #ifdef _WIN32
 			// Under Windows, try automatically downloading FFmpeg binaries if they don't exist
-			{
-			// if (system(fmt::format("where {} >nul 2>nul", ffmpeg.str()).c_str()) != 0) {
-				fs::path root_dir = fs::path{"scripts"}.exists() ? "." : "..";
+			if (system(fmt::format("where {} >nul 2>nul", ffmpeg.str()).c_str()) != 0) {
+				fs::path root_dir = get_root_dir();
 				if ((root_dir/"external"/"ffmpeg").exists()) {
 					for (const auto& path : fs::directory{root_dir/"external"/"ffmpeg"}) {
 						ffmpeg = path/"bin"/"ffmpeg.exe";
