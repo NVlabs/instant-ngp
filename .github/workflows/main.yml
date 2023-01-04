@@ -139,9 +139,9 @@ jobs:
             LICENSE.txt
             README.md
             requirements.txt
-            ${{ env.build_dir }}/cudart64*.dll
-            ${{ env.build_dir }}/instant-ngp.exe
-            ${{ env.build_dir }}/nvngx_dlss.dll
+            cudart64*.dll
+            instant-ngp.exe
+            nvngx_dlss.dll
             configs/
             docs/nerf_dataset_tips.md
             docs/assets_readme/

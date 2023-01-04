@@ -8,6 +8,9 @@
 /tmp
 /venv
 /video
+/instant-ngp
+/*.dll
+/*.exe
 /*.json
 *.msgpack
 *.training

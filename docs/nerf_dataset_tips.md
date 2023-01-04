@@ -109,7 +109,7 @@ The `aabb_scale` parameter is the most important `instant-ngp` specific paramete
 Assuming success, you can now train your NeRF model as follows, starting in the `instant-ngp` folder:
 
 ```sh
-instant-ngp$ ./build/instant-ngp [path to training data folder containing transforms.json]
+instant-ngp$ ./instant-ngp [path to training data folder containing transforms.json]
 ```
 
 ### Record3D
@@ -121,13 +121,13 @@ With an >=iPhone 12 Pro, one can use [Record3D](https://record3d.app/) to collec
 3. Replace the `.r3d` extension with `.zip` and unzip the file to get a directory `path/to/data`.
 4. Run the preprocessing script: 
 	```
-	python scripts/record3d2nerf.py --scene path/to/data
+	instant-ngp$ python scripts/record3d2nerf.py --scene path/to/data
 	```
 	If you capture the scene in the landscape orientation, add `--rotate`.
 
 5. Launch Instant-NGP training:
 	```
-	./build/instant-ngp path/to/data
+	instant-ngp$ ./instant-ngp path/to/data
 	```
 
 ## Tips for NeRF training data

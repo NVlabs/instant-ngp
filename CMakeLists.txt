@@ -306,6 +306,17 @@ if (NGP_VULKAN)
 	endif()
 endif()
 
+if (MSVC)
+	# Copy CUDA runtime DLLs to the build directory so that Python can find them.
+	file(GLOB CUDA_DLLS "${CUDA_COMPILER_BIN}/cudart64*.dll")
+	if (CUDA_DLLS)
+		add_custom_command(TARGET instant-ngp POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy ${CUDA_DLLS} $<TARGET_FILE_DIR:instant-ngp>
+			COMMAND_EXPAND_LISTS
+		)
+	endif()
+endif()
+
 
 if (Python_FOUND)
 	add_library(pyngp SHARED src/python_api.cu)
@@ -315,13 +326,18 @@ if (Python_FOUND)
 	pybind11_extension(pyngp)
 endif()
 
+# Link the executable to the project directory and copy over DLLs such that instant-ngp can be invoked without going into the build folder.
+set(NGP_BINARY_FILE "\"${CMAKE_CURRENT_SOURCE_DIR}/$<TARGET_FILE_NAME:instant-ngp>\"")
+file(TO_NATIVE_PATH ${NGP_BINARY_FILE} NGP_BINARY_FILE)
 if (MSVC)
-	# Copy CUDA runtime DLLs to the build directory so that Python can find them.
-	file(GLOB CUDA_DLLS "${CUDA_COMPILER_BIN}/cudart64*.dll")
-	if (CUDA_DLLS)
-		add_custom_command(TARGET pyngp POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy ${CUDA_DLLS} $<TARGET_FILE_DIR:pyngp>
+	add_custom_command(TARGET instant-ngp POST_BUILD COMMAND cmd /C del /F /Q "${NGP_BINARY_FILE}" && cmd /C mklink /H "${NGP_BINARY_FILE}" "\"$<TARGET_FILE:instant-ngp>\"")
+	file(GLOB REQUIRED_DLLS "${CMAKE_CURRENT_BINARY_DIR}/*.dll")
+	if (REQUIRED_DLLS)
+		add_custom_command(TARGET instant-ngp POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy ${REQUIRED_DLLS} ${CMAKE_CURRENT_SOURCE_DIR}
 			COMMAND_EXPAND_LISTS
 		)
 	endif()
+else()
+	add_custom_command(TARGET instant-ngp POST_BUILD COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE:instant-ngp> "${NGP_BINARY_FILE}")
 endif()
