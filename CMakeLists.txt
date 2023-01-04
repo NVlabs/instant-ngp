@@ -328,8 +328,8 @@ endif()
 
 # Link the executable to the project directory and copy over DLLs such that instant-ngp can be invoked without going into the build folder.
 set(NGP_BINARY_FILE "\"${CMAKE_CURRENT_SOURCE_DIR}/$<TARGET_FILE_NAME:instant-ngp>\"")
-file(TO_NATIVE_PATH ${NGP_BINARY_FILE} NGP_BINARY_FILE)
 if (MSVC)
+	file(TO_NATIVE_PATH ${NGP_BINARY_FILE} NGP_BINARY_FILE)
 	add_custom_command(TARGET instant-ngp POST_BUILD COMMAND cmd /C del /F /Q "${NGP_BINARY_FILE}" && cmd /C mklink /H "${NGP_BINARY_FILE}" "\"$<TARGET_FILE:instant-ngp>\"")
 	file(GLOB REQUIRED_DLLS "${CMAKE_CURRENT_BINARY_DIR}/*.dll")
 	if (REQUIRED_DLLS)
