@@ -132,6 +132,7 @@ py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool l
 	if (end_time < 0.f) {
 		end_time = start_time;
 	}
+
 	bool path_animation_enabled = start_time >= 0.f;
 	if (!path_animation_enabled) { // the old code disabled camera smoothing for non-path renders; so we preserve that behaviour
 		m_smoothed_camera = m_camera;
@@ -146,6 +147,7 @@ py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool l
 		set_camera_from_time(start_time);
 		m_smoothed_camera = m_camera;
 	}
+
 	auto start_cam_matrix = m_smoothed_camera;
 
 	// now set up the end-of-frame camera matrix if we are moving along a path
@@ -153,14 +155,15 @@ py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool l
 		set_camera_from_time(end_time);
 		apply_camera_smoothing(1000.f / fps);
 	}
+
 	auto end_cam_matrix = m_smoothed_camera;
 
 	for (int i = 0; i < spp; ++i) {
 		float start_alpha = ((float)i)/(float)spp * shutter_fraction;
 		float end_alpha = ((float)i + 1.0f)/(float)spp * shutter_fraction;
 
-		auto sample_start_cam_matrix = log_space_lerp(start_cam_matrix, end_cam_matrix, start_alpha);
-		auto sample_end_cam_matrix = log_space_lerp(start_cam_matrix, end_cam_matrix, end_alpha);
+		auto sample_start_cam_matrix = start_cam_matrix;
+		auto sample_end_cam_matrix = log_space_lerp(start_cam_matrix, end_cam_matrix, shutter_fraction);
 
 		if (path_animation_enabled) {
 			set_camera_from_time(start_time + (end_time-start_time) * (start_alpha + end_alpha) / 2.0f);
@@ -180,21 +183,6 @@ py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool l
 	py::array_t<float> result({height, width, 4});
 	py::buffer_info buf = result.request();
 
-	CUDA_CHECK_THROW(cudaMemcpy2DFromArray(buf.ptr, width * sizeof(float) * 4, m_windowless_render_surface.surface_provider().array(), 0, 0, width * sizeof(float) * 4, height, cudaMemcpyDeviceToHost));
-	return result;
-}
-
-py::array_t<float> Testbed::render_with_rolling_shutter_to_cpu(const Eigen::Matrix<float, 3, 4>& camera_transform_start, const Eigen::Matrix<float, 3, 4>& camera_transform_end, const Eigen::Vector4f& rolling_shutter, int width, int height, int spp, bool linear) {
-	m_windowless_render_surface.resize({width, height});
-	m_windowless_render_surface.reset_accumulation();
-	for (int i = 0; i < spp; ++i) {
-		if (m_autofocus) {
-			autofocus();
-		}
-		render_frame(m_nerf.training.dataset.nerf_matrix_to_ngp(camera_transform_start), m_nerf.training.dataset.nerf_matrix_to_ngp(camera_transform_end), rolling_shutter, m_windowless_render_surface, !linear);
-	}
-	py::array_t<float> result({height, width, 4});
-	py::buffer_info buf = result.request();
 	CUDA_CHECK_THROW(cudaMemcpy2DFromArray(buf.ptr, width * sizeof(float) * 4, m_windowless_render_surface.surface_provider().array(), 0, 0, width * sizeof(float) * 4, height, cudaMemcpyDeviceToHost));
 	return result;
 }
@@ -375,15 +363,6 @@ PYBIND11_MODULE(pyngp, m) {
 			py::arg("end_t") = -1.f,
 			py::arg("fps") = 30.f,
 			py::arg("shutter_fraction") = 1.0f
-		)
-		.def("render_with_rolling_shutter", &Testbed::render_with_rolling_shutter_to_cpu, "Renders an image at the requested resolution. Does not require a window. Supports rolling shutter, with per ray time being computed as A+B*u+C*v+D*t for [A,B,C,D]",
-			py::arg("transform_matrix_start"),
-			py::arg("transform_matrix_end"),
-			py::arg("rolling_shutter") = Eigen::Vector4f::Zero(),
-			py::arg("width") = 1920,
-			py::arg("height") = 1080,
-			py::arg("spp") = 1,
-			py::arg("linear") = true
 		)
 		.def("destroy_window", &Testbed::destroy_window, "Destroy the window again.")
 		.def("train", &Testbed::train, py::call_guard<py::gil_scoped_release>(), "Perform a specified number of training steps.")

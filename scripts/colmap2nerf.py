@@ -54,7 +54,9 @@ def do_system(arg):
 
 def run_ffmpeg(args):
 	ffmpeg_binary = "ffmpeg"
-	if os.name == 'nt':
+
+	# On Windows, if FFmpeg isn't found, try automatically downloading it from the internet
+	if os.name == "nt" and os.system(f"where {ffmpeg_binary} >nul 2>nul") != 0:
 		ffmpeg_glob = os.path.join(ROOT_DIR, "external", "ffmpeg", "*", "bin", "ffmpeg.exe")
 		candidates = glob(ffmpeg_glob)
 		if not candidates:
@@ -90,7 +92,9 @@ def run_ffmpeg(args):
 
 def run_colmap(args):
 	colmap_binary = "colmap"
-	if os.name == 'nt':
+
+	# On Windows, if FFmpeg isn't found, try automatically downloading it from the internet
+	if os.name == "nt" and os.system(f"where {colmap_binary} >nul 2>nul") != 0:
 		colmap_glob = os.path.join(ROOT_DIR, "external", "colmap", "*", "COLMAP.bat")
 		candidates = glob(colmap_glob)
 		if not candidates:
