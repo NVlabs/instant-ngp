@@ -272,7 +272,7 @@ bool debug_project(const Matrix<float, 4, 4>& proj, Vector3f p, ImVec2& o) {
 void add_debug_line(ImDrawList* list, const Matrix<float, 4, 4>& proj, Vector3f a, Vector3f b, uint32_t col, float thickness) {
 	ImVec2 aa, bb;
 	if (debug_project(proj, a, aa) && debug_project(proj, b, bb)) {
-		list->AddLine(aa, bb, col, thickness);
+		list->AddLine(aa, bb, col, thickness * 2.0f);
 	}
 }
 
