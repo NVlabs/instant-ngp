@@ -182,8 +182,8 @@ inline __device__ LossAndGradient mape_loss(const Array3f& target, const Array3f
 	};
 }
 
-inline __device__ float distance_to_next_voxel(const Vector3f& pos, const Vector3f& dir, const Vector3f& idir, uint32_t res) { // dda like step
-	Vector3f p = res * pos;
+inline __device__ float distance_to_next_voxel(const Vector3f& pos, const Vector3f& dir, const Vector3f& idir, float res) { // dda like step
+	Vector3f p = res * (pos - Vector3f::Constant(0.5f));
 	float tx = (floorf(p.x() + 0.5f + 0.5f * sign(dir.x())) - p.x()) * idir.x();
 	float ty = (floorf(p.y() + 0.5f + 0.5f * sign(dir.y())) - p.y()) * idir.y();
 	float tz = (floorf(p.z() + 0.5f + 0.5f * sign(dir.z())) - p.z()) * idir.z();
@@ -192,7 +192,9 @@ inline __device__ float distance_to_next_voxel(const Vector3f& pos, const Vector
 	return fmaxf(t / res, 0.0f);
 }
 
-inline __device__ float advance_to_next_voxel(float t, float cone_angle, const Vector3f& pos, const Vector3f& dir, const Vector3f& idir, uint32_t res) {
+inline __device__ float advance_to_next_voxel(float t, float cone_angle, const Vector3f& pos, const Vector3f& dir, const Vector3f& idir, uint32_t mip) {
+	float res = scalbnf(NERF_GRIDSIZE(), -(int)mip);
+
 	// Analytic stepping by a multiple of dt. Make empty space unequal to non-empty space
 	// due to the different stepping.
 	// float dt = calc_dt(t, cone_angle);
@@ -652,8 +654,7 @@ __global__ void advance_pos_nerf(
 			break;
 		}
 
-		uint32_t res = NERF_GRIDSIZE()>>mip;
-		t = advance_to_next_voxel(t, cone_angle, pos, dir, idir, res);
+		t = advance_to_next_voxel(t, cone_angle, pos, dir, idir, mip);
 	}
 
 	payload.t = t;
@@ -750,8 +751,7 @@ __global__ void generate_next_nerf_network_inputs(
 				break;
 			}
 
-			uint32_t res = NERF_GRIDSIZE()>>mip;
-			t = advance_to_next_voxel(t, cone_angle, pos, dir, idir, res);
+			t = advance_to_next_voxel(t, cone_angle, pos, dir, idir, mip);
 		}
 
 		network_input(i + j * n_elements)->set_with_optional_extra_dims(warp_position(pos, train_aabb), warp_direction(dir), warp_dt(dt), extra_dims, network_input.stride_in_bytes); // XXXCONE
@@ -933,11 +933,11 @@ __global__ void composite_kernel_nerf(
 			if (show_accel >= 0) {
 				uint32_t mip = max(show_accel, mip_from_pos(pos));
 				uint32_t res = NERF_GRIDSIZE() >> mip;
-				int ix = pos.x()*(res);
-				int iy = pos.y()*(res);
-				int iz = pos.z()*(res);
-				default_rng_t rng(ix+iy*232323+iz*727272);
-				rgb.x() = 1.f-mip*(1.f/(NERF_CASCADES()-1));
+				int ix = pos.x() * res;
+				int iy = pos.y() * res;
+				int iz = pos.z() * res;
+				default_rng_t rng(ix + iy * 232323 + iz * 727272);
+				rgb.x() = 1.f - mip * (1.f / (NERF_CASCADES() - 1));
 				rgb.y() = rng.next_float();
 				rgb.z() = rng.next_float();
 			} else {
@@ -1190,7 +1190,7 @@ __global__ void generate_training_samples_nerf(
 
 	// first pass to compute an accurate number of steps
 	uint32_t j = 0;
-	float t=startt;
+	float t = startt;
 	Vector3f pos;
 
 	while (aabb.contains(pos = ray_unnormalized.o + t * ray_d_normalized) && j < NERF_STEPS()) {
@@ -1200,8 +1200,7 @@ __global__ void generate_training_samples_nerf(
 			++j;
 			t += dt;
 		} else {
-			uint32_t res = NERF_GRIDSIZE()>>mip;
-			t = advance_to_next_voxel(t, cone_angle, pos, ray_d_normalized, idir, res);
+			t = advance_to_next_voxel(t, cone_angle, pos, ray_d_normalized, idir, mip);
 		}
 	}
 	if (j == 0 && !train_envmap) {
@@ -1233,8 +1232,7 @@ __global__ void generate_training_samples_nerf(
 			++j;
 			t += dt;
 		} else {
-			uint32_t res = NERF_GRIDSIZE()>>mip;
-			t = advance_to_next_voxel(t, cone_angle, pos, ray_d_normalized, idir, res);
+			t = advance_to_next_voxel(t, cone_angle, pos, ray_d_normalized, idir, mip);
 		}
 	}
 	if (max_level_rand_training) {
@@ -1637,8 +1635,6 @@ __global__ void compute_cam_gradient_train_nerf(
 
 	// Compute ray gradient
 	for (uint32_t j = 0; j < numsteps; ++j) {
-		// pos = ray.o + t * ray.d;
-
 		const Vector3f warped_pos = coords(j)->pos.p;
 		const Vector3f pos_gradient = coords_gradient(j)->pos.p.cwiseProduct(warp_position_derivative(warped_pos, aabb));
 		ray_gradient.o += pos_gradient;
