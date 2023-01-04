@@ -106,7 +106,8 @@ Let's start using __instant-ngp__; more information about the GUI and other scri
 
 ### NeRF fox
 
-One test scene is provided in this repository, using a small number of frames from a casually captured phone video:
+One test scene is provided in this repository, using a small number of frames from a casually captured phone video.
+Simply start `instant-ngp` and drag the `data/nerf/fox` folder into the GUI. Or, alternatively, use the command line:
 
 ```sh
 instant-ngp$ ./instant-ngp data/nerf/fox
@@ -131,6 +132,8 @@ instant-ngp$ ./instant-ngp data/nerf_synthetic/lego/transforms_train.json
 
 ### SDF armadillo
 
+Drag `data/sdf/armadillo.obj` into the GUI or use the command:
+
 ```sh
 instant-ngp$ ./instant-ngp data/sdf/armadillo.obj
 ```
@@ -138,6 +141,8 @@ instant-ngp$ ./instant-ngp data/sdf/armadillo.obj
 <img src="docs/assets_readme/armadillo.png"/>
 
 ### Image of Einstein
+
+Drag `data/image/albert.exr` into the GUI or use the command:
 
 ```sh
 instant-ngp$ ./instant-ngp data/image/albert.exr
@@ -156,8 +161,10 @@ instant-ngp$ ./instant-ngp data/image/tokyo.bin
 
 Download the [nanovdb volume for the Disney cloud](https://drive.google.com/drive/folders/1SuycSAOSG64k2KLV7oWgyNWyCvZAkafK?usp=sharing), which is derived [from here](https://disneyanimation.com/data-sets/?drawer=/resources/clouds/) ([CC BY-SA 3.0](https://media.disneyanimation.com/uploads/production/data_set_asset/6/asset/License_Cloud.pdf)).
 
+Then drag `wdas_cloud_quarter.nvdb` into the GUI or use the command:
+
 ```sh
-instant-ngp$ ./instant-ngp data/volume/wdas_cloud_quarter.nvdb
+instant-ngp$ ./instant-ngp wdas_cloud_quarter.nvdb
 ```
 <img src="docs/assets_readme/cloud.png"/>
 
