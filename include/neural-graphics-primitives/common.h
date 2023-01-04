@@ -180,6 +180,28 @@ enum class ESDFGroundTruthMode : int {
 struct Ray {
 	Eigen::Vector3f o;
 	Eigen::Vector3f d;
+
+	NGP_HOST_DEVICE Eigen::Vector3f operator()(float t) const {
+		return o + t * d;
+	}
+
+	NGP_HOST_DEVICE void advance(float t) {
+		o += d * t;
+	}
+
+	NGP_HOST_DEVICE float distance_to(const Eigen::Vector3f& p) const {
+		Eigen::Vector3f nearest = p - o;
+		nearest -= d * nearest.dot(d) / d.squaredNorm();
+		return nearest.norm();
+	}
+
+	NGP_HOST_DEVICE bool is_valid() const {
+		return d != Eigen::Vector3f::Zero();
+	}
+
+	static NGP_HOST_DEVICE Ray invalid() {
+		return {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
+	}
 };
 
 struct TrainingXForm {
