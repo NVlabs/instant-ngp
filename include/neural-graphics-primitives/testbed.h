@@ -617,7 +617,7 @@ public:
 			uint32_t n_steps_since_error_map_update = 0;
 			uint32_t n_rays_since_error_map_update = 0;
 
-			float near_distance = 0.2f;
+			float near_distance = 0.1f;
 			float density_grid_decay = 0.95f;
 			default_rng_t density_grid_rng;
 			int view = 0;
