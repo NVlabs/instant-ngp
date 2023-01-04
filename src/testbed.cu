@@ -38,22 +38,27 @@
 #include <filesystem/directory.h>
 #include <filesystem/path.h>
 
+#include <stb_image/stb_image.h>
+#include <stb_image/stb_image_write.h>
+
 #include <fstream>
 #include <set>
+#include <unordered_set>
 
 #ifdef NGP_GUI
 #  include <imgui/imgui.h>
 #  include <imgui/backends/imgui_impl_glfw.h>
 #  include <imgui/backends/imgui_impl_opengl3.h>
 #  include <imguizmo/ImGuizmo.h>
-#  include <stb_image/stb_image.h>
 #  ifdef _WIN32
 #    include <GL/gl3w.h>
 #  else
 #    include <GL/glew.h>
 #  endif
 #  include <GLFW/glfw3.h>
+#  include <GLFW/glfw3native.h>
 #  include <cuda_gl_interop.h>
+
 #endif
 
 // Windows.h is evil
@@ -67,6 +72,15 @@ using namespace Eigen;
 using namespace std::literals::chrono_literals;
 using namespace tcnn;
 namespace fs = filesystem;
+
+int do_system(const std::string& cmd) {
+#ifdef _WIN32
+	tlog::info() << "> " << cmd;
+#else
+	tlog::info() << "$ " << cmd;
+#endif
+	return system(cmd.c_str());
+}
 
 NGP_NAMESPACE_BEGIN
 
@@ -284,7 +298,15 @@ void Testbed::load_file(const std::string& file_path) {
 
 	// If the dragged file isn't any of the above, assume that it's training data
 	try {
+		bool was_training_data_available = m_training_data_available;
 		load_training_data(file_path);
+
+		if (!was_training_data_available) {
+			// If we previously didn't have any training data and only now dragged
+			// some into the window, it is very unlikely that the user doesn't
+			// want to immediately start training on that data. So: go for it.
+			m_train = true;
+		}
 	} catch (std::runtime_error& e) {
 		tlog::error() << "Failed to load training data: " << e.what();
 	}
@@ -388,9 +410,11 @@ void Testbed::reset_camera() {
 		0.0f, -1.0f, 0.0f, 0.5f,
 		0.0f, 0.0f, -1.0f, 0.5f;
 	m_camera.col(3) -= m_scale * view_dir();
+
 	m_smoothed_camera = m_camera;
 	m_up_dir = {0.0f, 1.0f, 0.0f};
 	m_sun_dir = Vector3f::Ones().normalized();
+
 	reset_accumulation();
 }
 
@@ -557,32 +581,124 @@ bool imgui_colored_button(const char *name, float hue) {
 }
 
 void Testbed::imgui() {
-	m_picture_in_picture_res = 0;
-	if (int read = ImGui::Begin("Camera path", 0, ImGuiWindowFlags_NoScrollbar)) {
-		static char path_filename_buf[128] = "";
-		if (path_filename_buf[0] == '\0') {
-			snprintf(path_filename_buf, sizeof(path_filename_buf), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, "_cam.json").c_str());
-		}
+	// If a GUI interaction causes an error, write that error to the following string and call
+	//   ImGui::OpenPopup("Error");
+	static std::string imgui_error_string = "";
 
-		if (m_camera_path.imgui(path_filename_buf, m_render_ms.val(), m_camera, m_slice_plane_z, m_scale, fov(), m_aperture_size, m_bounding_radius, !m_nerf.training.dataset.xforms.empty() ? m_nerf.training.dataset.xforms[0].start : Matrix<float, 3, 4>::Identity(), m_nerf.glow_mode, m_nerf.glow_y_cutoff)) {
-			if (m_camera_path.m_update_cam_from_path) {
-				set_camera_from_time(m_camera_path.m_playtime);
-				if (read > 1) {
-					m_smoothed_camera = m_camera;
+	m_picture_in_picture_res = 0;
+	if (ImGui::Begin("Camera path", 0, ImGuiWindowFlags_NoScrollbar)) {
+		if (ImGui::CollapsingHeader("Path manipulation", ImGuiTreeNodeFlags_DefaultOpen)) {
+			static char path_filename_buf[128] = "";
+			if (path_filename_buf[0] == '\0') {
+				snprintf(path_filename_buf, sizeof(path_filename_buf), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, "_cam.json").c_str());
+			}
+
+			if (int read = m_camera_path.imgui(
+				path_filename_buf,
+				m_render_ms.val(),
+				m_camera,
+				m_slice_plane_z,
+				m_scale,
+				fov(),
+				m_aperture_size,
+				m_bounding_radius,
+				!m_nerf.training.dataset.xforms.empty() ? m_nerf.training.dataset.xforms[0].start : Matrix<float, 3, 4>::Identity(),
+				m_nerf.glow_mode,
+				m_nerf.glow_y_cutoff
+			)) {
+				if (!m_camera_path.rendering) {
+					reset_accumulation(true);
+
+					if (m_camera_path.update_cam_from_path) {
+						set_camera_from_time(m_camera_path.play_time);
+
+						// A value of larger than 1 indicates that the camera path wants
+						// to override camera smoothing.
+						if (read > 1) {
+							m_smoothed_camera = m_camera;
+						}
+					} else {
+						m_pip_render_surface->reset_accumulation();
+					}
 				}
 			}
 
-			m_pip_render_surface->reset_accumulation();
-			reset_accumulation(true);
-		}
-		if (!m_camera_path.m_keyframes.empty()) {
-			float w = ImGui::GetContentRegionAvail().x;
-			m_picture_in_picture_res = (float)std::min((int(w)+31)&(~31),1920/4);
-			if (m_camera_path.m_update_cam_from_path) {
-				ImGui::Image((ImTextureID)(size_t)m_render_textures.front()->texture(), ImVec2(w,w*9.f/16.f));
-			} else {
-				ImGui::Image((ImTextureID)(size_t)m_pip_render_texture->texture(), ImVec2(w,w*9.f/16.f));
+			if (!m_camera_path.keyframes.empty()) {
+				float w = ImGui::GetContentRegionAvail().x;
+				if (m_camera_path.update_cam_from_path) {
+					m_picture_in_picture_res = 0;
+					ImGui::Image((ImTextureID)(size_t)m_render_textures.front()->texture(), ImVec2(w, w * 9.0f / 16.0f));
+				} else {
+					m_picture_in_picture_res = (float)std::min((int(w)+31)&(~31), 1920/4);
+					ImGui::Image((ImTextureID)(size_t)m_pip_render_texture->texture(), ImVec2(w, w * 9.0f / 16.0f));
+				}
 			}
+		}
+
+		if (!m_camera_path.keyframes.empty() && ImGui::CollapsingHeader("Export video", ImGuiTreeNodeFlags_DefaultOpen)) {
+			// Render a video
+			if (imgui_colored_button(m_camera_path.rendering ? "Abort rendering" : "Render video", 0.4)) {
+				m_camera_path.rendering = !m_camera_path.rendering;
+
+				if (!clear_tmp_dir()) {
+					imgui_error_string = "Failed to clear temporary directory 'tmp' to hold rendered images.";
+					ImGui::OpenPopup("Error");
+
+					m_camera_path.rendering = false;
+				}
+
+				if (m_camera_path.rendering) {
+					m_camera_path.render_start_time = std::chrono::steady_clock::now();
+					m_camera_path.update_cam_from_path = true;
+					m_camera_path.play_time = 0.0f;
+					m_camera_path.auto_play_speed = 1.0f;
+					m_camera_path.render_frame_idx = 0;
+
+					m_dlss = false;
+					m_train = false;
+
+					reset_accumulation(true);
+					set_camera_from_time(m_camera_path.play_time);
+					m_smoothed_camera = m_camera;
+				} else {
+					m_camera_path.play_time = 0.0f;
+					m_camera_path.auto_play_speed = 0.0f;
+				}
+			}
+
+			if (m_camera_path.rendering) {
+				ImGui::SameLine();
+
+				auto elapsed = std::chrono::steady_clock::now() - m_camera_path.render_start_time;
+
+				uint32_t progress = m_camera_path.render_frame_idx * m_camera_path.render_settings.spp + m_render_surfaces.front().spp();
+				uint32_t goal = m_camera_path.render_settings.n_frames() * m_camera_path.render_settings.spp;
+				auto est_remaining = elapsed * (float)(goal - progress) / std::max(progress, 1u);
+
+				ImGui::Text("%s", fmt::format(
+					"Frame {}/{}, Elapsed: {}, Remaining: {}",
+					m_camera_path.render_frame_idx+1,
+					m_camera_path.render_settings.n_frames(),
+					tlog::durationToString(std::chrono::steady_clock::now() - m_camera_path.render_start_time),
+					tlog::durationToString(est_remaining)
+				).c_str());
+			}
+
+			if (m_camera_path.rendering) { ImGui::BeginDisabled(); }
+
+			static char video_filename_buf[1024] = "video.mp4";
+			ImGui::InputText("File##Video file path", video_filename_buf, sizeof(video_filename_buf));
+			m_camera_path.render_settings.filename = video_filename_buf;
+
+			ImGui::InputInt2("Resolution", &m_camera_path.render_settings.resolution.x());
+			ImGui::InputFloat("Duration (seconds)", &m_camera_path.render_settings.duration_seconds);
+			ImGui::InputFloat("FPS (frames/second)", &m_camera_path.render_settings.fps);
+			ImGui::InputInt("SPP (samples/pixel)", &m_camera_path.render_settings.spp);
+			ImGui::SliderInt("Quality", &m_camera_path.render_settings.quality, 0, 10);
+
+			ImGui::SliderFloat("Shutter fraction", &m_camera_path.render_settings.shutter_fraction, 0.0f, 1.0f);
+
+			if (m_camera_path.rendering) { ImGui::EndDisabled(); }
 		}
 	}
 	ImGui::End();
@@ -709,7 +825,7 @@ void Testbed::imgui() {
 			ImGui::TreePop();
 		}
 
-		if (m_testbed_mode == ETestbedMode::Volume && ImGui::CollapsingHeader("Volume training options")) {
+		if (m_testbed_mode == ETestbedMode::Volume && ImGui::TreeNode("Volume training options")) {
 			accum_reset |= ImGui::SliderFloat("Albedo", &m_volume.albedo, 0.f, 1.f);
 			accum_reset |= ImGui::SliderFloat("Scattering", &m_volume.scattering, -2.f, 2.f);
 			accum_reset |= ImGui::SliderFloat("Distance scale", &m_volume.inv_distance_scale, 1.f, 100.f, "%.3g", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
@@ -896,11 +1012,13 @@ void Testbed::imgui() {
 				"Sphere Traced Mesh\0"
 				"SDF Bricks\0"
 			);
+
 			if (m_sdf.groundtruth_mode == ESDFGroundTruthMode::SDFBricks) {
-				accum_reset |= ImGui::SliderInt("Brick Octree Level", (int*)&m_sdf.brick_level, 1, 10);
-				accum_reset |= ImGui::Checkbox("Brick Normals track Octree Level", &m_sdf.brick_smooth_normals);
-				accum_reset |= ImGui::SliderInt("Brick Quantize Bits", (int*)&m_sdf.brick_quantise_bits, 0, 16);
+				accum_reset |= ImGui::SliderInt("Brick octree Level", (int*)&m_sdf.brick_level, 1, 10);
+				accum_reset |= ImGui::Checkbox("Brick normals track octree Level", &m_sdf.brick_smooth_normals);
+				accum_reset |= ImGui::SliderInt("Brick quantize Bits", (int*)&m_sdf.brick_quantise_bits, 0, 16);
 			}
+
 			accum_reset |= ImGui::Checkbox("Analytic normals", &m_sdf.analytic_normals);
 
 			accum_reset |= ImGui::SliderFloat("Normals epsilon", &m_sdf.fd_normals_epsilon, 0.00001f, 0.1f, "%.6g", ImGuiSliderFlags_Logarithmic);
@@ -987,11 +1105,11 @@ void Testbed::imgui() {
 					ImGui::PlotLines("Training view exposures", exposures.data(), exposures.size(), 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(0, 60.f));
 				}
 
-				if (ImGui::SliderInt("glow mode", &m_nerf.glow_mode, 0, 16)) {
+				if (ImGui::SliderInt("Glow mode", &m_nerf.glow_mode, 0, 16)) {
 					accum_reset = true;
 				}
 
-				if (m_nerf.glow_mode && ImGui::SliderFloat("glow pos", &m_nerf.glow_y_cutoff, -2.f, 3.f)) {
+				if (m_nerf.glow_mode && ImGui::SliderFloat("Glow height", &m_nerf.glow_y_cutoff, -2.f, 3.f)) {
 					accum_reset = true;
 				}
 			}
@@ -1017,9 +1135,7 @@ void Testbed::imgui() {
 		}
 
 		ImGui::Checkbox("First person controls", &m_fps_camera);
-		ImGui::SameLine();
 		ImGui::Checkbox("Smooth camera motion", &m_camera_smoothing);
-		ImGui::SameLine();
 		ImGui::Checkbox("Autofocus", &m_autofocus);
 
 		if (ImGui::TreeNode("Advanced camera settings")) {
@@ -1088,8 +1204,8 @@ void Testbed::imgui() {
 			ImGui::InputTextMultiline("Params", buf, sizeof(buf));
 			ImGui::TreePop();
 		}
-
 	}
+
 	if (ImGui::CollapsingHeader("Snapshot")) {
 		static char snapshot_filename_buf[128] = "";
 		if (snapshot_filename_buf[0] == '\0') {
@@ -1102,33 +1218,26 @@ void Testbed::imgui() {
 			save_snapshot(snapshot_filename_buf, m_include_optimizer_state_in_snapshot);
 		}
 		ImGui::SameLine();
-		static std::string snapshot_load_error_string = "";
 		if (ImGui::Button("Load")) {
 			try {
 				load_snapshot(snapshot_filename_buf);
 			} catch (std::exception& e) {
-				ImGui::OpenPopup("Snapshot load error");
-				snapshot_load_error_string = std::string{"Failed to load snapshot: "} + e.what();
+				imgui_error_string = fmt::format("Failed to load snapshot: {}", e.what());
+				ImGui::OpenPopup("Error");
 			}
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Dump parameters as images")) {
 			dump_parameters_as_images(m_trainer->params(), "params");
 		}
-		if (ImGui::BeginPopupModal("Snapshot load error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-			ImGui::Text("%s", snapshot_load_error_string.c_str());
-			if (ImGui::Button("OK", ImVec2(120, 0))) {
-				ImGui::CloseCurrentPopup();
-			}
-			ImGui::EndPopup();
-		}
+
 		ImGui::SameLine();
-		ImGui::Checkbox("w/ Optimizer State", &m_include_optimizer_state_in_snapshot);
+		ImGui::Checkbox("w/ optimizer state", &m_include_optimizer_state_in_snapshot);
 		ImGui::InputText("File##Snapshot file path", snapshot_filename_buf, sizeof(snapshot_filename_buf));
 	}
 
 	if (m_testbed_mode == ETestbedMode::Nerf || m_testbed_mode == ETestbedMode::Sdf) {
-		if (ImGui::CollapsingHeader("Marching Cubes Mesh Output")) {
+		if (ImGui::CollapsingHeader("Export mesh / volume / slices")) {
 			static bool flip_y_and_z_axes = false;
 			static float density_range = 4.f;
 			BoundingBox aabb = (m_testbed_mode == ETestbedMode::Nerf) ? m_render_aabb : m_aabb;
@@ -1154,7 +1263,7 @@ void Testbed::imgui() {
 
 			ImGui::SameLine();
 
-			if (imgui_colored_button("Save density PNG",-0.4f)) {
+			if (imgui_colored_button("Save density PNG", -0.7f)) {
 				Testbed::compute_and_save_png_slices(m_data_path.str().c_str(), m_mesh.res, {}, m_mesh.thresh, density_range, flip_y_and_z_axes);
 			}
 
@@ -1239,7 +1348,7 @@ void Testbed::imgui() {
 		m_sdf.brdf.ambientcolor = (m_background_color * m_background_color).head<3>();
 	}
 
-	if (ImGui::CollapsingHeader("Histograms of trainable encoding parameters")) {
+	if (ImGui::CollapsingHeader("Histograms of encoding parameters")) {
 		ImGui::Checkbox("Gather histograms", &m_gather_histograms);
 
 		static float minlevel = 0.f;
@@ -1280,6 +1389,14 @@ void Testbed::imgui() {
 			ImGui::Text("Mean: %0.5f Sigma: %0.5f", s.mean(), s.sigma());
 			ImGui::Text("Num Zero: %d (%0.1f%%)", s.numzero, s.fraczero() * 100.f);
 		}
+	}
+
+	if (ImGui::BeginPopupModal("Error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+		ImGui::Text("%s", imgui_error_string.c_str());
+		if (ImGui::Button("OK", ImVec2(120, 0))) {
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
 	}
 
 	if (accum_reset) {
@@ -1781,6 +1898,152 @@ void Testbed::draw_gui() {
 }
 #endif //NGP_GUI
 
+__global__ void to_8bit_color_kernel(
+	Vector2i resolution,
+	EColorSpace output_color_space,
+	cudaSurfaceObject_t surface,
+	uint8_t* result
+) {
+	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
+	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
+
+	if (x >= resolution.x() || y >= resolution.y()) {
+		return;
+	}
+
+	Array4f color;
+	surf2Dread((float4*)&color, surface, x * sizeof(float4), y);
+
+	if (output_color_space == EColorSpace::Linear) {
+		color.head<3>() = linear_to_srgb(color.head<3>());
+	}
+
+	for (uint32_t i = 0; i < 3; ++i) {
+		result[(x + resolution.x() * y) * 3 + i] = (uint8_t)(tcnn::clamp(color[i], 0.0f, 1.0f) * 255.0f + 0.5f);
+	}
+}
+
+void Testbed::prepare_next_camera_path_frame() {
+	if (!m_camera_path.rendering) {
+		return;
+	}
+
+	// If we're rendering a video, we'd like to accumulate multiple spp
+	// for motion blur. Hence dump the frame once the target spp has been reached
+	// and only reset _then_.
+	if (m_render_surfaces.front().spp() == m_camera_path.render_settings.spp) {
+		auto tmp_dir = fs::path{"tmp"};
+		if (!tmp_dir.exists()) {
+			if (!fs::create_directory(tmp_dir)) {
+				m_camera_path.rendering = false;
+				tlog::error() << "Failed to create temporary directory 'tmp' to hold rendered images.";
+				return;
+			}
+		}
+
+		Vector2i res = m_render_surfaces.front().out_resolution();
+		const dim3 threads = { 16, 8, 1 };
+		const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
+
+		GPUMemory<uint8_t> image_data(res.prod() * 3);
+		to_8bit_color_kernel<<<blocks, threads>>>(
+			res,
+			EColorSpace::SRGB, // the GUI always renders in SRGB
+			m_render_surfaces.front().surface(),
+			image_data.data()
+		);
+
+		m_render_futures.emplace_back(m_thread_pool.enqueue_task([image_data=std::move(image_data), frame_idx=m_camera_path.render_frame_idx++, res, tmp_dir] {
+			std::vector<uint8_t> cpu_image_data(image_data.size());
+			CUDA_CHECK_THROW(cudaMemcpy(cpu_image_data.data(), image_data.data(), image_data.bytes(), cudaMemcpyDeviceToHost));
+			stbi_write_jpg(fmt::format("{}/{:06d}.jpg", tmp_dir.str(), frame_idx).c_str(), res.x(), res.y(), 3, cpu_image_data.data(), 100);
+		}));
+
+		reset_accumulation(true);
+
+		if (m_camera_path.render_frame_idx == m_camera_path.render_settings.n_frames()) {
+			m_camera_path.rendering = false;
+
+			wait_all(m_render_futures);
+			m_render_futures.clear();
+
+			tlog::success() << "Finished rendering '.jpg' video frames to '" << tmp_dir << "'. Assembling them into a video next.";
+
+			fs::path ffmpeg = "ffmpeg";
+
+#ifdef _WIN32
+			// Under Windows, try automatically downloading FFmpeg binaries if they don't exist
+			{
+			// if (system(fmt::format("where {} >nul 2>nul", ffmpeg.str()).c_str()) != 0) {
+				fs::path root_dir = fs::path{"scripts"}.exists() ? "." : "..";
+				if ((root_dir/"external"/"ffmpeg").exists()) {
+					for (const auto& path : fs::directory{root_dir/"external"/"ffmpeg"}) {
+						ffmpeg = path/"bin"/"ffmpeg.exe";
+					}
+				}
+
+				if (!ffmpeg.exists()) {
+					tlog::info() << "FFmpeg not found. Downloading FFmpeg...";
+					do_system((root_dir/"scripts"/"download_ffmpeg.bat").str());
+				}
+
+				for (const auto& path : fs::directory{root_dir/"external"/"ffmpeg"}) {
+					ffmpeg = path/"bin"/"ffmpeg.exe";
+				}
+
+				if (!ffmpeg.exists()) {
+					tlog::warning() << "FFmpeg download failed. Trying system-wide FFmpeg.";
+				}
+			}
+#endif
+
+			auto ffmpeg_command = fmt::format(
+				"{} -loglevel error -y -framerate {} -i tmp/%06d.jpg -c:v libx264 -preset slow -crf {} -pix_fmt yuv420p {}",
+				ffmpeg.str(),
+				m_camera_path.render_settings.fps,
+				// Quality goes from 0 to 10. This conversion to CRF means a quality of 10
+				// is a CRF of 17 and a quality of 0 a CRF of 27, which covers the "sane"
+				// range of x264 quality settings according to the FFmpeg docs:
+				// https://trac.ffmpeg.org/wiki/Encode/H.264
+				27 - m_camera_path.render_settings.quality,
+				m_camera_path.render_settings.filename
+			);
+			int ffmpeg_result = do_system(ffmpeg_command);
+			if (ffmpeg_result == 0) {
+				tlog::success() << "Saved video '" << m_camera_path.render_settings.filename << "'";
+			} else if (ffmpeg_result == -1) {
+				tlog::error() << "Video could not be assembled: FFmpeg not found.";
+			} else {
+				tlog::error() << "Video could not be assembled: FFmpeg failed";
+			}
+
+			clear_tmp_dir();
+		}
+	}
+
+	const auto& rs = m_camera_path.render_settings;
+	m_camera_path.play_time = (float)((double)m_camera_path.render_frame_idx / (double)rs.n_frames());
+
+	if (m_render_surfaces.front().spp() == 0) {
+		set_camera_from_time(m_camera_path.play_time);
+		apply_camera_smoothing(rs.frame_milliseconds());
+
+		auto smoothed_camera_backup = m_smoothed_camera;
+
+		// Compute the camera for the next frame in order to be able to compute motion blur
+		// between it and the current one.
+		set_camera_from_time(m_camera_path.play_time + 1.0f / rs.n_frames());
+		apply_camera_smoothing(rs.frame_milliseconds());
+
+		m_camera_path.render_frame_end_camera = m_smoothed_camera;
+
+		// Revert camera such that the next frame will be computed correctly
+		// (Start camera of next frame should be the same as end camera of this frame)
+		set_camera_from_time(m_camera_path.play_time);
+		m_smoothed_camera = smoothed_camera_backup;
+	}
+}
+
 void Testbed::train_and_render(bool skip_rendering) {
 	if (m_train) {
 		train(m_training_batch_size);
@@ -1799,7 +2062,10 @@ void Testbed::train_and_render(bool skip_rendering) {
 		optimise_mesh_step(1);
 	}
 
-	apply_camera_smoothing(m_frame_ms.val());
+	// Don't do any smoothing here if a camera path is being rendered. It'll take care
+	// of the smoothing on its own.
+	float frame_ms = m_camera_path.rendering ? 0.0f : m_frame_ms.val();
+	apply_camera_smoothing(frame_ms);
 
 	if (!m_render_window || !m_render || skip_rendering) {
 		return;
@@ -1812,7 +2078,7 @@ void Testbed::train_and_render(bool skip_rendering) {
 
 	if ((m_smoothed_camera - m_camera).norm() < 0.001f) {
 		m_smoothed_camera = m_camera;
-	} else {
+	} else if (!m_camera_path.rendering) {
 		reset_accumulation(true);
 	}
 
@@ -1863,6 +2129,11 @@ void Testbed::train_and_render(bool skip_rendering) {
 				m_last_render_res_factor = factor;
 			}
 
+			if (m_camera_path.rendering) {
+				render_res = m_camera_path.render_settings.resolution;
+				m_last_render_res_factor = 1.0f;
+			}
+
 			if (render_buffer.dlss()) {
 				render_res = render_buffer.dlss()->clamp_resolution(render_res);
 				render_buffer.dlss()->update_feature(render_res, render_buffer.dlss()->is_hdr(), render_buffer.dlss()->sharpen());
@@ -1871,18 +2142,23 @@ void Testbed::train_and_render(bool skip_rendering) {
 			render_buffer.resize(render_res);
 		}
 
-		render_frame(m_smoothed_camera, m_smoothed_camera, Eigen::Vector4f::Zero(), render_buffer);
+		render_frame(
+			m_smoothed_camera,
+			m_camera_path.rendering ? log_space_lerp(m_smoothed_camera, m_camera_path.render_frame_end_camera, m_camera_path.render_settings.shutter_fraction) : m_smoothed_camera,
+			{0.0f, 0.0f, 0.0f, 1.0f},
+			render_buffer
+		);
 
 #ifdef NGP_GUI
 		m_render_textures.front()->blit_from_cuda_mapping();
 
 		if (m_picture_in_picture_res > 0) {
-			Vector2i res(m_picture_in_picture_res, m_picture_in_picture_res*9/16);
+			Vector2i res(m_picture_in_picture_res, m_picture_in_picture_res * 9/16);
 			m_pip_render_surface->resize(res);
 			if (m_pip_render_surface->spp() < 8) {
 				// a bit gross, but let's copy the keyframe's state into the global state in order to not have to plumb through the fov etc to render_frame.
 				CameraKeyframe backup = copy_camera_to_keyframe();
-				CameraKeyframe pip_kf = m_camera_path.eval_camera_path(m_camera_path.m_playtime);
+				CameraKeyframe pip_kf = m_camera_path.eval_camera_path(m_camera_path.play_time);
 				set_camera_from_keyframe(pip_kf);
 				render_frame(pip_kf.m(), pip_kf.m(), Eigen::Vector4f::Zero(), *m_pip_render_surface);
 				set_camera_from_keyframe(backup);
@@ -1927,7 +2203,9 @@ void Testbed::train_and_render(bool skip_rendering) {
 
 				m_visualized_dimension = i-1;
 				m_render_surfaces[i].resize(m_view_size);
+
 				render_frame(m_smoothed_camera, m_smoothed_camera, Eigen::Vector4f::Zero(), m_render_surfaces[i]);
+
 				m_render_textures[i]->blit_from_cuda_mapping();
 				++i;
 			}
@@ -2202,6 +2480,11 @@ bool Testbed::frame() {
 		}
 	}
 
+	if (m_camera_path.rendering) {
+		prepare_next_camera_path_frame();
+		skip_rendering = false;
+	}
+
 	if (!skip_rendering || (std::chrono::steady_clock::now() - m_last_gui_draw_time_point) > 25ms) {
 		redraw_gui_next_frame();
 	}
@@ -2273,7 +2556,7 @@ void Testbed::set_camera_from_keyframe(const CameraKeyframe& k) {
 }
 
 void Testbed::set_camera_from_time(float t) {
-	if (m_camera_path.m_keyframes.empty())
+	if (m_camera_path.keyframes.empty())
 		return;
 	set_camera_from_keyframe(m_camera_path.eval_camera_path(t));
 }
@@ -2638,7 +2921,7 @@ Testbed::Testbed(ETestbedMode mode) {
 
 	int active_device = cuda_device();
 	int active_compute_capability = cuda_compute_capability();
-	tlog::success() << "Active GPU is #" << active_device << ": " << cuda_device_name() << " [" << active_compute_capability << "]";
+	tlog::success() << "Initialized CUDA. Active GPU is #" << active_device << ": " << cuda_device_name() << " [" << active_compute_capability << "]";
 
 	if (active_compute_capability < MIN_GPU_ARCH) {
 		tlog::warning() << "Insufficient compute capability " << active_compute_capability << " detected.";
@@ -2683,13 +2966,37 @@ Testbed::Testbed(ETestbedMode mode) {
 
 Testbed::~Testbed() {
 
+	// If any temporary file was created, make sure it's deleted
+	clear_tmp_dir();
+
 	if (m_render_window) {
 		destroy_window();
 	}
 }
 
+bool Testbed::clear_tmp_dir() {
+	wait_all(m_render_futures);
+	m_render_futures.clear();
+
+	bool success = true;
+	auto tmp_dir = fs::path{"tmp"};
+	if (tmp_dir.exists()) {
+		if (tmp_dir.is_directory()) {
+			for (const auto& path : fs::directory{tmp_dir}) {
+				if (path.is_file()) {
+					success &= path.remove_file();
+				}
+			}
+		}
+
+		success &= tmp_dir.remove_file();
+	}
+
+	return success;
+}
+
 void Testbed::train(uint32_t batch_size) {
-	if (!m_training_data_available) {
+	if (!m_training_data_available || m_camera_path.rendering) {
 		m_train = false;
 		return;
 	}
@@ -3203,7 +3510,7 @@ void Testbed::save_snapshot(const std::string& filepath_string, bool include_opt
 void Testbed::load_snapshot(const std::string& filepath_string) {
 	auto config = load_network_config(filepath_string);
 	if (!config.contains("snapshot")) {
-		throw std::runtime_error{fmt::format("File {} does not contain a snapshot.", filepath_string)};
+		throw std::runtime_error{fmt::format("File '{}' does not contain a snapshot.", filepath_string)};
 	}
 
 	m_network_config_path = filepath_string;
@@ -3226,9 +3533,7 @@ void Testbed::load_snapshot(const std::string& filepath_string) {
 	m_aabb = snapshot.value("aabb", m_aabb);
 	m_bounding_radius = snapshot.value("bounding_radius", m_bounding_radius);
 
-	if (m_testbed_mode == ETestbedMode::Sdf) {
-		set_scale(m_bounding_radius * 1.5f);
-	} else if (m_testbed_mode == ETestbedMode::Nerf) {
+	if (m_testbed_mode == ETestbedMode::Nerf) {
 		if (snapshot["density_grid_size"] != NERF_GRIDSIZE()) {
 			throw std::runtime_error{"Incompatible grid size."};
 		}
@@ -3285,11 +3590,11 @@ void Testbed::load_camera_path(const std::string& filepath_string) {
 }
 
 bool Testbed::loop_animation() {
-	return m_camera_path.m_loop;
+	return m_camera_path.loop;
 }
 
 void Testbed::set_loop_animation(bool value) {
-	m_camera_path.m_loop = value;
+	m_camera_path.loop = value;
 }
 
 NGP_NAMESPACE_END

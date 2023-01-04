@@ -23,6 +23,7 @@
 #include <neural-graphics-primitives/render_buffer.h>
 #include <neural-graphics-primitives/sdf.h>
 #include <neural-graphics-primitives/shared_queue.h>
+#include <neural-graphics-primitives/thread_pool.h>
 #include <neural-graphics-primitives/trainable_buffer.cuh>
 
 #include <tiny-cuda-nn/multi_stream.h>
@@ -66,6 +67,8 @@ public:
 	Testbed(ETestbedMode mode, const std::string& data_path) : Testbed(mode) { load_training_data(data_path); }
 	Testbed(ETestbedMode mode, const std::string& data_path, const std::string& network_config_path) : Testbed(mode, data_path) { reload_network_from_file(network_config_path); }
 	Testbed(ETestbedMode mode, const std::string& data_path, const nlohmann::json& network_config) : Testbed(mode, data_path) { reload_network_from_json(network_config); }
+
+	bool clear_tmp_dir();
 	void load_training_data(const std::string& data_path);
 	void clear_training_data();
 
@@ -354,6 +357,7 @@ public:
 	template <typename T>
 	void dump_parameters_as_images(const T* params, const std::string& filename_base);
 
+	void prepare_next_camera_path_frame();
 	void imgui();
 	void training_prep_nerf(uint32_t batch_size, cudaStream_t stream);
 	void training_prep_sdf(uint32_t batch_size, cudaStream_t stream);
@@ -523,6 +527,8 @@ public:
 	std::vector<std::shared_ptr<GLTexture>> m_render_textures;
 #endif
 
+	ThreadPool m_thread_pool;
+	std::vector<std::future<void>> m_render_futures;
 
 	std::vector<CudaRenderBuffer> m_render_surfaces;
 	std::unique_ptr<CudaRenderBuffer> m_pip_render_surface;

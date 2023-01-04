@@ -866,7 +866,7 @@ void save_mesh(
 		free(tex);
 	}
 
-	FILE* f = fopen(outputname,"wb");
+	FILE* f = fopen(outputname, "wb");
 	if (!f) {
 		throw std::runtime_error{"Failed to open " + std::string(outputname) + " for writing."};
 	}
@@ -893,30 +893,35 @@ void save_mesh(
 			, (unsigned int)cpuverts.size()
 			, (unsigned int)cpuindices.size()/3
 		);
+
 		for (size_t i=0;i<cpuverts.size();++i) {
 			Vector3f p=(cpuverts[i]-nerf_offset)/nerf_scale;
 			Vector3f c=cpucolors[i];
 			Vector3f n=cpunormals[i].normalized();
 			unsigned char c8[3]={(unsigned char)tcnn::clamp(c.x()*255.f,0.f,255.f),(unsigned char)tcnn::clamp(c.y()*255.f,0.f,255.f),(unsigned char)tcnn::clamp(c.z()*255.f,0.f,255.f)};
-			fprintf(f,"%0.5f %0.5f %0.5f %0.3f %0.3f %0.3f %d %d %d\n", p.x(), p.y(), p.z(), n.x(), n.y(), n.z(), c8[0], c8[1], c8[2]);
+			fprintf(f, "%0.5f %0.5f %0.5f %0.3f %0.3f %0.3f %d %d %d\n", p.x(), p.y(), p.z(), n.x(), n.y(), n.z(), c8[0], c8[1], c8[2]);
 		}
+
 		for (size_t i=0;i<cpuindices.size();i+=3) {
-			fprintf(f,"3 %d %d %d\n", cpuindices[i+2], cpuindices[i+1], cpuindices[i+0]);
+			fprintf(f, "3 %d %d %d\n", cpuindices[i+2], cpuindices[i+1], cpuindices[i+0]);
 		}
 	} else {
 		// obj file
 		if (unwrap_it) {
 			fprintf(f, "mtllib nerf.mtl\n");
 		}
+
 		for (size_t i = 0; i < cpuverts.size(); ++i) {
 			Vector3f p = (cpuverts[i]-nerf_offset)/nerf_scale;
 			Vector3f c = cpucolors[i];
-			fprintf(f,"v %0.5f %0.5f %0.5f %0.3f %0.3f %0.3f\n", p.x(), p.y(), p.z(), tcnn::clamp(c.x(), 0.f, 1.f), tcnn::clamp(c.y(), 0.f, 1.f), tcnn::clamp(c.z(), 0.f, 1.f));
+			fprintf(f, "v %0.5f %0.5f %0.5f %0.3f %0.3f %0.3f\n", p.x(), p.y(), p.z(), tcnn::clamp(c.x(), 0.f, 1.f), tcnn::clamp(c.y(), 0.f, 1.f), tcnn::clamp(c.z(), 0.f, 1.f));
 		}
+
 		for (auto &v: cpunormals) {
 			auto n = v.normalized();
-			fprintf(f,"vn %0.5f %0.5f %0.5f\n", n.x(), n.y(), n.z());
+			fprintf(f, "vn %0.5f %0.5f %0.5f\n", n.x(), n.y(), n.z());
 		}
+
 		if (unwrap_it) {
 			for (size_t i = 0; i < cpuindices.size(); i++) {
 				uint32_t q = (uint32_t)(i/6);
@@ -931,8 +936,9 @@ void save_mesh(
 					case 4: x += 3+d; break;
 					case 5: x += 3+d; y += d; break;
 				}
-				fprintf(f,"vt %0.5f %0.5f\n", ((float)x+0.5f)/float(texw), 1.f-((float)y+0.5f)/float(texh));
+				fprintf(f, "vt %0.5f %0.5f\n", ((float)x+0.5f)/float(texw), 1.f-((float)y+0.5f)/float(texh));
 			}
+
 			fprintf(f, "g default\nusemtl nerf\ns 1\n");
 			for (size_t i = 0; i < cpuindices.size(); i += 3) {
 				fprintf(f,"f %u/%u/%u %u/%u/%u %u/%u/%u\n",
@@ -943,7 +949,7 @@ void save_mesh(
 			}
 		} else {
 			for (size_t i = 0; i < cpuindices.size(); i += 3) {
-				fprintf(f,"f %u//%u %u//%u %u//%u\n",
+				fprintf(f, "f %u//%u %u//%u %u//%u\n",
 					cpuindices[i+2]+1, cpuindices[i+2]+1, cpuindices[i+1]+1, cpuindices[i+1]+1, cpuindices[i+0]+1, cpuindices[i+0]+1
 				);
 			}

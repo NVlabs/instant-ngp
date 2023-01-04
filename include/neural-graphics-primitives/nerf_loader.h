@@ -164,8 +164,9 @@ struct NerfDataset {
 
 	void nerf_ray_to_ngp(Ray& ray, bool scale_direction = false) {
 		ray.o = ray.o * scale + offset;
-		if (scale_direction)
+		if (scale_direction) {
 			ray.d *= scale;
+		}
 
 		float tmp = ray.o[0];
 		ray.o[0] = ray.o[1];
