@@ -656,6 +656,7 @@ void Testbed::imgui() {
 					set_camera_from_time(m_camera_path.play_time);
 					m_smoothed_camera = m_camera;
 				} else {
+					m_camera_path.update_cam_from_path = false;
 					m_camera_path.play_time = 0.0f;
 					m_camera_path.auto_play_speed = 0.0f;
 				}
