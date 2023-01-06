@@ -146,6 +146,8 @@ jobs:
             docs/nerf_dataset_tips.md
             docs/assets_readme/
             data/
+            scripts/download_colmap.bat
+            scripts/download_ffmpeg.bat
             scripts/colmap2nerf.py
             scripts/nsvf2nerf.py
             scripts/record3d2nerf.py
