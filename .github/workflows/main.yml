@@ -89,12 +89,12 @@ jobs:
             cuda: "11.5.1"
             arch: 70
             python: "3.9"
-            recommended_gpus: "GTX 1000 (Pascal)"
           - os: windows-2019
             visual_studio: "Visual Studio 16 2019"
             cuda: "11.5.1"
             arch: 61
             python: "3.8"
+            recommended_gpus: "GTX 1000 (Pascal)"
           - os: windows-2019
             visual_studio: "Visual Studio 16 2019"
             cuda: "11.5.1"
