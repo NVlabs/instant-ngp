@@ -21,9 +21,9 @@ For business inquiries, please submit the [NVIDIA research licensing form](https
 
 If you have Windows and if you do not need developer Python bindings, you can download one of the following binary releases and then jump directly to the [usage instructions](https://github.com/NVlabs/instant-ngp#interactive-training-and-rendering) or to [creating your own NeRF from a recording](docs/nerf_dataset_tips.md).
 
-- [**RTX 3000 & 4000 series, RTX A4000&ndash;A6000**, and other Ampere & Ada cards](https://nightly.link/NVlabs/instant-ngp/workflows/main/master/Instant%20NGP%20for%20RTX%203000%20%26%204000%20%28Ampere%20%26%20Ada%29.zip)
-- [**RTX 2000 series, Titan RTX, Quadro RTX 4000&ndash;8000**, and other Turing cards](https://nightly.link/NVlabs/instant-ngp/workflows/main/master/Instant%20NGP%20for%20RTX%202000%20%28Turing%29.zip)
-- [**GTX 1000 series, Titan Xp, Quadro P1000&ndash;P6000**, and other Pascal cards](https://nightly.link/NVlabs/instant-ngp/workflows/main/master/Instant%20NGP%20for%20GTX%201000%20%28Pascal%29.zip)
+- [**RTX 3000 & 4000 series, RTX A4000&ndash;A6000**, and other Ampere & Ada cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-RTX-3000-and-4000.zip)
+- [**RTX 2000 series, Titan RTX, Quadro RTX 4000&ndash;8000**, and other Turing cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-RTX-2000.zip)
+- [**GTX 1000 series, Titan Xp, Quadro P1000&ndash;P6000**, and other Pascal cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-GTX-1000.zip)
 
 If you use Linux, or want the developer Python bindings, or if your GPU is not listed above (e.g. Hopper, Volta, or Maxwell generations), use the following step-by-step instructions to compile __instant-ngp__ yourself.
 
