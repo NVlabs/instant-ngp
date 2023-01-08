@@ -164,14 +164,31 @@ jobs:
         uses: actions/download-artifact@v3
       - name: Package
         run: for i in */; do zip -r "${i%/}.zip" "$i"; done
+      - name: Advance tag
+        uses: actions/github-script@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            try {
+                await github.git.deleteRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: "tags/continuous"
+                })
+            } catch (e) {}
+            await github.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: "refs/tags/continuous",
+              sha: context.sha
+            })
       - name: Update release
         uses: ncipollo/release-action@v1
         with:
           allowUpdates: true
           artifacts: "*.zip"
-          commit: "${{ github.sha }}"
           omitBody: true
           omitName: true
-          omitPrereleaseDuringUpdate: true
+          prerelease: true
           tag: "continuous"
           updateOnlyUnreleased: true
