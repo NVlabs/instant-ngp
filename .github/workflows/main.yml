@@ -151,3 +151,27 @@ jobs:
             scripts/colmap2nerf.py
             scripts/nsvf2nerf.py
             scripts/record3d2nerf.py
+
+  continuous_release:
+    name: "Update continuous development release"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs: [build_windows]
+    if: github.ref == 'refs/heads/master'
+    steps:
+      - name: Grab binary artifacts
+        uses: actions/download-artifact@v3
+      - name: Package
+        run: for i in */; do zip -r "${i%/}.zip" "$i"; done
+      - name: Update release
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifacts: "*.zip"
+          commit: "${{ github.sha }}"
+          omitBody: true
+          omitName: true
+          omitPrereleaseDuringUpdate: true
+          tag: "continuous"
+          updateOnlyUnreleased: true
