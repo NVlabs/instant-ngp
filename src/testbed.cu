@@ -2902,7 +2902,7 @@ Testbed::Testbed(ETestbedMode mode) {
 			int gl_device = -1;
 			unsigned int device_count = 0;
 			if (cudaGLGetDevices(&device_count, &gl_device, 1, cudaGLDeviceListAll) == cudaSuccess) {
-				if (device_count > 0 && gl_device != -1) {
+				if (device_count > 0 && gl_device >= 0) {
 					set_cuda_device(gl_device);
 				}
 			}
@@ -2912,6 +2912,10 @@ Testbed::Testbed(ETestbedMode mode) {
 
 		glfwTerminate();
 	}
+
+	// Reset our stream, which was allocated on the originally active device,
+	// to make sure it corresponds to the now active device.
+	m_stream = {};
 #endif
 
 	int active_device = cuda_device();
