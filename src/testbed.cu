@@ -2892,7 +2892,7 @@ Testbed::Testbed(ETestbedMode mode) {
 #ifdef NGP_GUI
 	// Ensure we're running on the GPU that'll host our GUI. To do so, try creating a dummy
 	// OpenGL context, figure out the GPU it's running on, and then kill that context again.
-	if (glfwInit()) {
+	if (!is_wsl() && glfwInit()) {
 		glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 		GLFWwindow* offscreen_context = glfwCreateWindow(640, 480, "", NULL, NULL);
 
@@ -2912,11 +2912,11 @@ Testbed::Testbed(ETestbedMode mode) {
 
 		glfwTerminate();
 	}
+#endif
 
 	// Reset our stream, which was allocated on the originally active device,
 	// to make sure it corresponds to the now active device.
 	m_stream = {};
-#endif
 
 	int active_device = cuda_device();
 	int active_compute_capability = cuda_compute_capability();

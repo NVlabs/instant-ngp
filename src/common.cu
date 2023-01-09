@@ -28,6 +28,21 @@ namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
+bool is_wsl() {
+#ifdef _WIN32
+	return false;
+#else
+	fs::path path = "/proc/sys/kernel/osrelease";
+	if (!path.exists()) {
+		return false;
+	}
+
+	std::ifstream f{path.str()};
+	std::string content((std::istreambuf_iterator<char>(f)), (std::istreambuf_iterator<char>()));
+	return content.find("microsoft") != std::string::npos;
+#endif
+}
+
 fs::path get_executable_dir() {
 #ifdef _WIN32
 	WCHAR path[MAX_PATH];

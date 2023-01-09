@@ -174,20 +174,6 @@ void GLTexture::resize(const Vector2i& new_size, int n_channels, bool is_8bit) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 }
 
-static bool is_wsl() {
-#ifdef _WIN32
-	return false;
-#else
-	fs::path path = "/proc/sys/kernel/osrelease";
-	if (!path.exists()) {
-		return false;
-	}
-
-	std::ifstream f{path.str()};
-	std::string content((std::istreambuf_iterator<char>(f)), (std::istreambuf_iterator<char>()));
-	return content.find("microsoft") != std::string::npos;
-#endif
-}
 
 GLTexture::CUDAMapping::CUDAMapping(GLuint texture_id, const Vector2i& size) : m_size{size} {
 	static bool s_is_cuda_interop_supported = !is_wsl();

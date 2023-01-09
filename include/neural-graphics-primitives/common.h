@@ -63,6 +63,8 @@
 
 NGP_NAMESPACE_BEGIN
 
+bool is_wsl();
+
 filesystem::path get_executable_dir();
 filesystem::path get_root_dir();
 
