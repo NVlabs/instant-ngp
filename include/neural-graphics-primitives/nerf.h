@@ -25,6 +25,10 @@ inline constexpr __device__ uint32_t NERF_GRIDSIZE() {
 	return 128;
 }
 
+inline constexpr __device__ uint32_t NERF_GRID_N_CELLS() {
+	return NERF_GRIDSIZE() * NERF_GRIDSIZE() * NERF_GRIDSIZE();
+}
+
 struct NerfPayload {
 	Eigen::Vector3f origin;
 	Eigen::Vector3f dir;
