@@ -1119,7 +1119,6 @@ void Testbed::load_mesh(const fs::path& data_path) {
 	m_sdf.brick_data.free_memory();
 
 	m_bounding_radius = Vector3f::Constant(0.5f).norm();
-	set_scale(m_bounding_radius * 1.5f);
 
 	// Compute discrete probability distribution for later sampling of the mesh's surface
 	m_sdf.triangle_weights.resize(n_triangles);
