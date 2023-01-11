@@ -428,7 +428,7 @@ public:
 			Vector3f d = fibonacci_dir<N_STAB_RAYS>(i, offset);
 
 			// If any of the stab rays goes outside the mesh, the SDF is positive.
-			if (ray_intersect(point, -d, bvhnodes, triangles).first < 0 || ray_intersect(point, d, bvhnodes, triangles).first < 0) {
+			if (ray_intersect(point, d, bvhnodes, triangles).first < 0) {
 				return distance;
 			}
 		}
