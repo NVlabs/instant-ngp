@@ -2546,8 +2546,9 @@ void Testbed::Nerf::Training::update_transforms(int first, int last) {
 
 void Testbed::create_empty_nerf_dataset(size_t n_images, int aabb_scale, bool is_hdr) {
 	m_data_path = {};
+	set_mode(ETestbedMode::Nerf);
 	m_nerf.training.dataset = ngp::create_empty_nerf_dataset(n_images, aabb_scale, is_hdr);
-	load_nerf();
+	load_nerf(m_data_path);
 	m_nerf.training.n_images_for_training = 0;
 	m_training_data_available = true;
 }
@@ -2644,21 +2645,21 @@ void Testbed::load_nerf_post() { // moved the second half of load_nerf here
 	m_up_dir = m_nerf.training.dataset.up;
 }
 
-void Testbed::load_nerf() {
-	if (!m_data_path.empty()) {
+void Testbed::load_nerf(const fs::path& data_path) {
+	if (!data_path.empty()) {
 		std::vector<fs::path> json_paths;
-		if (m_data_path.is_directory()) {
-			for (const auto& path : fs::directory{m_data_path}) {
+		if (data_path.is_directory()) {
+			for (const auto& path : fs::directory{data_path}) {
 				if (path.is_file() && equals_case_insensitive(path.extension(), "json")) {
 					json_paths.emplace_back(path);
 				}
 			}
-		} else if (equals_case_insensitive(m_data_path.extension(), "msgpack")) {
-			load_snapshot(m_data_path.str());
+		} else if (equals_case_insensitive(data_path.extension(), "msgpack")) {
+			load_snapshot(data_path.str());
 			set_train(false);
 			return;
-		} else if (equals_case_insensitive(m_data_path.extension(), "json")) {
-			json_paths.emplace_back(m_data_path);
+		} else if (equals_case_insensitive(data_path.extension(), "json")) {
+			json_paths.emplace_back(data_path);
 		} else {
 			throw std::runtime_error{"NeRF data path must either be a json file or a directory containing json files."};
 		}

@@ -32,6 +32,7 @@
 
 using namespace Eigen;
 using namespace tcnn;
+namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
@@ -1012,42 +1013,59 @@ void Testbed::render_sdf(
 		for (uint32_t i = 0; i < n_hit; ++i) {
 			total_n_steps += payloads_final_cpu[i].n_steps;
 		}
+
 		tlog::info() << "Total steps per hit= " << total_n_steps << "/" << n_hit << " = " << ((float)total_n_steps/(float)n_hit);
 	}
 }
 
-void Testbed::load_mesh() {
+std::vector<Vector3f> load_stl(const std::string& filename) {
 	std::vector<Vector3f> vertices;
-	if (equals_case_insensitive(m_data_path.extension(), "obj")) {
-		vertices = load_obj(m_data_path.str());
-	} else if (equals_case_insensitive(m_data_path.extension(), "stl")) {
-		FILE* f = fopen(m_data_path.str().c_str(), "rb");
-		if (!f) {
-			throw std::runtime_error{"stl file not found"};
-		}
-		uint32_t buf[21]={};
-		if (fread(buf, 4, 21, f) != 4*21) {
-			throw std::runtime_error{"stl file too small for header"};
-		}
-		uint32_t nfaces = buf[20];
-		if (memcmp(buf,"solid",5)==0 || buf[20]==0) {
-			fclose(f);
-			throw std::runtime_error{"ascii stl files are not supported"};
-		}
-		vertices.reserve(nfaces * 3);
-		for (uint32_t i = 0; i < nfaces; ++i) {
-			if (fread(buf, 1, 50, f) < 50) {
-				nfaces = i;
-				break;
-			}
-			vertices.push_back(*(Vector3f*)(buf + 3));
-			vertices.push_back(*(Vector3f*)(buf + 6));
-			vertices.push_back(*(Vector3f*)(buf + 9));
-		}
-		fclose(f);
-	} else {
-		throw std::runtime_error{"Sdf data path must be a mesh in ascii .obj or binary .stl format."};
+
+	std::ifstream f{filename, std::ios::in | std::ios::binary};
+	if (!f) {
+		throw std::runtime_error{fmt::format("Mesh file '{}' not found", filename)};
 	}
+
+	uint32_t buf[21] = {};
+	f.read((char*)buf, 4 * 21);
+	if (f.gcount() < 4 * 21) {
+		throw std::runtime_error{fmt::format("Mesh file '{}' too small for STL header", filename)};
+	}
+
+	uint32_t nfaces = buf[20];
+	if (memcmp(buf, "solid", 5) == 0 || buf[20] == 0) {
+		throw std::runtime_error{fmt::format("ASCII STL file '{}' not supported", filename)};
+	}
+
+	vertices.reserve(nfaces * 3);
+	for (uint32_t i = 0; i < nfaces; ++i) {
+		f.read((char*)buf, 50);
+		if (f.gcount() < 50) {
+			nfaces = i;
+			break;
+		}
+
+		vertices.push_back(*(Vector3f*)(buf + 3));
+		vertices.push_back(*(Vector3f*)(buf + 6));
+		vertices.push_back(*(Vector3f*)(buf + 9));
+	}
+
+	return vertices;
+}
+
+void Testbed::load_mesh(const fs::path& data_path) {
+	tlog::info() << "Loading mesh from '" << data_path << "'";
+	auto start = std::chrono::steady_clock::now();
+
+	std::vector<Vector3f> vertices;
+	if (equals_case_insensitive(data_path.extension(), "obj")) {
+		vertices = load_obj(data_path.str());
+	} else if (equals_case_insensitive(data_path.extension(), "stl")) {
+		vertices = load_stl(data_path.str());
+	} else {
+		throw std::runtime_error{"SDF data path must be a mesh in ascii .obj or binary .stl format."};
+	}
+
 	// The expected format is
 	// [v1.x][v1.y][v1.z][v2.x]...
 	size_t n_vertices = vertices.size();
@@ -1076,6 +1094,7 @@ void Testbed::load_mesh() {
 	for (size_t i = 0; i < n_vertices; ++i) {
 		m_aabb.enlarge(vertices[i]);
 	}
+
 	m_aabb.inflate(m_aabb.diag().norm() * inflation);
 	m_aabb = m_aabb.intersection(BoundingBox{Vector3f::Zero(), Vector3f::Ones()});
 	m_render_aabb = m_aabb;
@@ -1087,8 +1106,10 @@ void Testbed::load_mesh() {
 		m_sdf.triangles_cpu[i/3] = {vertices[i+0], vertices[i+1], vertices[i+2]};
 	}
 
-	if (!m_sdf.triangle_bvh)
+	if (!m_sdf.triangle_bvh) {
 		m_sdf.triangle_bvh = TriangleBvh::make();
+	}
+
 	m_sdf.triangle_bvh->build(m_sdf.triangles_cpu, 8);
 	m_sdf.triangles_gpu.resize_and_copy_from_host(m_sdf.triangles_cpu);
 	m_sdf.triangle_bvh->build_optix(m_sdf.triangles_gpu, m_stream.get());
@@ -1116,7 +1137,8 @@ void Testbed::load_mesh() {
 	m_sdf.training.idx = 0;
 	m_sdf.training.size = 0;
 
-	tlog::success() << "Loaded mesh: triangles=" << n_triangles << " AABB=" << m_raw_aabb << " after scaling=" << m_aabb;
+	tlog::success() << "Loaded mesh after " << tlog::durationToString(std::chrono::steady_clock::now() - start);
+	tlog::info() << "  n_triangles=" << n_triangles << " aabb=" << m_raw_aabb;
 }
 
 void Testbed::generate_training_samples_sdf(Vector3f* positions, float* distances, uint32_t n_to_generate, cudaStream_t stream, bool uniform_only) {

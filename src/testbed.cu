@@ -99,6 +99,32 @@ json merge_parent_network_config(const json &child, const fs::path &child_filena
 	return parent;
 }
 
+std::string get_filename_in_data_path_with_suffix(fs::path data_path, fs::path network_config_path, const char* suffix) {
+	// use the network config name along with the data path to build a filename with the requested suffix & extension
+	std::string default_name = network_config_path.basename();
+	if (default_name == "") {
+		default_name = "base";
+	}
+
+	if (data_path.empty()) {
+		return default_name + std::string(suffix);
+	}
+
+	if (data_path.is_directory()) {
+		return (data_path / (default_name + std::string{suffix})).str();
+	}
+
+	return data_path.stem().str() + "_" + default_name + std::string(suffix);
+}
+
+void Testbed::update_imgui_paths() {
+	snprintf(m_imgui.cam_path_path, sizeof(m_imgui.cam_path_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, "_cam.json").c_str());
+	snprintf(m_imgui.extrinsics_path, sizeof(m_imgui.extrinsics_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, "_extrinsics.json").c_str());
+	snprintf(m_imgui.mesh_path, sizeof(m_imgui.mesh_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, ".obj").c_str());
+	snprintf(m_imgui.snapshot_path, sizeof(m_imgui.snapshot_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, ".msgpack").c_str());
+	snprintf(m_imgui.video_path, sizeof(m_imgui.video_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, "_video.mp4").c_str());
+}
+
 void Testbed::load_training_data(const std::string& data_path_str) {
 	fs::path data_path = data_path_str;
 	if (!data_path.exists()) {
@@ -115,19 +141,23 @@ void Testbed::load_training_data(const std::string& data_path_str) {
 
 	m_data_path = data_path;
 
-	if (!m_data_path.exists()) {
-		throw std::runtime_error{fmt::format("Data path '{}' does not exist.", m_data_path.str())};
-	}
-
 	switch (m_testbed_mode) {
-		case ETestbedMode::Nerf:   load_nerf(); break;
-		case ETestbedMode::Sdf:    load_mesh(); break;
-		case ETestbedMode::Image:  load_image(); break;
-		case ETestbedMode::Volume: load_volume(); break;
+		case ETestbedMode::Nerf:   load_nerf(data_path); break;
+		case ETestbedMode::Sdf:    load_mesh(data_path); break;
+		case ETestbedMode::Image:  load_image(data_path); break;
+		case ETestbedMode::Volume: load_volume(data_path); break;
 		default: throw std::runtime_error{"Invalid testbed mode."};
 	}
 
 	m_training_data_available = true;
+
+	update_imgui_paths();
+}
+
+void Testbed::reload_training_data() {
+	if (m_data_path.exists()) {
+		load_training_data(m_data_path.str());
+	}
 }
 
 void Testbed::clear_training_data() {
@@ -1511,6 +1541,7 @@ bool Testbed::keyboard_event() {
 		}
 	}
 
+	bool ctrl = ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Ctrl;
 	bool shift = ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Shift;
 
 	if (ImGui::IsKeyPressed('Z')) {
@@ -1530,6 +1561,15 @@ bool Testbed::keyboard_event() {
 		if (shift) {
 			reset_camera();
 		} else {
+			if (ctrl) {
+				reload_training_data();
+				// After reloading the training data, also reset the NN.
+				// Presumably, there is no use case where the user would
+				// like to hot-reload the same training data set other than
+				// to slightly tweak its parameters. And to observe that
+				// effect meaningfully, the NN should be trained from scratch.
+			}
+
 			reload_network_from_file();
 		}
 	}

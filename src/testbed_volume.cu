@@ -33,6 +33,7 @@
 
 using namespace Eigen;
 using namespace tcnn;
+namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
@@ -549,12 +550,12 @@ struct NanoVDBMetaData
 };
 static_assert(sizeof(NanoVDBMetaData) == 176, "nanovdb padding error");
 
-void Testbed::load_volume() {
-	if (!m_data_path.exists()) {
-		throw std::runtime_error{m_data_path.str() + " does not exist."};
+void Testbed::load_volume(const fs::path& data_path) {
+	if (!data_path.exists()) {
+		throw std::runtime_error{data_path.str() + " does not exist."};
 	}
-	tlog::info() << "Loading NanoVDB file from " << m_data_path;
-	std::ifstream f(m_data_path.str(), std::ios::in | std::ios::binary);
+	tlog::info() << "Loading NanoVDB file from " << data_path;
+	std::ifstream f(data_path.str(), std::ios::in | std::ios::binary);
 	NanoVDBFileHeader header;
 	NanoVDBMetaData metadata;
 	f.read(reinterpret_cast<char*>(&header), sizeof(header));
@@ -584,37 +585,41 @@ void Testbed::load_volume() {
 	m_volume.nanovdb_grid.copy_from_host(cpugrid);
 	const nanovdb::FloatGrid* grid = reinterpret_cast<const nanovdb::FloatGrid*>(cpugrid.data());
 
-	float mn=1e10f,mx=-1e10f;
+	float mn = 10000.0f, mx = -10000.0f;
 	bool hmm = grid->hasMinMax();
 	//grid->tree().extrema(mn,mx);
-	int  xsize = std::max(1,metadata.indexBBox[1][0]-metadata.indexBBox[0][0]);
-	int ysize = std::max(1,metadata.indexBBox[1][1]-metadata.indexBBox[0][1]);
-	int zsize = std::max(1,metadata.indexBBox[1][2]-metadata.indexBBox[0][2]);
-	float maxsize=std::max(std::max(xsize,ysize),zsize);
-	float scale = 1.f/maxsize;
+	int xsize = std::max(1, metadata.indexBBox[1][0] - metadata.indexBBox[0][0]);
+	int ysize = std::max(1, metadata.indexBBox[1][1] - metadata.indexBBox[0][1]);
+	int zsize = std::max(1, metadata.indexBBox[1][2] - metadata.indexBBox[0][2]);
+	float maxsize = std::max(std::max(xsize, ysize), zsize);
+	float scale = 1.0f / maxsize;
 	m_aabb = m_render_aabb = BoundingBox{
-		Vector3f{0.5f-xsize*scale*0.5f,0.5f-ysize*scale*0.5f,0.5f-zsize*scale*0.5f},
-		Vector3f{0.5f+xsize*scale*0.5f,0.5f+ysize*scale*0.5f,0.5f+zsize*scale*0.5f}
+		Vector3f{0.5f - xsize * scale * 0.5f, 0.5f - ysize * scale * 0.5f, 0.5f - zsize * scale * 0.5f},
+		Vector3f{0.5f + xsize * scale * 0.5f, 0.5f + ysize * scale * 0.5f, 0.5f + zsize * scale * 0.5f},
 	};
 	m_volume.world2index_scale = maxsize;
-	m_volume.world2index_offset= Vector3f{(metadata.indexBBox[0][0]+metadata.indexBBox[1][0])*0.5f-0.5f*maxsize,(metadata.indexBBox[0][1]+metadata.indexBBox[1][1])*0.5f-0.5f*maxsize,(metadata.indexBBox[0][2]+metadata.indexBBox[1][2])*0.5f-0.5f*maxsize};
+	m_volume.world2index_offset = Vector3f{
+		(metadata.indexBBox[0][0] + metadata.indexBBox[1][0]) * 0.5f - 0.5f * maxsize,
+		(metadata.indexBBox[0][1] + metadata.indexBBox[1][1]) * 0.5f - 0.5f * maxsize,
+		(metadata.indexBBox[0][2] + metadata.indexBBox[1][2]) * 0.5f - 0.5f * maxsize,
+	};
 
 	auto acc = grid->tree().getAccessor();
 	std::vector<uint8_t> bitgrid;
-	bitgrid.resize(128*128*128/8);
-	for (int i=metadata.indexBBox[0][0];i<metadata.indexBBox[1][0];++i)
-	for (int j=metadata.indexBBox[0][1];j<metadata.indexBBox[1][1];++j)
-	for (int k=metadata.indexBBox[0][2];k<metadata.indexBBox[1][2];++k) {
-		float d = acc.getValue({i,j,k});
-		if (d>mx) mx=d;
-		if (d<mn) mn=d;
-		if (d>0.001f) {
-			float fx=((i+0.5f)-m_volume.world2index_offset.x())/m_volume.world2index_scale;
-			float fy=((j+0.5f)-m_volume.world2index_offset.y())/m_volume.world2index_scale;
-			float fz=((k+0.5f)-m_volume.world2index_offset.z())/m_volume.world2index_scale;
-			uint32_t bitidx = tcnn::morton3D(int(fx*128.f+0.5f),int(fy*128.f+0.5f),int(fz*128.f+0.5f));
-			if (bitidx<128*128*128)
-				bitgrid[bitidx/8]|=1<<(bitidx&7);
+	bitgrid.resize(128 * 128 * 128 / 8);
+	for (int i = metadata.indexBBox[0][0]; i < metadata.indexBBox[1][0]; ++i)
+	for (int j = metadata.indexBBox[0][1]; j < metadata.indexBBox[1][1]; ++j)
+	for (int k = metadata.indexBBox[0][2]; k < metadata.indexBBox[1][2]; ++k) {
+		float d = acc.getValue({i, j, k});
+		if (d > mx) mx = d;
+		if (d < mn) mn = d;
+		if (d > 0.001f) {
+			float fx = ((i + 0.5f) - m_volume.world2index_offset.x()) / m_volume.world2index_scale;
+			float fy = ((j + 0.5f) - m_volume.world2index_offset.y()) / m_volume.world2index_scale;
+			float fz = ((k + 0.5f) - m_volume.world2index_offset.z()) / m_volume.world2index_scale;
+			uint32_t bitidx = tcnn::morton3D(int(fx * 128.0f + 0.5f), int(fy * 128.0f + 0.5f), int(fz * 128.0f + 0.5f));
+			if (bitidx < 128 * 128 * 128)
+				bitgrid[bitidx / 8] |= 1 << (bitidx & 7);
 		}
 	}
 	m_volume.bitgrid.enlarge(bitgrid.size());

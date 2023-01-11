@@ -27,6 +27,7 @@
 
 using namespace Eigen;
 using namespace tcnn;
+namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
@@ -359,53 +360,44 @@ void Testbed::render_image(CudaRenderBuffer& render_buffer, cudaStream_t stream)
 	);
 }
 
-void Testbed::load_image() {
-	if (equals_case_insensitive(m_data_path.extension(), "exr")) {
-		load_exr_image();
-	} else if (equals_case_insensitive(m_data_path.extension(), "bin")) {
-		load_binary_image();
+void Testbed::load_image(const fs::path& data_path) {
+	if (equals_case_insensitive(data_path.extension(), "exr")) {
+		load_exr_image(data_path);
+	} else if (equals_case_insensitive(data_path.extension(), "bin")) {
+		load_binary_image(data_path);
 	} else {
-		load_stbi_image();
+		load_stbi_image(data_path);
 	}
-
-#ifdef COLOR_SPACE_CONVERT
-	const dim3 threads = { 32, 32, 1 };
-	const dim3 blocks = { div_round_up((uint32_t)m_image.resolution.x(), threads.x), div_round_up((uint32_t)m_image.resolution.x(), threads.y), 1 };
-	if (m_image.type == EDataType::Half)
-		colorspace_convert_image_half<<<blocks, threads, 0>>>(m_image.resolution, m_image.data.data());
-	else
-		colorspace_convert_image_float<<<blocks, threads, 0>>>(m_image.resolution, m_image.data.data());
-#endif
 
 	tlog::success()
 		<< "Loaded a " << (m_image.type == EDataType::Half ? "half" : "full") << "-precision image with "
 		<< m_image.resolution.x() << "x" << m_image.resolution.y() << " pixels.";
 }
 
-void Testbed::load_exr_image() {
-	if (!m_data_path.exists()) {
-		throw std::runtime_error{fmt::format("Image file '{}' does not exist.", m_data_path.str())};
+void Testbed::load_exr_image(const fs::path& data_path) {
+	if (!data_path.exists()) {
+		throw std::runtime_error{fmt::format("Image file '{}' does not exist.", data_path.str())};
 	}
 
-	tlog::info() << "Loading EXR image from " << m_data_path;
+	tlog::info() << "Loading EXR image from " << data_path;
 
 	// First step: load an image that we'd like to learn
-	GPUMemory<float> image = load_exr(m_data_path.str(), m_image.resolution.x(), m_image.resolution.y());
+	GPUMemory<float> image = load_exr(data_path.str(), m_image.resolution.x(), m_image.resolution.y());
 	m_image.data.resize(image.size() * sizeof(float));
 	CUDA_CHECK_THROW(cudaMemcpy(m_image.data.data(), image.data(), image.size() * sizeof(float), cudaMemcpyDeviceToDevice));
 
 	m_image.type = EDataType::Float;
 }
 
-void Testbed::load_stbi_image() {
-	if (!m_data_path.exists()) {
-		throw std::runtime_error{fmt::format("Image file '{}' does not exist.", m_data_path.str())};
+void Testbed::load_stbi_image(const fs::path& data_path) {
+	if (!data_path.exists()) {
+		throw std::runtime_error{fmt::format("Image file '{}' does not exist.", data_path.str())};
 	}
 
-	tlog::info() << "Loading STBI image from " << m_data_path;
+	tlog::info() << "Loading STBI image from " << data_path;
 
 	// First step: load an image that we'd like to learn
-	GPUMemory<float> image = load_stbi(m_data_path.str(), m_image.resolution.x(), m_image.resolution.y());
+	GPUMemory<float> image = load_stbi(data_path.str(), m_image.resolution.x(), m_image.resolution.y());
 	m_image.data.resize(image.size() * sizeof(float));
 	CUDA_CHECK_THROW(cudaMemcpy(m_image.data.data(), image.data(), image.size() * sizeof(float), cudaMemcpyDeviceToDevice));
 
@@ -413,14 +405,14 @@ void Testbed::load_stbi_image() {
 }
 
 
-void Testbed::load_binary_image() {
-	if (!m_data_path.exists()) {
-		throw std::runtime_error{fmt::format("Image file '{}' does not exist.", m_data_path.str())};
+void Testbed::load_binary_image(const fs::path& data_path) {
+	if (!data_path.exists()) {
+		throw std::runtime_error{fmt::format("Image file '{}' does not exist.", data_path.str())};
 	}
 
-	tlog::info() << "Loading binary image from " << m_data_path;
+	tlog::info() << "Loading binary image from " << data_path;
 
-	std::ifstream f(m_data_path.str(), std::ios::in | std::ios::binary);
+	std::ifstream f(data_path.str(), std::ios::in | std::ios::binary);
 	f.read(reinterpret_cast<char*>(&m_image.resolution.y()), sizeof(int));
 	f.read(reinterpret_cast<char*>(&m_image.resolution.x()), sizeof(int));
 

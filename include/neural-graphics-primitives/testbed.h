@@ -70,6 +70,7 @@ public:
 
 	bool clear_tmp_dir();
 	void load_training_data(const std::string& data_path);
+	void reload_training_data();
 	void clear_training_data();
 
 	void set_mode(ETestbedMode mode);
