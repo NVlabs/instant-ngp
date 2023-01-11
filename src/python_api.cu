@@ -473,7 +473,10 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readonly("sdf", &Testbed::m_sdf)
 		.def_readonly("image", &Testbed::m_image)
 		.def_readwrite("camera_smoothing", &Testbed::m_camera_smoothing)
-		.def_readwrite("display_gui", &Testbed::m_imgui_enabled)
+		.def_property("display_gui",
+			[](py::object& obj) { return obj.cast<Testbed&>().m_imgui.enabled; },
+			[](const py::object& obj, bool value) { obj.cast<Testbed&>().m_imgui.enabled = value; }
+		)
 		.def_readwrite("visualize_unit_cube", &Testbed::m_visualize_unit_cube)
 		.def_readwrite("snap_to_pixel_centers", &Testbed::m_snap_to_pixel_centers)
 		.def_readwrite("parallax_shift", &Testbed::m_parallax_shift)

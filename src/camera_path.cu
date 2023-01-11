@@ -143,11 +143,11 @@ void CameraPath::load(const std::string& filepath_string, const Eigen::Matrix<fl
 }
 
 #ifdef NGP_GUI
-int CameraPath::imgui(char path_filename_buf[128], float frame_milliseconds, Matrix<float, 3, 4>& camera, float slice_plane_z, float scale, float fov, float aperture_size, float bounding_radius, const Eigen::Matrix<float, 3, 4>& first_xform, int glow_mode, float glow_y_cutoff) {
+int CameraPath::imgui(char path_filename_buf[1024], float frame_milliseconds, Matrix<float, 3, 4>& camera, float slice_plane_z, float scale, float fov, float aperture_size, float bounding_radius, const Eigen::Matrix<float, 3, 4>& first_xform, int glow_mode, float glow_y_cutoff) {
 	int n = std::max(0, int(keyframes.size()) - 1);
 	int read = 0; // 1=smooth, 2=hard
 
-	ImGui::InputText("##PathFile", path_filename_buf, 128);
+	ImGui::InputText("##PathFile", path_filename_buf, sizeof(path_filename_buf));
 	ImGui::SameLine();
 	static std::string camera_path_load_error_string = "";
 

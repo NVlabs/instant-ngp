@@ -69,6 +69,7 @@ public:
 	Testbed(ETestbedMode mode, const std::string& data_path, const nlohmann::json& network_config) : Testbed(mode, data_path) { reload_network_from_json(network_config); }
 
 	bool clear_tmp_dir();
+	void update_imgui_paths();
 	void load_training_data(const std::string& data_path);
 	void reload_training_data();
 	void clear_training_data();
@@ -273,7 +274,7 @@ public:
 	);
 	void train_volume(size_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
 	void training_prep_volume(uint32_t batch_size, cudaStream_t stream) {}
-	void load_volume();
+	void load_volume(const filesystem::path& data_path);
 
 	void render_sdf(
 		const distance_fun_t& distance_function,
@@ -302,9 +303,9 @@ public:
 	static ELossType string_to_loss_type(const std::string& str);
 	void reset_network(bool clear_density_grid = true);
 	void create_empty_nerf_dataset(size_t n_images, int aabb_scale = 1, bool is_hdr = false);
-	void load_nerf();
+	void load_nerf(const filesystem::path& data_path);
 	void load_nerf_post();
-	void load_mesh();
+	void load_mesh(const filesystem::path& data_path);
 	void set_exposure(float exposure) { m_exposure = exposure; }
 	void set_max_level(float maxlevel);
 	void set_min_level(float minlevel);
@@ -402,10 +403,10 @@ public:
 	void draw_gui();
 	bool frame();
 	bool want_repl();
-	void load_image();
-	void load_exr_image();
-	void load_stbi_image();
-	void load_binary_image();
+	void load_image(const filesystem::path& data_path);
+	void load_exr_image(const filesystem::path& data_path);
+	void load_stbi_image(const filesystem::path& data_path);
+	void load_binary_image(const filesystem::path& data_path);
 	uint32_t n_dimensions_to_visualize() const;
 	float fov() const ;
 	void set_fov(float val) ;
@@ -823,7 +824,17 @@ public:
 	bool m_single_view = true; // Whether a single neuron is visualized, or all in a tiled grid
 	float m_picture_in_picture_res = 0.f; // if non zero, requests a small second picture :)
 
-	bool m_imgui_enabled = true; // tab to toggle
+	struct ImGuiVars {
+		static const uint32_t MAX_PATH_LEN = 1024;
+
+		bool enabled = true; // tab to toggle
+		char cam_path_path[MAX_PATH_LEN] = "cam.json";
+		char extrinsics_path[MAX_PATH_LEN] = "extrinsics.json";
+		char mesh_path[MAX_PATH_LEN] = "base.obj";
+		char snapshot_path[MAX_PATH_LEN] = "base.msgpack";
+		char video_path[MAX_PATH_LEN] = "video.mp4";
+	} m_imgui;
+
 	bool m_visualize_unit_cube = false;
 	bool m_snap_to_pixel_centers = false;
 	bool m_edit_render_aabb = false;

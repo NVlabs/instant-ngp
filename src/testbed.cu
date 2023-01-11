@@ -450,18 +450,6 @@ void Testbed::set_train(bool mtrain) {
 	m_train = mtrain;
 }
 
-std::string get_filename_in_data_path_with_suffix(fs::path data_path, fs::path network_config_path, const char* suffix) {
-	// use the network config name along with the data path to build a filename with the requested suffix & extension
-	std::string default_name = network_config_path.basename();
-	if (default_name == "") default_name = "base";
-	if (data_path.empty())
-		return default_name + std::string(suffix);
-	if (data_path.is_directory())
-		return (data_path / (default_name + std::string{suffix})).str();
-	else
-		return data_path.stem().str() + "_" + default_name + std::string(suffix);
-}
-
 void Testbed::compute_and_save_marching_cubes_mesh(const char* filename, Vector3i res3d , BoundingBox aabb, float thresh, bool unwrap_it) {
 	Matrix3f render_aabb_to_local = Matrix3f::Identity();
 	if (aabb.is_empty()) {
@@ -613,13 +601,8 @@ void Testbed::imgui() {
 	m_picture_in_picture_res = 0;
 	if (ImGui::Begin("Camera path", 0, ImGuiWindowFlags_NoScrollbar)) {
 		if (ImGui::CollapsingHeader("Path manipulation", ImGuiTreeNodeFlags_DefaultOpen)) {
-			static char path_filename_buf[128] = "";
-			if (path_filename_buf[0] == '\0') {
-				snprintf(path_filename_buf, sizeof(path_filename_buf), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, "_cam.json").c_str());
-			}
-
 			if (int read = m_camera_path.imgui(
-				path_filename_buf,
+				m_imgui.cam_path_path,
 				m_render_ms.val(),
 				m_camera,
 				m_slice_plane_z,
@@ -712,9 +695,8 @@ void Testbed::imgui() {
 
 			if (m_camera_path.rendering) { ImGui::BeginDisabled(); }
 
-			static char video_filename_buf[1024] = "video.mp4";
-			ImGui::InputText("File##Video file path", video_filename_buf, sizeof(video_filename_buf));
-			m_camera_path.render_settings.filename = video_filename_buf;
+			ImGui::InputText("File##Video file path", m_imgui.video_path, sizeof(m_imgui.video_path));
+			m_camera_path.render_settings.filename = m_imgui.video_path;
 
 			ImGui::InputInt2("Resolution", &m_camera_path.render_settings.resolution.x());
 			ImGui::InputFloat("Duration (seconds)", &m_camera_path.render_settings.duration_seconds);
@@ -759,14 +741,14 @@ void Testbed::imgui() {
 			if (m_nerf.training.dataset.n_extra_learnable_dims) {
 				ImGui::Checkbox("Train latent codes", &m_nerf.training.optimize_extra_dims);
 			}
-			static char opt_extr_filename_buf[1024] = "./trajectory.json";
 			static bool export_extrinsics_in_quat_format = true;
 			if (imgui_colored_button("Export extrinsics", 0.4f)) {
-				m_nerf.training.export_camera_extrinsics(opt_extr_filename_buf, export_extrinsics_in_quat_format);
+				m_nerf.training.export_camera_extrinsics(m_imgui.extrinsics_path, export_extrinsics_in_quat_format);
 			}
+
 			ImGui::SameLine();
 			ImGui::PushItemWidth(400.f);
-			ImGui::InputText("File##Extrinsics file path", opt_extr_filename_buf, sizeof(opt_extr_filename_buf));
+			ImGui::InputText("File##Extrinsics file path", m_imgui.extrinsics_path, sizeof(m_imgui.extrinsics_path));
 			ImGui::PopItemWidth();
 			ImGui::SameLine();
 			ImGui::Checkbox("Quaternion format", &export_extrinsics_in_quat_format);
@@ -1200,7 +1182,7 @@ void Testbed::imgui() {
 
 			if (m_testbed_mode == ETestbedMode::Sdf) {
 				size_t n = strlen(buf);
-				snprintf(buf+n, sizeof(buf)-n,
+				snprintf(buf + n, sizeof(buf) - n,
 					"testbed.sdf.shadow_sharpness = %0.3f\n"
 					"testbed.sdf.analytic_normals = %s\n"
 					"testbed.sdf.use_triangle_octree = %s\n\n"
@@ -1233,20 +1215,15 @@ void Testbed::imgui() {
 	}
 
 	if (ImGui::CollapsingHeader("Snapshot")) {
-		static char snapshot_filename_buf[128] = "";
-		if (snapshot_filename_buf[0] == '\0') {
-			snprintf(snapshot_filename_buf, sizeof(snapshot_filename_buf), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, ".msgpack").c_str());
-		}
-
 		ImGui::Text("Snapshot");
 		ImGui::SameLine();
 		if (ImGui::Button("Save")) {
-			save_snapshot(snapshot_filename_buf, m_include_optimizer_state_in_snapshot);
+			save_snapshot(m_imgui.snapshot_path, m_include_optimizer_state_in_snapshot);
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Load")) {
 			try {
-				load_snapshot(snapshot_filename_buf);
+				load_snapshot(m_imgui.snapshot_path);
 			} catch (std::exception& e) {
 				imgui_error_string = fmt::format("Failed to load snapshot: {}", e.what());
 				ImGui::OpenPopup("Error");
@@ -1259,7 +1236,7 @@ void Testbed::imgui() {
 
 		ImGui::SameLine();
 		ImGui::Checkbox("w/ optimizer state", &m_include_optimizer_state_in_snapshot);
-		ImGui::InputText("File##Snapshot file path", snapshot_filename_buf, sizeof(snapshot_filename_buf));
+		ImGui::InputText("File##Snapshot file path", m_imgui.snapshot_path, sizeof(m_imgui.snapshot_path));
 	}
 
 	if (m_testbed_mode == ETestbedMode::Nerf || m_testbed_mode == ETestbedMode::Sdf) {
@@ -1332,22 +1309,18 @@ void Testbed::imgui() {
 			ImGui::Checkbox("Swap Y&Z", &flip_y_and_z_axes);
 			ImGui::SliderFloat("PNG Density Range", &density_range, 0.001f, 8.f);
 
-			static char obj_filename_buf[128] = "";
 			ImGui::SliderInt("Res:", &m_mesh.res, 16, 2048, "%d", ImGuiSliderFlags_Logarithmic);
 			ImGui::SameLine();
 
 			ImGui::Text("%dx%dx%d", res3d.x(), res3d.y(), res3d.z());
-			if (obj_filename_buf[0] == '\0') {
-				snprintf(obj_filename_buf, sizeof(obj_filename_buf), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, ".obj").c_str());
-			}
 			float thresh_range = (m_testbed_mode == ETestbedMode::Sdf) ? 0.5f : 10.f;
 			ImGui::SliderFloat("MC density threshold",&m_mesh.thresh, -thresh_range, thresh_range);
 			ImGui::Combo("Mesh render mode", (int*)&m_mesh_render_mode, "Off\0Vertex Colors\0Vertex Normals\0Face IDs\0");
 			ImGui::Checkbox("Unwrap mesh", &m_mesh.unwrap);
 			if (uint32_t tricount = m_mesh.indices.size()/3) {
-				ImGui::InputText("##OBJFile", obj_filename_buf, sizeof(obj_filename_buf));
+				ImGui::InputText("##OBJFile", m_imgui.mesh_path, sizeof(m_imgui.mesh_path));
 				if (ImGui::Button("Save it!")) {
-					save_mesh(m_mesh.verts, m_mesh.vert_normals, m_mesh.vert_colors, m_mesh.indices, obj_filename_buf, m_mesh.unwrap, m_nerf.training.dataset.scale, m_nerf.training.dataset.offset);
+					save_mesh(m_mesh.verts, m_mesh.vert_normals, m_mesh.vert_colors, m_mesh.indices, m_imgui.mesh_path, m_mesh.unwrap, m_nerf.training.dataset.scale, m_nerf.training.dataset.offset);
 				}
 				ImGui::SameLine();
 				ImGui::Text("Mesh has %d triangles\n", tricount);
@@ -1406,8 +1379,9 @@ void Testbed::imgui() {
 		if (m_histo_level < m_num_levels) {
 			LevelStats& s = m_level_stats[m_histo_level];
 			static bool excludezero = false;
-			if (excludezero)
+			if (excludezero) {
 				m_histo[128] = 0.f;
+			}
 			ImGui::PlotHistogram("Values histogram", m_histo, 257, 0, "", FLT_MAX, FLT_MAX, ImVec2(0, 120.f));
 			ImGui::SliderFloat("Histogram horizontal scale", &m_histo_scale, 0.01f, 2.f);
 			ImGui::Checkbox("Exclude 'zero' from histogram", &excludezero);
@@ -1782,7 +1756,7 @@ bool Testbed::begin_frame_and_handle_user_input() {
 	ImGuizmo::BeginFrame();
 
 	if (ImGui::IsKeyPressed(GLFW_KEY_TAB) || ImGui::IsKeyPressed(GLFW_KEY_GRAVE_ACCENT)) {
-		m_imgui_enabled = !m_imgui_enabled;
+		m_imgui.enabled = !m_imgui.enabled;
 	}
 
 	ImVec2 m = ImGui::GetMousePos();
@@ -1813,7 +1787,7 @@ bool Testbed::begin_frame_and_handle_user_input() {
 	mouse_wheel({m.x / (float)m_window_res.y(), m.y / (float)m_window_res.y()}, mw);
 	mouse_drag({relm.x, relm.y}, mb);
 
-	if (m_imgui_enabled) {
+	if (m_imgui.enabled) {
 		imgui();
 	}
 
@@ -3585,7 +3559,7 @@ void Testbed::load_snapshot(const std::string& filepath_string) {
 		// and render using just that.
 		if (m_data_path.empty() && snapshot["nerf"].contains("dataset")) {
 			m_nerf.training.dataset = snapshot["nerf"]["dataset"];
-			load_nerf();
+			load_nerf(m_data_path);
 		} else {
 			if (snapshot["nerf"].contains("aabb_scale")) {
 				m_nerf.training.dataset.aabb_scale = snapshot["nerf"]["aabb_scale"];
