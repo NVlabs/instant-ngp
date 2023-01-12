@@ -53,10 +53,12 @@ See [nerf_loader.cu](src/nerf_loader.cu) for implementation details and addition
 
 ## Preparing new NeRF datasets
 
-To train on self-captured data, one has to process the data into an existing format supported by Instant-NGP. We provide scripts to support two complementary approaches:
+To train on self-captured data, one has to process the data into an existing format supported by Instant-NGP. We provide scripts to support three approaches:
 - [COLMAP](#COLMAP) to create a dataset from a set of photos or a video you took
 
 - [Record3D](#Record3D) to create a dataset with an iPhone 12 Pro or newer (based on ARKit)
+
+- [NeRFCapture](https://github.com/jc211/NeRFCapture) to create a dataset or stream posed images directly to InsantNGP with an iOS device.
 
 Both require [Python](https://www.python.org/) 3.7 or higher to be installed and available in your PATH.
 
@@ -129,6 +131,9 @@ With an >=iPhone 12 Pro, one can use [Record3D](https://record3d.app/) to collec
 	```
 	instant-ngp$ ./instant-ngp path/to/data
 	```
+	
+### NeRFCapture
+[NeRFCapture](https://github.com/jc211/NeRFCapture) is an iOS app that runs on any ARKit device. It allows you to stream images directly from your phone to InstantNGP thus enabling a more interactive experience. It can also collect an offline dataset for later use.
 
 ## Tips for NeRF training data
 
