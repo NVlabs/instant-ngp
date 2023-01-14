@@ -128,7 +128,7 @@ Now you can run:
 instant-ngp$ ./instant-ngp data/nerf_synthetic/lego/transforms_train.json
 ```
 
-**[To prepare your own dataset for use with our NeRF implementation, click here.](docs/nerf_dataset_tips.md)** See also [this video](https://www.youtube.com/watch?v=8GbENSmdVeE) for a guided walkthrough.
+**[To prepare your own dataset for use with our NeRF implementation, click here.](docs/nerf_dataset_tips.md)** See also [this video](https://www.youtube.com/watch?v=3TWxO1PftMc) for a guided walkthrough.
 
 ### SDF armadillo
 
@@ -197,19 +197,13 @@ Some popular user controls in __instant-ngp__ are:
 * __Rendering -> DLSS:__ toggling this on and setting "DLSS sharpening" below it to 1.0 can often improve rendering quality.
 * __Rendering -> Crop size:__ trim back the surrounding environment to focus on the model. "Crop aabb" lets you move the center of the volume of interest and fine tune. See more about this feature in [our NeRF training & dataset tips](https://github.com/NVlabs/instant-ngp/blob/master/docs/nerf_dataset_tips.md).
 
-The "Camera path" GUI lets you set frames along a path. "Add from cam" is the main button you'll want to push. Then, you can render a video `.mp4` of your camera path or export the keyframes to a `.json` file. There is a bit more information about the GUI [in this post](https://developer.nvidia.com/blog/getting-started-with-nvidia-instant-nerfs/) and [in this (bit dated) video](https://www.youtube.com/watch?v=z3-fjYzd0BA).
+The "Camera path" GUI lets you set frames along a path. "Add from cam" is the main button you'll want to push. Then, you can render a video `.mp4` of your camera path or export the keyframes to a `.json` file. There is a bit more information about the GUI [in this post](https://developer.nvidia.com/blog/getting-started-with-nvidia-instant-nerfs/) and [in this video guide to creating your own video](https://www.youtube.com/watch?v=3TWxO1PftMc).
 
 
 ## Python bindings
 
 To conduct controlled experiments in an automated fashion, all features from the interactive GUI (and more!) have Python bindings that can be easily instrumented.
 For an example of how the `./instant-ngp` application can be implemented and extended from within Python, see `./scripts/run.py`, which supports a superset of the command line arguments that `./instant-ngp` does.
-
-Here is a typical command line using `scripts/run.py` to generate a 5-second flythrough of the fox dataset to the (default) file `video.mp4`, after using the GUI to save a (default) NeRF snapshot `base.msgpack` and a set of camera key frames: (see [this video](https://www.youtube.com/watch?v=8GbENSmdVeE) for a guided walkthrough)
-
-```sh
-instant-ngp$ python scripts/run.py data/nerf/fox/base.msgpack --video_camera_path data/nerf/fox/base_cam.json --video_n_seconds 5 --video_fps 60 --width 1920 --height 1080
-```
 
 If you'd rather build new models from the hash encoding and fast neural networks, consider the [__tiny-cuda-nn__'s PyTorch extension](https://github.com/nvlabs/tiny-cuda-nn#pytorch-extension).
 
