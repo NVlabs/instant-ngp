@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
 	ValueFlag<string> scene_flag{
 		parser,
 		"SCENE",
-		"The scene to load. Can be NeRF dataset, a *.obj/*.ply mesh for training a SDF, an image, or a *.nvdb volume.",
+		"The scene to load. Can be NeRF dataset, a *.obj/*.stl mesh for training a SDF, an image, or a *.nvdb volume.",
 		{'s', "scene"},
 	};
 

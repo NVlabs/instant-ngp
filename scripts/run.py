@@ -29,7 +29,7 @@ def parse_args():
 
 	parser.add_argument("files", nargs="*", help="Files to be loaded. Can be a scene, network config, snapshot, camera path, or a combination of those.")
 
-	parser.add_argument("--scene", "--training_data", default="", help="The scene to load. Can be the scene's name or a full path to the training data. Can be NeRF dataset, a *.obj/*.ply mesh for training a SDF, an image, or a *.nvdb volume.")
+	parser.add_argument("--scene", "--training_data", default="", help="The scene to load. Can be the scene's name or a full path to the training data. Can be NeRF dataset, a *.obj/*.stl mesh for training a SDF, an image, or a *.nvdb volume.")
 	parser.add_argument("--mode", default="", type=str, help=argparse.SUPPRESS) # deprecated
 	parser.add_argument("--network", default="", help="Path to the network config. Uses the scene's default if unspecified.")
 
