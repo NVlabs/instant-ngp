@@ -579,6 +579,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("loss_type", &Testbed::Nerf::Training::loss_type)
 		.def_readwrite("depth_loss_type", &Testbed::Nerf::Training::depth_loss_type)
 		.def_readwrite("snap_to_pixel_centers", &Testbed::Nerf::Training::snap_to_pixel_centers)
+		.def_readwrite("use_view_direction", &Testbed::Nerf::Training::use_view_direction)
 		.def_readwrite("optimize_extrinsics", &Testbed::Nerf::Training::optimize_extrinsics)
 		.def_readwrite("optimize_extra_dims", &Testbed::Nerf::Training::optimize_extra_dims)
 		.def_readwrite("optimize_exposure", &Testbed::Nerf::Training::optimize_exposure)
