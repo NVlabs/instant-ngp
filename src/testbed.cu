@@ -741,6 +741,7 @@ void Testbed::imgui() {
 			if (m_nerf.training.dataset.n_extra_learnable_dims) {
 				ImGui::Checkbox("Train latent codes", &m_nerf.training.optimize_extra_dims);
 			}
+			ImGui::Checkbox("View direction", &m_nerf.training.use_view_direction);
 			static bool export_extrinsics_in_quat_format = true;
 			if (imgui_colored_button("Export extrinsics", 0.4f)) {
 				m_nerf.training.export_camera_extrinsics(m_imgui.extrinsics_path, export_extrinsics_in_quat_format);
@@ -2789,6 +2790,7 @@ void Testbed::reset_network(bool clear_density_grid) {
 			n_dir_dims,
 			n_extra_dims,
 			dims.n_pos + 1, // The offset of 1 comes from the dt member variable of NerfCoordinate. HACKY
+			m_nerf.training.use_view_direction,
 			encoding_config,
 			dir_encoding_config,
 			network_config,

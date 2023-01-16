@@ -602,6 +602,7 @@ public:
 			bool snap_to_pixel_centers = true;
 			bool train_envmap = false;
 
+			bool use_view_direction = true;
 			bool optimize_distortion = false;
 			bool optimize_extrinsics = false;
 			bool optimize_extra_dims = false;
