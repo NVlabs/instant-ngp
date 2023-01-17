@@ -60,6 +60,8 @@ To train on self-captured data, one has to process the data into an existing for
 
 Both require [Python](https://www.python.org/) 3.7 or higher to be installed and available in your PATH.
 
+On Windows you can [download an installer from here](https://www.python.org/downloads/). During installation, make sure to check "add python.exe to PATH".
+
 If you are using Debian based Linux distribution, install Python with
 ```sh
 sudo apt-get install python3-dev python3-pip
@@ -70,9 +72,7 @@ Alternatively, if you are using Arch or Arch derivatives, install Python with
 sudo pacman -S python python-pip
 ```
 
-On Windows you can also install Python from the Microsoft Store, which will add Python to your PATH automatically.
-
-Then you need to install the required Python packages for running this software by to do so opening a Linux terminal / Windows Command Prompt and calling
+For all operating systems, after having installed Python, you need to install the required Python packages by opening a Windows Command Prompt / Linux terminal and calling
 ```sh
 pip install -r requirements.txt
 ```
