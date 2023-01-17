@@ -79,7 +79,7 @@ int main(int argc, char** argv) {
 		parser,
 		"SNAPSHOT",
 		"Optional snapshot to load upon startup.",
-		{"snapshot"},
+		{"snapshot", "load_snapshot"},
 	};
 
 	ValueFlag<uint32_t> width_flag{
