@@ -2526,6 +2526,15 @@ void Testbed::Nerf::Training::update_transforms(int first, int last) {
 
 	for (uint32_t i = 0; i < n; ++i) {
 		auto xform = dataset.xforms[i + first];
+		if (std::abs(xform.start.block<3, 3>(0, 0).determinant() - 1.0f) > 0.01f || std::abs(xform.end.block<3, 3>(0, 0).determinant() - 1.0f) > 0.01f) {
+			tlog::warning() << "Rotation of camera matrix in frame " << i + first << " has a scaling component (determinant!=1).";
+			tlog::warning() << "Normalizing the matrix. This hints at an issue in your data generation pipeline and should be fixed.";
+
+			dataset.xforms[i + first].start.block<3, 3>(0, 0) /= std::cbrt(xform.start.block<3, 3>(0, 0).determinant());
+			dataset.xforms[i + first].end.block<3, 3>(0, 0) /= std::cbrt(xform.end.block<3, 3>(0, 0).determinant());
+			xform = dataset.xforms[i + first];
+		}
+
 		Vector3f rot = cam_rot_offset[i + first].variable();
 		float angle = rot.norm();
 		rot /= angle;
