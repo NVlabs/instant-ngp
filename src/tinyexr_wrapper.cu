@@ -54,28 +54,28 @@ __global__ void interleave_and_cast_kernel(const uint32_t num_pixels, bool has_a
 	*((uint64_t*)&out[i*4]) = *((uint64_t*)&rgba_out[0]);
 }
 
-void save_exr(const float* data, int width, int height, int nChannels, int channelStride, const char* outfilename) {
+void save_exr(const float* data, int width, int height, int n_channels, int channel_stride, const char* outfilename) {
 	EXRHeader header;
 	InitEXRHeader(&header);
 
 	EXRImage image;
 	InitEXRImage(&image);
 
-	image.num_channels = nChannels;
+	image.num_channels = n_channels;
 
-	std::vector<std::vector<float>> images(nChannels);
-	std::vector<float*> image_ptr(nChannels);
-	for (int i = 0; i < nChannels; ++i) {
+	std::vector<std::vector<float>> images(n_channels);
+	std::vector<float*> image_ptr(n_channels);
+	for (int i = 0; i < n_channels; ++i) {
 		images[i].resize(width * height);
 	}
 
-	for (int i = 0; i < nChannels; ++i) {
-		image_ptr[i] = images[nChannels - i - 1].data();
+	for (int i = 0; i < n_channels; ++i) {
+		image_ptr[i] = images[n_channels - i - 1].data();
 	}
 
 	for (size_t i = 0; i < (size_t)width * height; i++) {
-		for (int c = 0; c < nChannels; ++c) {
-			images[c][i] = data[channelStride*i+c];
+		for (int c = 0; c < n_channels; ++c) {
+			images[c][i] = data[channel_stride * i + c];
 		}
 	}
 
@@ -83,18 +83,16 @@ void save_exr(const float* data, int width, int height, int nChannels, int chann
 	image.width = width;
 	image.height = height;
 
-	header.num_channels = nChannels;
+	header.num_channels = n_channels;
 	header.channels = (EXRChannelInfo *)malloc(sizeof(EXRChannelInfo) * header.num_channels);
+
 	// Must be (A)BGR order, since most of EXR viewers expect this channel order.
-	strncpy(header.channels[0].name, "B", 255); header.channels[0].name[strlen("B")] = '\0';
-	if (nChannels > 1) {
-		strncpy(header.channels[1].name, "G", 255); header.channels[1].name[strlen("G")] = '\0';
-	}
-	if (nChannels > 2) {
-		strncpy(header.channels[2].name, "R", 255); header.channels[2].name[strlen("R")] = '\0';
-	}
-	if (nChannels > 3) {
-		strncpy(header.channels[3].name, "A", 255); header.channels[3].name[strlen("A")] = '\0';
+	const char* channel_names[] = {
+		"R", "G", "B", "A"
+	};
+
+	for (size_t i = 0; i < n_channels; ++i) {
+		strncpy(header.channels[i].name, channel_names[n_channels - i - 1], 255);
 	}
 
 	header.pixel_types = (int *)malloc(sizeof(int) * header.num_channels);
