@@ -3611,7 +3611,7 @@ void Testbed::load_snapshot(const std::string& filepath_string) {
 	m_render_aabb = snapshot.value("render_aabb", m_render_aabb);
 
 	m_network_config_path = filepath_string;
-	m_network_config = config;
+	m_network_config = std::move(config);
 
 	reset_network(false);
 
