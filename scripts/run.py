@@ -113,7 +113,6 @@ if __name__ == "__main__":
 		scene_info = get_scene(args.load_snapshot)
 		if scene_info is not None:
 			args.load_snapshot = default_snapshot_filename(scene_info)
-		print("Loading snapshot ", args.load_snapshot)
 		testbed.load_snapshot(args.load_snapshot)
 	elif args.network:
 		testbed.reload_network_from_file(args.network)
@@ -200,7 +199,6 @@ if __name__ == "__main__":
 					tqdm_last_update = now
 
 	if args.save_snapshot:
-		print("Saving snapshot ", args.save_snapshot)
 		testbed.save_snapshot(args.save_snapshot, False)
 
 	if args.test_transforms:
