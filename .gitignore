@@ -12,6 +12,7 @@
 /*.dll
 /*.exe
 /*.json
+*.ingp
 *.msgpack
 *.training
 __pycache__

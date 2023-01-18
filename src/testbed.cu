@@ -41,6 +41,8 @@
 #include <stb_image/stb_image.h>
 #include <stb_image/stb_image_write.h>
 
+#include <zstr.hpp>
+
 #include <fstream>
 #include <set>
 #include <unordered_set>
@@ -86,7 +88,7 @@ NGP_NAMESPACE_BEGIN
 
 std::atomic<size_t> g_total_n_bytes_allocated{0};
 
-json merge_parent_network_config(const json &child, const fs::path &child_filename) {
+json merge_parent_network_config(const json& child, const fs::path& child_filename) {
 	if (!child.contains("parent")) {
 		return child;
 	}
@@ -121,7 +123,7 @@ void Testbed::update_imgui_paths() {
 	snprintf(m_imgui.cam_path_path, sizeof(m_imgui.cam_path_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, "_cam.json").c_str());
 	snprintf(m_imgui.extrinsics_path, sizeof(m_imgui.extrinsics_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, "_extrinsics.json").c_str());
 	snprintf(m_imgui.mesh_path, sizeof(m_imgui.mesh_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, ".obj").c_str());
-	snprintf(m_imgui.snapshot_path, sizeof(m_imgui.snapshot_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, ".msgpack").c_str());
+	snprintf(m_imgui.snapshot_path, sizeof(m_imgui.snapshot_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, ".ingp").c_str());
 	snprintf(m_imgui.video_path, sizeof(m_imgui.video_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, "_video.mp4").c_str());
 }
 
@@ -215,7 +217,7 @@ fs::path Testbed::find_network_config(const fs::path& network_config_path) {
 }
 
 json Testbed::load_network_config(const fs::path& network_config_path) {
-	bool is_snapshot = equals_case_insensitive(network_config_path.extension(), "msgpack");
+	bool is_snapshot = equals_case_insensitive(network_config_path.extension(), "msgpack") || equals_case_insensitive(network_config_path.extension(), "ingp");
 	if (network_config_path.empty() || !network_config_path.exists()) {
 		throw std::runtime_error{fmt::format("Network {} '{}' does not exist.", is_snapshot ? "snapshot" : "config", network_config_path.str())};
 	}
@@ -223,14 +225,20 @@ json Testbed::load_network_config(const fs::path& network_config_path) {
 	tlog::info() << "Loading network " << (is_snapshot ? "snapshot" : "config") << " from: " << network_config_path;
 
 	json result;
-	if (equals_case_insensitive(network_config_path.extension(), "json")) {
+	if (is_snapshot) {
+		if (equals_case_insensitive(network_config_path.extension(), "ingp")) {
+			// zstr::ifstream applies zlib compression.
+			zstr::ifstream f{network_config_path.str(), std::ios::in | std::ios::binary};
+			result = json::from_msgpack(f);
+		} else {
+			std::ifstream f{network_config_path.str(), std::ios::in | std::ios::binary};
+			result = json::from_msgpack(f);
+		}
+		// we assume parent pointers are already resolved in snapshots.
+	} else if (equals_case_insensitive(network_config_path.extension(), "json")) {
 		std::ifstream f{network_config_path.str()};
 		result = json::parse(f, nullptr, true, true);
 		result = merge_parent_network_config(result, network_config_path);
-	} else if (equals_case_insensitive(network_config_path.extension(), "msgpack")) {
-		std::ifstream f{network_config_path.str(), std::ios::in | std::ios::binary};
-		result = json::from_msgpack(f);
-		// we assume parent pointers are already resolved in snapshots.
 	}
 
 	return result;
@@ -239,7 +247,7 @@ json Testbed::load_network_config(const fs::path& network_config_path) {
 void Testbed::reload_network_from_file(const std::string& network_config_path_string) {
 	if (!network_config_path_string.empty()) {
 		fs::path candidate = find_network_config(network_config_path_string);
-		if (candidate.exists()) {
+		if (candidate.exists() || !m_network_config_path.exists()) {
 			// Store the path _argument_ in the member variable. E.g. for the base config,
 			// it'll store `base.json`, even though the loaded config will be
 			// config/<mode>/base.json. This has the benefit of switching to the
@@ -289,7 +297,7 @@ void Testbed::load_file(const std::string& file_path) {
 		return;
 	}
 
-	if (ends_with_case_insensitive(file_path, ".msgpack")) {
+	if (ends_with_case_insensitive(file_path, ".ingp") || ends_with_case_insensitive(file_path, ".msgpack")) {
 		load_snapshot(file_path);
 		return;
 	}
@@ -1218,7 +1226,7 @@ void Testbed::imgui() {
 		ImGui::Text("Snapshot");
 		ImGui::SameLine();
 		if (ImGui::Button("Save")) {
-			save_snapshot(m_imgui.snapshot_path, m_include_optimizer_state_in_snapshot);
+			save_snapshot(m_imgui.snapshot_path, m_include_optimizer_state_in_snapshot, m_compress_snapshot);
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Load")) {
@@ -1237,6 +1245,16 @@ void Testbed::imgui() {
 		ImGui::SameLine();
 		ImGui::Checkbox("w/ optimizer state", &m_include_optimizer_state_in_snapshot);
 		ImGui::InputText("File##Snapshot file path", m_imgui.snapshot_path, sizeof(m_imgui.snapshot_path));
+		ImGui::SameLine();
+
+		bool can_compress = ends_with_case_insensitive(m_imgui.snapshot_path, ".ingp");
+
+		if (!can_compress) {
+			ImGui::BeginDisabled();
+			m_compress_snapshot = false;
+		}
+		ImGui::Checkbox("Compress", &m_compress_snapshot);
+		if (!can_compress) ImGui::EndDisabled();
 	}
 
 	if (m_testbed_mode == ETestbedMode::Nerf || m_testbed_mode == ETestbedMode::Sdf) {
@@ -3481,7 +3499,7 @@ void Testbed::gather_histograms() {
 // Increment this number when making a change to the snapshot format
 static const size_t SNAPSHOT_FORMAT_VERSION = 1;
 
-void Testbed::save_snapshot(const std::string& filepath_string, bool include_optimizer_state) {
+void Testbed::save_snapshot(const std::string& filepath_string, bool include_optimizer_state, bool compress) {
 	fs::path filepath = filepath_string;
 	m_network_config["snapshot"] = m_trainer->serialize(include_optimizer_state);
 
@@ -3516,8 +3534,16 @@ void Testbed::save_snapshot(const std::string& filepath_string, bool include_opt
 	}
 
 	m_network_config_path = filepath;
-	std::ofstream f(m_network_config_path.str(), std::ios::out | std::ios::binary);
-	json::to_msgpack(m_network_config, f);
+	if (equals_case_insensitive(m_network_config_path.extension(), "ingp")) {
+		// zstr::ofstream applies zlib compression.
+		zstr::ofstream f{m_network_config_path.str(), std::ios::out | std::ios::binary, compress ? Z_DEFAULT_COMPRESSION : Z_NO_COMPRESSION};
+		json::to_msgpack(m_network_config, f);
+	} else {
+		std::ofstream f{m_network_config_path.str(), std::ios::out | std::ios::binary};
+		json::to_msgpack(m_network_config, f);
+	}
+
+	tlog::success() << "Saved snapshot '" << filepath_string << "'";
 }
 
 void Testbed::load_snapshot(const std::string& filepath_string) {
@@ -3526,10 +3552,7 @@ void Testbed::load_snapshot(const std::string& filepath_string) {
 		throw std::runtime_error{fmt::format("File '{}' does not contain a snapshot.", filepath_string)};
 	}
 
-	m_network_config_path = filepath_string;
-
 	const auto& snapshot = config["snapshot"];
-
 	if (snapshot.value("version", 0) < SNAPSHOT_FORMAT_VERSION) {
 		throw std::runtime_error{"Snapshot uses an old format and can not be loaded."};
 	}
@@ -3588,7 +3611,7 @@ void Testbed::load_snapshot(const std::string& filepath_string) {
 	m_render_aabb = snapshot.value("render_aabb", m_render_aabb);
 
 	m_network_config_path = filepath_string;
-	m_network_config = config;
+	m_network_config = std::move(config);
 
 	reset_network(false);
 

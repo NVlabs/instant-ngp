@@ -33,10 +33,10 @@ def parse_args():
 	parser.add_argument("--mode", default="", type=str, help=argparse.SUPPRESS) # deprecated
 	parser.add_argument("--network", default="", help="Path to the network config. Uses the scene's default if unspecified.")
 
-	parser.add_argument("--load_snapshot", "--snapshot", default="", help="Load this snapshot before training. recommended extension: .msgpack")
-	parser.add_argument("--save_snapshot", default="", help="Save this snapshot after training. recommended extension: .msgpack")
+	parser.add_argument("--load_snapshot", "--snapshot", default="", help="Load this snapshot before training. recommended extension: .ingp/.msgpack")
+	parser.add_argument("--save_snapshot", default="", help="Save this snapshot after training. recommended extension: .ingp/.msgpack")
 
-	parser.add_argument("--nerf_compatibility", action="store_true", help="Matches parameters with original NeRF. Can cause slowness and worse results on some scenes.")
+	parser.add_argument("--nerf_compatibility", action="store_true", help="Matches parameters with original NeRF. Can cause slowness and worse results on some scenes, but helps with high PSNR on synthetic scenes.")
 	parser.add_argument("--test_transforms", default="", help="Path to a nerf style transforms json from which we will compute PSNR.")
 	parser.add_argument("--near_distance", default=-1, type=float, help="Set the distance from the camera at which training rays start for nerf. <0 means use ngp default")
 	parser.add_argument("--exposure", default=0.0, type=float, help="Controls the brightness of the image. Positive numbers increase brightness, negative numbers decrease it.")
@@ -113,7 +113,6 @@ if __name__ == "__main__":
 		scene_info = get_scene(args.load_snapshot)
 		if scene_info is not None:
 			args.load_snapshot = default_snapshot_filename(scene_info)
-		print("Loading snapshot ", args.load_snapshot)
 		testbed.load_snapshot(args.load_snapshot)
 	elif args.network:
 		testbed.reload_network_from_file(args.network)
@@ -200,7 +199,6 @@ if __name__ == "__main__":
 					tqdm_last_update = now
 
 	if args.save_snapshot:
-		print("Saving snapshot ", args.save_snapshot)
 		testbed.save_snapshot(args.save_snapshot, False)
 
 	if args.test_transforms:

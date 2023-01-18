@@ -222,7 +222,7 @@ def setup_colored_sdf(testbed, scene, softshadow=True):
 	testbed.scale = testbed.scale * 1.13
 
 def default_snapshot_filename(scene_info):
-	filename = "base.msgpack"
+	filename = f"base.ingp"
 	if scene_info["dataset"]:
 		filename = f"{os.path.splitext(scene_info['dataset'])[0]}_{filename}"
 	return os.path.join(scene_info["data_dir"], filename)
