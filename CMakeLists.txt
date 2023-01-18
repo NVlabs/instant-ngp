@@ -193,6 +193,26 @@ if (Python_FOUND)
 	add_subdirectory("dependencies/pybind11")
 endif()
 
+# Compile zlib (only on Windows)
+if (WIN32)
+	set(ZLIB_USE_STATIC_LIBS ON CACHE BOOL " " FORCE)
+	set(ZLIB_BUILD_STATIC_LIBS ON CACHE BOOL " " FORCE)
+	set(ZLIB_BUILD_SHARED_LIBS OFF CACHE BOOL " " FORCE)
+	set(SKIP_INSTALL_ALL ON CACHE BOOL " " FORCE)
+	add_subdirectory("dependencies/zlib")
+	set_property(TARGET zlibstatic PROPERTY FOLDER "dependencies")
+
+	set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/zlib" CACHE PATH " " FORCE)
+	set(ZLIB_LIBRARY zlibstatic)
+
+	include_directories(${ZLIB_INCLUDE_DIR} "${CMAKE_CURRENT_BINARY_DIR}/dependencies/zlib")
+
+	list(APPEND NGP_LIBRARIES zlibstatic)
+endif()
+
+add_subdirectory("dependencies/zstr")
+list(APPEND NGP_LIBRARIES zstr::zstr)
+
 
 ###############################################################################
 # Program

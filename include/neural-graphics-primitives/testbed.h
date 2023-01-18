@@ -412,7 +412,7 @@ public:
 	void set_fov(float val) ;
 	Eigen::Vector2f fov_xy() const ;
 	void set_fov_xy(const Eigen::Vector2f& val);
-	void save_snapshot(const std::string& filepath_string, bool include_optimizer_state);
+	void save_snapshot(const std::string& filepath_string, bool include_optimizer_state, bool compress);
 	void load_snapshot(const std::string& filepath_string);
 	CameraKeyframe copy_camera_to_keyframe() const;
 	void set_camera_from_keyframe(const CameraKeyframe& k);
@@ -464,6 +464,7 @@ public:
 	bool m_gather_histograms = false;
 
 	bool m_include_optimizer_state_in_snapshot = false;
+	bool m_compress_snapshot = true;
 	bool m_render_ground_truth = false;
 	EGroundTruthRenderMode m_ground_truth_render_mode = EGroundTruthRenderMode::Shade;
 	float m_ground_truth_alpha = 1.0f;
@@ -831,7 +832,7 @@ public:
 		char cam_path_path[MAX_PATH_LEN] = "cam.json";
 		char extrinsics_path[MAX_PATH_LEN] = "extrinsics.json";
 		char mesh_path[MAX_PATH_LEN] = "base.obj";
-		char snapshot_path[MAX_PATH_LEN] = "base.msgpack";
+		char snapshot_path[MAX_PATH_LEN] = "base.ingp";
 		char video_path[MAX_PATH_LEN] = "video.mp4";
 	} m_imgui;
 
