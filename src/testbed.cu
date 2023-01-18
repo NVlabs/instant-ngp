@@ -247,7 +247,7 @@ json Testbed::load_network_config(const fs::path& network_config_path) {
 void Testbed::reload_network_from_file(const std::string& network_config_path_string) {
 	if (!network_config_path_string.empty()) {
 		fs::path candidate = find_network_config(network_config_path_string);
-		if (candidate.exists()) {
+		if (candidate.exists() || !m_network_config_path.exists()) {
 			// Store the path _argument_ in the member variable. E.g. for the base config,
 			// it'll store `base.json`, even though the loaded config will be
 			// config/<mode>/base.json. This has the benefit of switching to the
