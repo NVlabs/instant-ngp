@@ -147,11 +147,12 @@ jobs:
             docs/assets_readme/
             data/
             scripts/flip/*
+            scripts/category2id.json
+            scripts/colmap2nerf.py
             scripts/common.py
             scripts/convert_image.py
             scripts/download_colmap.bat
             scripts/download_ffmpeg.bat
-            scripts/colmap2nerf.py
             scripts/nsvf2nerf.py
             scripts/record3d2nerf.py
 
