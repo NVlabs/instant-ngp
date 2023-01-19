@@ -397,7 +397,9 @@ if __name__ == "__main__":
 			import detectron2
 		except ModuleNotFoundError:
 			input("Detectron2 is not installed. Press enter to install it.")
-			os.system("python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'")
+			import subprocess
+			package = 'git+https://github.com/facebookresearch/detectron2.git'
+			subprocess.check_call([sys.executable, "-m", "pip", "install", package])
 			import detectron2
 
 		import torch
