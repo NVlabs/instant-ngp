@@ -106,6 +106,11 @@ For more options, you can run the script with `--help`. For more advanced uses o
 
 The `aabb_scale` parameter is the most important `instant-ngp` specific parameter. It specifies the extent of the scene, defaulting to 1; that is, the scene is scaled such that the camera positions are at an average distance of 1 unit from the origin. For small synthetic scenes such as the original NeRF dataset, the default `aabb_scale` of 1 is ideal and leads to fastest training. The NeRF model makes the assumption that the training images can entirely be explained by a scene contained within this bounding box. However, for natural scenes where there is a background that extends beyond this bounding box, the NeRF model will struggle and may hallucinate "floaters" at the boundaries of the box. By setting `aabb_scale` to a larger power of 2 (up to a maximum of 16), the NeRF model will extend rays to a much larger bounding box. Note that this can impact training speed slightly. If in doubt, for natural scenes, start with an `aabb_scale` of 128, and subsequently reduce it if possible. The value can be directly edited in the `transforms.json` output file, without re-running the [scripts/colmap2nerf.py](/scripts/colmap2nerf.py) script.
 
+You can optionally pass in object categories (e.g. `--mask_categories person car`) which runs [Detectron2](https://github.com/facebookresearch/detectron2) to generate masks automatically.
+__instant-ngp__ will not use the masked pixels for training.
+This utility is helpful for users who wish to ignore moving or sensitive objects such as people, cars, or bikes.
+See [scripts/category2id.json](/scripts/category2id.json) for a list of categories.
+
 Assuming success, you can now train your NeRF model as follows, starting in the `instant-ngp` folder:
 
 ```sh
