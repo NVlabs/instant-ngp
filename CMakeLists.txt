@@ -104,11 +104,7 @@ if (NGP_BUILD_WITH_GUI)
 		list(APPEND NGP_INCLUDE_DIRECTORIES "dependencies/dlss/include")
 		if (MSVC)
 			list(APPEND NGP_LINK_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/x86_64")
-			if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-				list(APPEND NGP_LIBRARIES nvsdk_ngx_d_dbg)
-			else()
-				list(APPEND NGP_LIBRARIES nvsdk_ngx_d)
-			endif()
+			list(APPEND NGP_LIBRARIES "$<IF:$<CONFIG:Debug>,nvsdk_ngx_d_dbg,nvsdk_ngx_d>")
 		else()
 			list(APPEND NGP_LINK_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64")
 			list(APPEND NGP_LIBRARIES nvsdk_ngx)
@@ -306,11 +302,7 @@ target_link_libraries(instant-ngp PRIVATE ngp)
 
 # Copy DLSS shared libraries
 if (NGP_VULKAN)
-	if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-		set(NGX_BUILD_DIR "dev")
-	else()
-		set(NGX_BUILD_DIR "rel")
-	endif()
+	set(NGX_BUILD_DIR "$<IF:$<CONFIG:Debug>,dev,rel>")
 
 	if (MSVC)
 		add_custom_command(TARGET instant-ngp POST_BUILD
@@ -318,9 +310,8 @@ if (NGP_VULKAN)
 			COMMAND_EXPAND_LISTS
 		)
 	else()
-		file(GLOB DLSS_SOS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64/${NGX_BUILD_DIR}/libnvidia-ngx-dlss.so.*")
 		add_custom_command(TARGET instant-ngp POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy ${DLSS_SOS} $<TARGET_FILE_DIR:instant-ngp>
+			COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64/${NGX_BUILD_DIR}/libnvidia-ngx-dlss.so.*" $<TARGET_FILE_DIR:instant-ngp>
 			COMMAND_EXPAND_LISTS
 		)
 	endif()

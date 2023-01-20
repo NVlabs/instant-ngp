@@ -421,7 +421,7 @@ if __name__ == "__main__":
 		predictor = DefaultPredictor(cfg)
 
 		for frame in out['frames']:
-			img = cv2.imread(frame['file_path'])        
+			img = cv2.imread(frame['file_path'])
 			outputs = predictor(img)
 
 			output_mask = np.zeros((img.shape[0], img.shape[1]))
@@ -429,7 +429,7 @@ if __name__ == "__main__":
 				if outputs['instances'][i].pred_classes.cpu().numpy()[0] in mask_ids:
 					pred_mask = outputs['instances'][i].pred_masks.cpu().numpy()[0]
 					output_mask = np.logical_or(output_mask, pred_mask)
-			
+
 			rgb_path = Path(frame['file_path'])
 			mask_name = str(rgb_path.parents[0] / Path('dynamic_mask_' + rgb_path.name.replace('.jpg', '.png')))
 			cv2.imwrite(mask_name, (output_mask*255).astype(np.uint8))
