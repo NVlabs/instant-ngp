@@ -52,7 +52,6 @@ static_assert(false, "DLSS can only be compiled when both Vulkan and GUI support
 
 using namespace Eigen;
 using namespace tcnn;
-namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 

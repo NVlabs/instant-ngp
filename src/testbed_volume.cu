@@ -33,7 +33,6 @@
 
 using namespace Eigen;
 using namespace tcnn;
-namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
@@ -555,7 +554,7 @@ void Testbed::load_volume(const fs::path& data_path) {
 		throw std::runtime_error{data_path.str() + " does not exist."};
 	}
 	tlog::info() << "Loading NanoVDB file from " << data_path;
-	std::ifstream f(data_path.str(), std::ios::in | std::ios::binary);
+	std::ifstream f{native_string(data_path), std::ios::in | std::ios::binary};
 	NanoVDBFileHeader header;
 	NanoVDBMetaData metadata;
 	f.read(reinterpret_cast<char*>(&header), sizeof(header));

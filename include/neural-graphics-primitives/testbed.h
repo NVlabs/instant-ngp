@@ -31,8 +31,6 @@
 
 #include <json/json.hpp>
 
-#include <filesystem/path.h>
-
 #ifdef NGP_PYTHON
 #  include <pybind11/pybind11.h>
 #  include <pybind11/numpy.h>
@@ -64,13 +62,14 @@ public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	Testbed(ETestbedMode mode = ETestbedMode::None);
 	~Testbed();
-	Testbed(ETestbedMode mode, const std::string& data_path) : Testbed(mode) { load_training_data(data_path); }
-	Testbed(ETestbedMode mode, const std::string& data_path, const std::string& network_config_path) : Testbed(mode, data_path) { reload_network_from_file(network_config_path); }
-	Testbed(ETestbedMode mode, const std::string& data_path, const nlohmann::json& network_config) : Testbed(mode, data_path) { reload_network_from_json(network_config); }
+
+	Testbed(ETestbedMode mode, const fs::path& data_path) : Testbed(mode) { load_training_data(data_path); }
+	Testbed(ETestbedMode mode, const fs::path& data_path, const fs::path& network_config_path) : Testbed(mode, data_path) { reload_network_from_file(network_config_path); }
+	Testbed(ETestbedMode mode, const fs::path& data_path, const nlohmann::json& network_config) : Testbed(mode, data_path) { reload_network_from_json(network_config); }
 
 	bool clear_tmp_dir();
 	void update_imgui_paths();
-	void load_training_data(const std::string& data_path);
+	void load_training_data(const fs::path& path);
 	void reload_training_data();
 	void clear_training_data();
 
@@ -274,7 +273,7 @@ public:
 	);
 	void train_volume(size_t target_batch_size, bool get_loss_scalar, cudaStream_t stream);
 	void training_prep_volume(uint32_t batch_size, cudaStream_t stream) {}
-	void load_volume(const filesystem::path& data_path);
+	void load_volume(const fs::path& data_path);
 
 	void render_sdf(
 		const distance_fun_t& distance_function,
@@ -291,9 +290,9 @@ public:
 	void render_image(CudaRenderBuffer& render_buffer, cudaStream_t stream);
 	void render_frame(const Eigen::Matrix<float, 3, 4>& camera_matrix0, const Eigen::Matrix<float, 3, 4>& camera_matrix1, const Eigen::Vector4f& nerf_rolling_shutter, CudaRenderBuffer& render_buffer, bool to_srgb = true) ;
 	void visualize_nerf_cameras(ImDrawList* list, const Eigen::Matrix<float, 4, 4>& world2proj);
-	filesystem::path find_network_config(const filesystem::path& network_config_path);
-	nlohmann::json load_network_config(const filesystem::path& network_config_path);
-	void reload_network_from_file(const std::string& network_config_path = "");
+	fs::path find_network_config(const fs::path& network_config_path);
+	nlohmann::json load_network_config(const fs::path& network_config_path);
+	void reload_network_from_file(const fs::path& path = "");
 	void reload_network_from_json(const nlohmann::json& json, const std::string& config_base_path=""); // config_base_path is needed so that if the passed in json uses the 'parent' feature, we know where to look... be sure to use a filename, or if a directory, end with a trailing slash
 	void reset_accumulation(bool due_to_camera_movement = false, bool immediate_redraw = true);
 	void redraw_next_frame() {
@@ -303,9 +302,9 @@ public:
 	static ELossType string_to_loss_type(const std::string& str);
 	void reset_network(bool clear_density_grid = true);
 	void create_empty_nerf_dataset(size_t n_images, int aabb_scale = 1, bool is_hdr = false);
-	void load_nerf(const filesystem::path& data_path);
+	void load_nerf(const fs::path& data_path);
 	void load_nerf_post();
-	void load_mesh(const filesystem::path& data_path);
+	void load_mesh(const fs::path& data_path);
 	void set_exposure(float exposure) { m_exposure = exposure; }
 	void set_max_level(float maxlevel);
 	void set_min_level(float minlevel);
@@ -314,7 +313,7 @@ public:
 	void translate_camera(const Eigen::Vector3f& rel);
 	void mouse_drag(const Eigen::Vector2f& rel, int button);
 	void mouse_wheel(Eigen::Vector2f m, float delta);
-	void load_file(const std::string& file);
+	void load_file(const fs::path& path);
 	void set_nerf_camera_matrix(const Eigen::Matrix<float, 3, 4>& cam);
 	Eigen::Vector3f look_at() const;
 	void set_look_at(const Eigen::Vector3f& pos);
@@ -385,7 +384,6 @@ public:
 #ifdef NGP_PYTHON
 	pybind11::dict compute_marching_cubes_mesh(Eigen::Vector3i res3d = Eigen::Vector3i::Constant(128), BoundingBox aabb = BoundingBox{Eigen::Vector3f::Zero(), Eigen::Vector3f::Ones()}, float thresh=2.5f);
 	pybind11::array_t<float> render_to_cpu(int width, int height, int spp, bool linear, float start_t, float end_t, float fps, float shutter_fraction);
-	pybind11::array_t<float> render_with_rolling_shutter_to_cpu(const Eigen::Matrix<float, 3, 4>& camera_transform_start, const Eigen::Matrix<float, 3, 4>& camera_transform_end, const Eigen::Vector4f& rolling_shutter, int width, int height, int spp, bool linear);
 	pybind11::array_t<float> screenshot(bool linear) const;
 	void override_sdf_training_data(pybind11::array_t<float> points, pybind11::array_t<float> distances);
 #endif
@@ -393,7 +391,7 @@ public:
 	double calculate_iou(uint32_t n_samples=128*1024*1024, float scale_existing_results_factor=0.0, bool blocking=true, bool force_use_octree = true);
 	void draw_visualizations(ImDrawList* list, const Eigen::Matrix<float, 3, 4>& camera_matrix);
 	void train_and_render(bool skip_rendering);
-	filesystem::path training_data_path() const;
+	fs::path training_data_path() const;
 	void init_window(int resw, int resh, bool hidden = false, bool second_window = false);
 	void destroy_window();
 	void apply_camera_smoothing(float elapsed_ms);
@@ -403,22 +401,22 @@ public:
 	void draw_gui();
 	bool frame();
 	bool want_repl();
-	void load_image(const filesystem::path& data_path);
-	void load_exr_image(const filesystem::path& data_path);
-	void load_stbi_image(const filesystem::path& data_path);
-	void load_binary_image(const filesystem::path& data_path);
+	void load_image(const fs::path& data_path);
+	void load_exr_image(const fs::path& data_path);
+	void load_stbi_image(const fs::path& data_path);
+	void load_binary_image(const fs::path& data_path);
 	uint32_t n_dimensions_to_visualize() const;
 	float fov() const ;
 	void set_fov(float val) ;
 	Eigen::Vector2f fov_xy() const ;
 	void set_fov_xy(const Eigen::Vector2f& val);
-	void save_snapshot(const std::string& filepath_string, bool include_optimizer_state, bool compress);
-	void load_snapshot(const std::string& filepath_string);
+	void save_snapshot(const fs::path& path, bool include_optimizer_state, bool compress);
+	void load_snapshot(const fs::path& path);
 	CameraKeyframe copy_camera_to_keyframe() const;
 	void set_camera_from_keyframe(const CameraKeyframe& k);
 	void set_camera_from_time(float t);
 	void update_loss_graph();
-	void load_camera_path(const std::string& filepath_string);
+	void load_camera_path(const fs::path& path);
 	bool loop_animation();
 	void set_loop_animation(bool value);
 
@@ -640,7 +638,7 @@ public:
 #endif
 
 			void reset_camera_extrinsics();
-			void export_camera_extrinsics(const std::string& filename, bool export_extrinsics_in_quat_format = true);
+			void export_camera_extrinsics(const fs::path& path, bool export_extrinsics_in_quat_format = true);
 		} training = {};
 
 		tcnn::GPUMemory<float> density_grid; // NERF_GRIDSIZE()^3 grid of EMA smoothed densities from the network
@@ -865,8 +863,8 @@ public:
 	bool m_train_encoding = true;
 	bool m_train_network = true;
 
-	filesystem::path m_data_path;
-	filesystem::path m_network_config_path = "base.json";
+	fs::path m_data_path;
+	fs::path m_network_config_path = "base.json";
 
 	nlohmann::json m_network_config;
 

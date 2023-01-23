@@ -296,6 +296,8 @@ public:
 			m_path = tokenize(str, "/");
 			m_absolute = !str.empty() && str[0] == '/';
 		}
+
+		m_path.erase(std::remove(std::begin(m_path), std::end(m_path), ""), std::end(m_path));
 	}
 
 	path &operator=(const path &path) {

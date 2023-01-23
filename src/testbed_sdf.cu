@@ -32,7 +32,6 @@
 
 using namespace Eigen;
 using namespace tcnn;
-namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
@@ -1018,23 +1017,23 @@ void Testbed::render_sdf(
 	}
 }
 
-std::vector<Vector3f> load_stl(const std::string& filename) {
+std::vector<Vector3f> load_stl(const fs::path& path) {
 	std::vector<Vector3f> vertices;
 
-	std::ifstream f{filename, std::ios::in | std::ios::binary};
+	std::ifstream f{native_string(path), std::ios::in | std::ios::binary};
 	if (!f) {
-		throw std::runtime_error{fmt::format("Mesh file '{}' not found", filename)};
+		throw std::runtime_error{fmt::format("Mesh file '{}' not found", path.str())};
 	}
 
 	uint32_t buf[21] = {};
 	f.read((char*)buf, 4 * 21);
 	if (f.gcount() < 4 * 21) {
-		throw std::runtime_error{fmt::format("Mesh file '{}' too small for STL header", filename)};
+		throw std::runtime_error{fmt::format("Mesh file '{}' too small for STL header", path.str())};
 	}
 
 	uint32_t nfaces = buf[20];
 	if (memcmp(buf, "solid", 5) == 0 || buf[20] == 0) {
-		throw std::runtime_error{fmt::format("ASCII STL file '{}' not supported", filename)};
+		throw std::runtime_error{fmt::format("ASCII STL file '{}' not supported", path.str())};
 	}
 
 	vertices.reserve(nfaces * 3);

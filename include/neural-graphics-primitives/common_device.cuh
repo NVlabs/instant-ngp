@@ -756,7 +756,7 @@ inline NGP_HOST_DEVICE float read_depth(Eigen::Vector2f pos, const Eigen::Vector
 
 Eigen::Matrix<float, 3, 4> log_space_lerp(const Eigen::Matrix<float, 3, 4>& begin, const Eigen::Matrix<float, 3, 4>& end, float t);
 
-tcnn::GPUMemory<float> load_exr(const std::string& filename, int& width, int& height);
-tcnn::GPUMemory<float> load_stbi(const std::string& filename, int& width, int& height);
+tcnn::GPUMemory<float> load_exr_gpu(const fs::path& path, int* width, int* height);
+tcnn::GPUMemory<float> load_stbi_gpu(const fs::path& path, int* width, int* height);
 
 NGP_NAMESPACE_END

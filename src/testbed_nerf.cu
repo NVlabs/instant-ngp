@@ -40,7 +40,6 @@
 
 using namespace Eigen;
 using namespace tcnn;
-namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
@@ -2462,8 +2461,8 @@ void Testbed::Nerf::Training::reset_camera_extrinsics() {
 	}
 }
 
-void Testbed::Nerf::Training::export_camera_extrinsics(const std::string& filename, bool export_extrinsics_in_quat_format) {
-	tlog::info() << "Saving a total of " << n_images_for_training << " poses to " << filename;
+void Testbed::Nerf::Training::export_camera_extrinsics(const fs::path& path, bool export_extrinsics_in_quat_format) {
+	tlog::info() << "Saving a total of " << n_images_for_training << " poses to " << path.str();
 	nlohmann::json trajectory;
 	for(int i = 0; i < n_images_for_training; ++i) {
 		nlohmann::json frame{{"id", i}};
@@ -2495,7 +2494,8 @@ void Testbed::Nerf::Training::export_camera_extrinsics(const std::string& filena
 
 		trajectory.emplace_back(frame);
 	}
-	std::ofstream file(filename);
+
+	std::ofstream file{native_string(path)};
 	file << std::setw(2) << trajectory << std::endl;
 }
 

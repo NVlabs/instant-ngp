@@ -17,6 +17,7 @@
 #include <neural-graphics-primitives/random_val.cuh>
 #include <neural-graphics-primitives/render_buffer.h>
 #include <neural-graphics-primitives/testbed.h>
+#include <neural-graphics-primitives/tinyexr_wrapper.h>
 
 #include <tiny-cuda-nn/gpu_matrix.h>
 #include <tiny-cuda-nn/network_with_input_encoding.h>
@@ -27,7 +28,6 @@
 
 using namespace Eigen;
 using namespace tcnn;
-namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
@@ -382,7 +382,7 @@ void Testbed::load_exr_image(const fs::path& data_path) {
 	tlog::info() << "Loading EXR image from " << data_path;
 
 	// First step: load an image that we'd like to learn
-	GPUMemory<float> image = load_exr(data_path.str(), m_image.resolution.x(), m_image.resolution.y());
+	GPUMemory<float> image = load_exr_gpu(data_path, &m_image.resolution.x(), &m_image.resolution.y());
 	m_image.data.resize(image.size() * sizeof(float));
 	CUDA_CHECK_THROW(cudaMemcpy(m_image.data.data(), image.data(), image.size() * sizeof(float), cudaMemcpyDeviceToDevice));
 
@@ -397,7 +397,7 @@ void Testbed::load_stbi_image(const fs::path& data_path) {
 	tlog::info() << "Loading STBI image from " << data_path;
 
 	// First step: load an image that we'd like to learn
-	GPUMemory<float> image = load_stbi(data_path.str(), m_image.resolution.x(), m_image.resolution.y());
+	GPUMemory<float> image = load_stbi_gpu(data_path, &m_image.resolution.x(), &m_image.resolution.y());
 	m_image.data.resize(image.size() * sizeof(float));
 	CUDA_CHECK_THROW(cudaMemcpy(m_image.data.data(), image.data(), image.size() * sizeof(float), cudaMemcpyDeviceToDevice));
 
@@ -412,7 +412,7 @@ void Testbed::load_binary_image(const fs::path& data_path) {
 
 	tlog::info() << "Loading binary image from " << data_path;
 
-	std::ifstream f(data_path.str(), std::ios::in | std::ios::binary);
+	std::ifstream f{native_string(data_path), std::ios::in | std::ios::binary};
 	f.read(reinterpret_cast<char*>(&m_image.resolution.y()), sizeof(int));
 	f.read(reinterpret_cast<char*>(&m_image.resolution.x()), sizeof(int));
 

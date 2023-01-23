@@ -35,7 +35,6 @@
 
 using namespace Eigen;
 using namespace tcnn;
-namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
@@ -117,10 +116,10 @@ void GLTexture::blit_from_cuda_mapping() {
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, m_size.x(), m_size.y(), 0, GL_RGBA, GL_FLOAT, data_cpu);
 }
 
-void GLTexture::load(const char* fname) {
+void GLTexture::load(const fs::path& path) {
 	uint8_t* out; // width * height * RGBA
-	int comp,width,height;
-	out = stbi_load(fname, &width, &height, &comp, 4);
+	int comp, width, height;
+	out = load_stbi(path, &width, &height, &comp, 4);
 	if (!out) {
 		throw std::runtime_error{std::string{stbi_failure_reason()}};
 	}
@@ -161,7 +160,7 @@ void GLTexture::resize(const Vector2i& new_size, int n_channels, bool is_8bit) {
 		case 2: m_internal_format = is_8bit ? GL_RG8   : GL_RG32F;   m_format = GL_RG;   break;
 		case 3: m_internal_format = is_8bit ? GL_RGB8  : GL_RGB32F;  m_format = GL_RGB;  break;
 		case 4: m_internal_format = is_8bit ? GL_RGBA8 : GL_RGBA32F; m_format = GL_RGBA; break;
-		default: tlog::error() << "Unsupported number of channels: " << n_channels;
+		default: throw std::runtime_error{fmt::format("GLTexture: unsupported number of channels {}", n_channels)};
 	}
 	m_is_8bit = is_8bit;
 	m_size = new_size;

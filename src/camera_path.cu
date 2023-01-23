@@ -107,20 +107,20 @@ void from_json(bool is_first, const json& j, CameraKeyframe& p, const CameraKeyf
 }
 
 
-void CameraPath::save(const std::string& filepath_string) {
+void CameraPath::save(const fs::path& path) {
 	json j = {
 		{"loop", loop},
 		{"time", play_time},
 		{"path", keyframes},
 	};
-	std::ofstream f(filepath_string);
+	std::ofstream f(native_string(path));
 	f << j;
 }
 
-void CameraPath::load(const std::string& filepath_string, const Eigen::Matrix<float, 3, 4>& first_xform) {
-	std::ifstream f(filepath_string);
+void CameraPath::load(const fs::path& path, const Eigen::Matrix<float, 3, 4>& first_xform) {
+	std::ifstream f{native_string(path)};
 	if (!f) {
-		throw std::runtime_error{fmt::format("Camera path {} does not exist.", filepath_string)};
+		throw std::runtime_error{fmt::format("Camera path {} does not exist.", path.str())};
 	}
 
 	json j;
@@ -147,7 +147,7 @@ int CameraPath::imgui(char path_filename_buf[1024], float frame_milliseconds, Ma
 	int n = std::max(0, int(keyframes.size()) - 1);
 	int read = 0; // 1=smooth, 2=hard
 
-	ImGui::InputText("##PathFile", path_filename_buf, sizeof(path_filename_buf));
+	ImGui::InputText("##PathFile", path_filename_buf, 1024);
 	ImGui::SameLine();
 	static std::string camera_path_load_error_string = "";
 

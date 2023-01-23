@@ -105,7 +105,7 @@ public:
 
 	bool is_8bit() { return m_is_8bit; }
 
-	void load(const char* fname);
+	void load(const fs::path& path);
 
 	void load(const float* data, Eigen::Vector2i new_size, int n_channels);
 

@@ -38,9 +38,6 @@
 #include <filesystem/directory.h>
 #include <filesystem/path.h>
 
-#include <stb_image/stb_image.h>
-#include <stb_image/stb_image_write.h>
-
 #include <zstr.hpp>
 
 #include <fstream>
@@ -73,30 +70,30 @@
 using namespace Eigen;
 using namespace std::literals::chrono_literals;
 using namespace tcnn;
-namespace fs = filesystem;
+
+NGP_NAMESPACE_BEGIN
 
 int do_system(const std::string& cmd) {
 #ifdef _WIN32
 	tlog::info() << "> " << cmd;
+	return _wsystem(utf8_to_utf16(cmd).c_str());
 #else
 	tlog::info() << "$ " << cmd;
-#endif
 	return system(cmd.c_str());
+#endif
 }
-
-NGP_NAMESPACE_BEGIN
 
 std::atomic<size_t> g_total_n_bytes_allocated{0};
 
-json merge_parent_network_config(const json& child, const fs::path& child_filename) {
+json merge_parent_network_config(const json& child, const fs::path& child_path) {
 	if (!child.contains("parent")) {
 		return child;
 	}
-	fs::path parent_filename = child_filename.parent_path() / std::string(child["parent"]);
-	tlog::info() << "Loading parent network config from: " << parent_filename.str();
-	std::ifstream f{parent_filename.str()};
+	fs::path parent_path = child_path.parent_path() / std::string(child["parent"]);
+	tlog::info() << "Loading parent network config from: " << parent_path.str();
+	std::ifstream f{native_string(parent_path)};
 	json parent = json::parse(f, nullptr, true, true);
-	parent = merge_parent_network_config(parent, parent_filename);
+	parent = merge_parent_network_config(parent, parent_path);
 	parent.merge_patch(child);
 	return parent;
 }
@@ -127,27 +124,26 @@ void Testbed::update_imgui_paths() {
 	snprintf(m_imgui.video_path, sizeof(m_imgui.video_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, "_video.mp4").c_str());
 }
 
-void Testbed::load_training_data(const std::string& data_path_str) {
-	fs::path data_path = data_path_str;
-	if (!data_path.exists()) {
-		throw std::runtime_error{fmt::format("Data path '{}' does not exist.", data_path.str())};
+void Testbed::load_training_data(const fs::path& path) {
+	if (!path.exists()) {
+		throw std::runtime_error{fmt::format("Data path '{}' does not exist.", path.str())};
 	}
 
 	// Automatically determine the mode from the first scene that's loaded
-	ETestbedMode scene_mode = mode_from_scene(data_path.str());
+	ETestbedMode scene_mode = mode_from_scene(path.str());
 	if (scene_mode == ETestbedMode::None) {
-		throw std::runtime_error{fmt::format("Unknown scene format for path '{}'.", data_path.str())};
+		throw std::runtime_error{fmt::format("Unknown scene format for path '{}'.", path.str())};
 	}
 
 	set_mode(scene_mode);
 
-	m_data_path = data_path;
+	m_data_path = path;
 
 	switch (m_testbed_mode) {
-		case ETestbedMode::Nerf:   load_nerf(data_path); break;
-		case ETestbedMode::Sdf:    load_mesh(data_path); break;
-		case ETestbedMode::Image:  load_image(data_path); break;
-		case ETestbedMode::Volume: load_volume(data_path); break;
+		case ETestbedMode::Nerf:   load_nerf(path); break;
+		case ETestbedMode::Sdf:    load_mesh(path); break;
+		case ETestbedMode::Image:  load_image(path); break;
+		case ETestbedMode::Volume: load_volume(path); break;
 		default: throw std::runtime_error{"Invalid testbed mode."};
 	}
 
@@ -226,17 +222,17 @@ json Testbed::load_network_config(const fs::path& network_config_path) {
 
 	json result;
 	if (is_snapshot) {
+		std::ifstream f{native_string(network_config_path), std::ios::in | std::ios::binary};
 		if (equals_case_insensitive(network_config_path.extension(), "ingp")) {
 			// zstr::ifstream applies zlib compression.
-			zstr::ifstream f{network_config_path.str(), std::ios::in | std::ios::binary};
-			result = json::from_msgpack(f);
+			zstr::istream zf{f};
+			result = json::from_msgpack(zf);
 		} else {
-			std::ifstream f{network_config_path.str(), std::ios::in | std::ios::binary};
 			result = json::from_msgpack(f);
 		}
 		// we assume parent pointers are already resolved in snapshots.
 	} else if (equals_case_insensitive(network_config_path.extension(), "json")) {
-		std::ifstream f{network_config_path.str()};
+		std::ifstream f{native_string(network_config_path)};
 		result = json::parse(f, nullptr, true, true);
 		result = merge_parent_network_config(result, network_config_path);
 	}
@@ -244,15 +240,15 @@ json Testbed::load_network_config(const fs::path& network_config_path) {
 	return result;
 }
 
-void Testbed::reload_network_from_file(const std::string& network_config_path_string) {
-	if (!network_config_path_string.empty()) {
-		fs::path candidate = find_network_config(network_config_path_string);
+void Testbed::reload_network_from_file(const fs::path& path) {
+	if (!path.empty()) {
+		fs::path candidate = find_network_config(path);
 		if (candidate.exists() || !m_network_config_path.exists()) {
 			// Store the path _argument_ in the member variable. E.g. for the base config,
 			// it'll store `base.json`, even though the loaded config will be
 			// config/<mode>/base.json. This has the benefit of switching to the
 			// appropriate config when switching modes.
-			m_network_config_path = network_config_path_string;
+			m_network_config_path = path;
 		}
 	}
 
@@ -285,46 +281,46 @@ void Testbed::reload_network_from_json(const json& json, const std::string& conf
 	reset_network();
 }
 
-void Testbed::load_file(const std::string& file_path) {
-	if (!fs::path{file_path}.exists()) {
+void Testbed::load_file(const fs::path& path) {
+	if (!path.exists()) {
 		// If the path doesn't exist, but a network config can be resolved, load that.
-		if (ends_with_case_insensitive(file_path, ".json") && find_network_config(file_path).exists()) {
-			reload_network_from_file(file_path);
+		if (equals_case_insensitive(path.extension(), "json") && find_network_config(path).exists()) {
+			reload_network_from_file(path);
 			return;
 		}
 
-		tlog::error() << "File '" << file_path << "' does not exist.";
+		tlog::error() << "File '" << path.str() << "' does not exist.";
 		return;
 	}
 
-	if (ends_with_case_insensitive(file_path, ".ingp") || ends_with_case_insensitive(file_path, ".msgpack")) {
-		load_snapshot(file_path);
+	if (equals_case_insensitive(path.extension(), "ingp") || equals_case_insensitive(path.extension(), "msgpack")) {
+		load_snapshot(path);
 		return;
 	}
 
 	// If we get a json file, we need to parse it to determine its purpose.
-	if (ends_with_case_insensitive(file_path, ".json")) {
+	if (equals_case_insensitive(path.extension(), "json")) {
 		json file;
 		{
-			std::ifstream f{file_path};
+			std::ifstream f{native_string(path)};
 			file = json::parse(f, nullptr, true, true);
 		}
 
 		// Snapshot in json format... inefficient, but technically supported.
 		if (file.contains("snapshot")) {
-			load_snapshot(file_path);
+			load_snapshot(path);
 			return;
 		}
 
 		// Regular network config
 		if (file.contains("parent") || file.contains("network") || file.contains("encoding") || file.contains("loss") || file.contains("optimizer")) {
-			reload_network_from_file(file_path);
+			reload_network_from_file(path);
 			return;
 		}
 
 		// Camera path
 		if (file.contains("path")) {
-			load_camera_path(file_path);
+			load_camera_path(path);
 			return;
 		}
 	}
@@ -332,7 +328,7 @@ void Testbed::load_file(const std::string& file_path) {
 	// If the dragged file isn't any of the above, assume that it's training data
 	try {
 		bool was_training_data_available = m_training_data_available;
-		load_training_data(file_path);
+		load_training_data(path);
 
 		if (!was_training_data_available) {
 			// If we previously didn't have any training data and only now dragged
@@ -1984,7 +1980,7 @@ void Testbed::prepare_next_camera_path_frame() {
 		m_render_futures.emplace_back(m_thread_pool.enqueue_task([image_data=std::move(image_data), frame_idx=m_camera_path.render_frame_idx++, res, tmp_dir] {
 			std::vector<uint8_t> cpu_image_data(image_data.size());
 			CUDA_CHECK_THROW(cudaMemcpy(cpu_image_data.data(), image_data.data(), image_data.bytes(), cudaMemcpyDeviceToHost));
-			stbi_write_jpg(fmt::format("{}/{:06d}.jpg", tmp_dir.str(), frame_idx).c_str(), res.x(), res.y(), 3, cpu_image_data.data(), 100);
+			write_stbi(tmp_dir / fmt::format("{:06d}.jpg", frame_idx), res.x(), res.y(), 3, cpu_image_data.data(), 100);
 		}));
 
 		reset_accumulation(true);
@@ -2025,7 +2021,7 @@ void Testbed::prepare_next_camera_path_frame() {
 #endif
 
 			auto ffmpeg_command = fmt::format(
-				"{} -loglevel error -y -framerate {} -i tmp/%06d.jpg -c:v libx264 -preset slow -crf {} -pix_fmt yuv420p {}",
+				"{} -loglevel error -y -framerate {} -i tmp/%06d.jpg -c:v libx264 -preset slow -crf {} -pix_fmt yuv420p \"{}\"",
 				ffmpeg.str(),
 				m_camera_path.render_settings.fps,
 				// Quality goes from 0 to 10. This conversion to CRF means a quality of 10
@@ -3499,8 +3495,7 @@ void Testbed::gather_histograms() {
 // Increment this number when making a change to the snapshot format
 static const size_t SNAPSHOT_FORMAT_VERSION = 1;
 
-void Testbed::save_snapshot(const std::string& filepath_string, bool include_optimizer_state, bool compress) {
-	fs::path filepath = filepath_string;
+void Testbed::save_snapshot(const fs::path& path, bool include_optimizer_state, bool compress) {
 	m_network_config["snapshot"] = m_trainer->serialize(include_optimizer_state);
 
 	auto& snapshot = m_network_config["snapshot"];
@@ -3533,23 +3528,23 @@ void Testbed::save_snapshot(const std::string& filepath_string, bool include_opt
 		snapshot["nerf"]["dataset"] = m_nerf.training.dataset;
 	}
 
-	m_network_config_path = filepath;
+	m_network_config_path = path;
+	std::ofstream f{native_string(m_network_config_path), std::ios::out | std::ios::binary};
 	if (equals_case_insensitive(m_network_config_path.extension(), "ingp")) {
 		// zstr::ofstream applies zlib compression.
-		zstr::ofstream f{m_network_config_path.str(), std::ios::out | std::ios::binary, compress ? Z_DEFAULT_COMPRESSION : Z_NO_COMPRESSION};
-		json::to_msgpack(m_network_config, f);
+		zstr::ostream zf{f, zstr::default_buff_size, compress ? Z_DEFAULT_COMPRESSION : Z_NO_COMPRESSION};
+		json::to_msgpack(m_network_config, zf);
 	} else {
-		std::ofstream f{m_network_config_path.str(), std::ios::out | std::ios::binary};
 		json::to_msgpack(m_network_config, f);
 	}
 
-	tlog::success() << "Saved snapshot '" << filepath_string << "'";
+	tlog::success() << "Saved snapshot '" << path.str() << "'";
 }
 
-void Testbed::load_snapshot(const std::string& filepath_string) {
-	auto config = load_network_config(filepath_string);
+void Testbed::load_snapshot(const fs::path& path) {
+	auto config = load_network_config(path);
 	if (!config.contains("snapshot")) {
-		throw std::runtime_error{fmt::format("File '{}' does not contain a snapshot.", filepath_string)};
+		throw std::runtime_error{fmt::format("File '{}' does not contain a snapshot.", path.str())};
 	}
 
 	const auto& snapshot = config["snapshot"];
@@ -3610,7 +3605,7 @@ void Testbed::load_snapshot(const std::string& filepath_string) {
 	if (snapshot.contains("render_aabb_to_local")) from_json(snapshot.at("render_aabb_to_local"), m_render_aabb_to_local);
 	m_render_aabb = snapshot.value("render_aabb", m_render_aabb);
 
-	m_network_config_path = filepath_string;
+	m_network_config_path = path;
 	m_network_config = std::move(config);
 
 	reset_network(false);
@@ -3621,8 +3616,8 @@ void Testbed::load_snapshot(const std::string& filepath_string) {
 	m_trainer->deserialize(m_network_config["snapshot"]);
 }
 
-void Testbed::load_camera_path(const std::string& filepath_string) {
-	m_camera_path.load(filepath_string, Matrix<float, 3, 4>::Identity());
+void Testbed::load_camera_path(const fs::path& path) {
+	m_camera_path.load(path, Matrix<float, 3, 4>::Identity());
 }
 
 bool Testbed::loop_animation() {
