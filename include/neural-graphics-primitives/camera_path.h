@@ -126,8 +126,8 @@ struct CameraPath {
 		return spline(t-floorf(t), get_keyframe(t1-1), get_keyframe(t1), get_keyframe(t1+1), get_keyframe(t1+2));
 	}
 
-	void save(const std::string& filepath_string);
-	void load(const std::string& filepath_string, const Eigen::Matrix<float, 3, 4> &first_xform);
+	void save(const fs::path& path);
+	void load(const fs::path& path, const Eigen::Matrix<float, 3, 4> &first_xform);
 
 #ifdef NGP_GUI
 	ImGuizmo::MODE m_gizmo_mode = ImGuizmo::LOCAL;

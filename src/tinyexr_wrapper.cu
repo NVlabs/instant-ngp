@@ -54,7 +54,7 @@ __global__ void interleave_and_cast_kernel(const uint32_t num_pixels, bool has_a
 	*((uint64_t*)&out[i*4]) = *((uint64_t*)&rgba_out[0]);
 }
 
-void save_exr(const float* data, int width, int height, int n_channels, int channel_stride, const char* outfilename) {
+void save_exr(const float* data, int width, int height, int n_channels, int channel_stride, const fs::path& path) {
 	EXRHeader header;
 	InitEXRHeader(&header);
 
@@ -103,23 +103,43 @@ void save_exr(const float* data, int width, int height, int n_channels, int chan
 	}
 
 	const char* err = NULL; // or nullptr in C++11 or later.
-	int ret = SaveEXRImageToFile(&image, &header, outfilename, &err);
-	if (ret != TINYEXR_SUCCESS) {
+	uint8_t* buffer;
+	size_t n_bytes = SaveEXRImageToMemory(&image, &header, &buffer, &err);
+	if (n_bytes == 0) {
 		std::string error_message = std::string("Failed to save EXR image: ") + err;
 		FreeEXRErrorMessage(err); // free's buffer for an error message
 		throw std::runtime_error(error_message);
 	}
-	tlog::info() << "Saved exr file: " << outfilename;
+
+	{
+		std::ofstream f{native_string(path), std::ios::out | std::ios::binary};
+		f.write((char*)buffer, n_bytes);
+	}
+
+	tlog::info() << "Saved exr file: " << path.str();
 
 	free(header.channels);
 	free(header.pixel_types);
 	free(header.requested_pixel_types);
+	free(buffer);
 }
 
-void load_exr(float** data, int* width, int* height, const char* filename) {
-	const char* err = nullptr;
+void load_exr(float** data, int* width, int* height, const fs::path& path) {
+	std::vector<uint8_t> buffer;
 
-	int ret = LoadEXR(data, width, height, filename, &err);
+	{
+		std::ifstream f{native_string(path), std::ios::in | std::ios::binary | std::ios::ate};
+		size_t size = f.tellg();
+		f.seekg(0, std::ios::beg);
+
+		buffer.resize(size);
+		if (!f.read((char*)buffer.data(), size)) {
+			throw std::runtime_error("Failed to open EXR file");
+		}
+	}
+
+	const char* err = nullptr;
+	int ret = LoadEXRFromMemory(data, width, height, buffer.data(), buffer.size(), &err);
 
 	if (ret != TINYEXR_SUCCESS) {
 		if (err) {
@@ -132,11 +152,24 @@ void load_exr(float** data, int* width, int* height, const char* filename) {
 	}
 }
 
-__half* load_exr_to_gpu(int* width, int* height, const char* filename, bool fix_premult) {
+__half* load_exr_to_gpu(int* width, int* height, const fs::path& path, bool fix_premult) {
+	std::vector<uint8_t> buffer;
+
+	{
+		std::ifstream f{native_string(path), std::ios::in | std::ios::binary | std::ios::ate};
+		size_t size = f.tellg();
+		f.seekg(0, std::ios::beg);
+
+		buffer.resize(size);
+		if (!f.read((char*)buffer.data(), size)) {
+			throw std::runtime_error("Failed to open EXR file");
+		}
+	}
+
 	// 1. Read EXR version.
 	EXRVersion exr_version;
 
-	int ret = ParseEXRVersionFromFile(&exr_version, filename);
+	int ret = ParseEXRVersionFromMemory(&exr_version, buffer.data(), buffer.size());
 	if (ret != 0) {
 		std::string error_message = std::string("Failed to parse EXR image version");
 		throw std::runtime_error(error_message);
@@ -151,7 +184,7 @@ __half* load_exr_to_gpu(int* width, int* height, const char* filename, bool fix_
 	InitEXRHeader(&exr_header);
 
 	const char* err = NULL; // or `nullptr` in C++11 or later.
-	ret = ParseEXRHeaderFromFile(&exr_header, &exr_version, filename, &err);
+	ret = ParseEXRHeaderFromMemory(&exr_header, &exr_version, buffer.data(), buffer.size(), &err);
 	if (ret != 0) {
 		std::string error_message = std::string("Failed to parse EXR image header: ") + err;
 		FreeEXRErrorMessage(err); // free's buffer for an error message
@@ -170,7 +203,7 @@ __half* load_exr_to_gpu(int* width, int* height, const char* filename, bool fix_
 	EXRImage exr_image;
 	InitEXRImage(&exr_image);
 
-	ret = LoadEXRImageFromFile(&exr_image, &exr_header, filename, &err);
+	ret = LoadEXRImageFromMemory(&exr_image, &exr_header, buffer.data(), buffer.size(), &err);
 	if (ret != 0) {
 		std::string error_message = std::string("Failed to load EXR image: ") + err;
 		FreeEXRHeader(&exr_header);

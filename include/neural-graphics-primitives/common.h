@@ -63,10 +63,20 @@
 
 NGP_NAMESPACE_BEGIN
 
+namespace fs = filesystem;
+
 bool is_wsl();
 
-filesystem::path get_executable_dir();
-filesystem::path get_root_dir();
+fs::path get_executable_dir();
+fs::path get_root_dir();
+
+#ifdef _WIN32
+std::string utf16_to_utf8(const std::wstring& utf16);
+std::wstring utf8_to_utf16(const std::string& utf16);
+std::wstring native_string(const fs::path& path);
+#else
+std::string native_string(const fs::path& path);
+#endif
 
 bool ends_with(const std::string& str, const std::string& ending);
 bool ends_with_case_insensitive(const std::string& str, const std::string& ending);
@@ -332,5 +342,13 @@ private:
 	int64_t m_last_progress = 0;
 	std::chrono::time_point<std::chrono::steady_clock> m_creation_time;
 };
+
+uint8_t* load_stbi(const fs::path& path, int* width, int* height, int* comp, int req_comp);
+float* load_stbi_float(const fs::path& path, int* width, int* height, int* comp, int req_comp);
+uint16_t* load_stbi_16(const fs::path& path, int* width, int* height, int* comp, int req_comp);
+bool is_hdr_stbi(const fs::path& path);
+int write_stbi(const fs::path& path, int width, int height, int comp, const uint8_t* pixels, int quality = 100);
+
+FILE* native_fopen(const fs::path& path, const char* mode);
 
 NGP_NAMESPACE_END

@@ -23,6 +23,6 @@
 
 NGP_NAMESPACE_BEGIN
 
-std::vector<Eigen::Vector3f> load_obj(const std::string& filename);
+std::vector<Eigen::Vector3f> load_obj(const fs::path& path);
 
 NGP_NAMESPACE_END

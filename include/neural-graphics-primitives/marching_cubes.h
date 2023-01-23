@@ -46,7 +46,7 @@ void save_mesh(
 	tcnn::GPUMemory<Eigen::Vector3f>& normals,
 	tcnn::GPUMemory<Eigen::Vector3f>& colors,
 	tcnn::GPUMemory<uint32_t>& indices,
-	const char* outputname,
+	const fs::path& path,
 	bool unwrap_it,
 	float nerf_scale,
 	Eigen::Vector3f nerf_offset
@@ -70,10 +70,10 @@ uint32_t compile_shader(bool pixel, const char* code);
 bool check_shader(uint32_t handle, const char* desc, bool program);
 #endif
 
-void save_density_grid_to_png(const tcnn::GPUMemory<float>& density, const char* filename, Eigen::Vector3i res3d, float thresh, bool swap_y_z = true, float density_range = 4.f);
+void save_density_grid_to_png(const tcnn::GPUMemory<float>& density, const fs::path& path, Eigen::Vector3i res3d, float thresh, bool swap_y_z = true, float density_range = 4.f);
 
-void save_rgba_grid_to_png_sequence(const tcnn::GPUMemory<Eigen::Array4f>& rgba, const char *path, Eigen::Vector3i res3d, bool swap_y_z = true);
+void save_rgba_grid_to_png_sequence(const tcnn::GPUMemory<Eigen::Array4f>& rgba, const fs::path& path, Eigen::Vector3i res3d, bool swap_y_z = true);
 
-void save_rgba_grid_to_raw_file(const tcnn::GPUMemory<Eigen::Array4f>& rgba, const char* path, Eigen::Vector3i res3d, bool swap_y_z, int cascade);
+void save_rgba_grid_to_raw_file(const tcnn::GPUMemory<Eigen::Array4f>& rgba, const fs::path& path, Eigen::Vector3i res3d, bool swap_y_z, int cascade);
 
 NGP_NAMESPACE_END

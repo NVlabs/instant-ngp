@@ -326,11 +326,18 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("max", &BoundingBox::max)
 		;
 
+	py::class_<fs::path>(m, "path")
+		.def(py::init<>())
+		.def(py::init<const std::string&>())
+		;
+
+	py::implicitly_convertible<std::string, fs::path>();
+
 	py::class_<Testbed> testbed(m, "Testbed");
 	testbed
 		.def(py::init<ETestbedMode>(), py::arg("mode") = ETestbedMode::None)
-		.def(py::init<ETestbedMode, const std::string&, const std::string&>())
-		.def(py::init<ETestbedMode, const std::string&, const json&>())
+		.def(py::init<ETestbedMode, const fs::path&, const fs::path&>())
+		.def(py::init<ETestbedMode, const fs::path&, const json&>())
 		.def_readonly("mode", &Testbed::m_testbed_mode)
 		.def("create_empty_nerf_dataset", &Testbed::create_empty_nerf_dataset, "Allocate memory for a nerf dataset with a given size", py::arg("n_images"), py::arg("aabb_scale")=1, py::arg("is_hdr")=false)
 		.def("load_training_data", &Testbed::load_training_data, py::call_guard<py::gil_scoped_release>(), "Load training data from a given path.")
@@ -387,8 +394,8 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("n_encoding_params", &Testbed::n_encoding_params, "Number of trainable parameters in the encoding")
 		.def("save_snapshot", &Testbed::save_snapshot, py::arg("path"), py::arg("include_optimizer_state")=false, py::arg("compress")=true, "Save a snapshot of the currently trained model. Optionally compressed (only when saving '.ingp' files).")
 		.def("load_snapshot", &Testbed::load_snapshot, py::arg("path"), "Load a previously saved snapshot")
-		.def("load_camera_path", &Testbed::load_camera_path, "Load a camera path", py::arg("path"))
-		.def("load_file", &Testbed::load_file, "Load a file and automatically determine how to handle it. Can be a snapshot, dataset, network config, or camera path.", py::arg("path"))
+		.def("load_camera_path", &Testbed::load_camera_path, py::arg("path"), "Load a camera path")
+		.def("load_file", &Testbed::load_file, py::arg("path"), "Load a file and automatically determine how to handle it. Can be a snapshot, dataset, network config, or camera path.")
 		.def_property("loop_animation", &Testbed::loop_animation, &Testbed::set_loop_animation)
 		.def("compute_and_save_png_slices", &Testbed::compute_and_save_png_slices,
 			py::arg("filename"),

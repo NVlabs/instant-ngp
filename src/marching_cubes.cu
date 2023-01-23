@@ -21,9 +21,6 @@
 #include <tiny-cuda-nn/gpu_memory.h>
 #include <filesystem/path.h>
 
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-
-#include <stb_image/stb_image_write.h>
 #include <stdarg.h>
 
 #ifdef NGP_GUI
@@ -40,7 +37,6 @@
 
 using namespace Eigen;
 using namespace tcnn;
-namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
@@ -819,7 +815,7 @@ void save_mesh(
 	GPUMemory<Vector3f>& normals,
 	GPUMemory<Vector3f>& colors,
 	GPUMemory<uint32_t>& indices,
-	const char* outputname,
+	const fs::path& path,
 	bool unwrap_it,
 	float nerf_scale,
 	Vector3f nerf_offset
@@ -862,16 +858,17 @@ void save_mesh(
 				tex[x*3+y*3*texw+2]=b;
 			}
 		}
-		stbi_write_tga(fs::path(outputname).with_extension(".tga").str().c_str(), texw, texh, 3, tex);
+
+		write_stbi(path.with_extension(".tga"), texw, texh, 3, tex);
 		free(tex);
 	}
 
-	FILE* f = fopen(outputname, "wb");
+	FILE* f = native_fopen(path, "wb");
 	if (!f) {
-		throw std::runtime_error{"Failed to open " + std::string(outputname) + " for writing."};
+		throw std::runtime_error{fmt::format("Failed to open '{}' for writing", path.str())};
 	}
 
-	if (fs::path(outputname).extension() == "ply") {
+	if (equals_case_insensitive(path.extension(), "ply")) {
 		// ply file
 		fprintf(f,
 			"ply\n"
@@ -958,7 +955,7 @@ void save_mesh(
 	fclose(f);
 }
 
-void save_density_grid_to_png(const GPUMemory<float>& density, const char* filename, Vector3i res3d, float thresh, bool swap_y_z, float density_range) {
+void save_density_grid_to_png(const GPUMemory<float>& density, const fs::path& path, Vector3i res3d, float thresh, bool swap_y_z, float density_range) {
 	float density_scale = 128.f / density_range; // map from -density_range to density_range into 0-255
 	std::vector<float> density_cpu;
 	density_cpu.resize(density.size());
@@ -1025,9 +1022,9 @@ void save_density_grid_to_png(const GPUMemory<float>& density, const char* filen
 		}
 	}
 
-	stbi_write_png(filename, w, h, 1, pngpixels, w);
+	write_stbi(path, w, h, 1, pngpixels);
 
-	tlog::success() << "Wrote density PNG to " << filename;
+	tlog::success() << "Wrote density PNG to " << path.str();
 	tlog::info()
 		<< "  #lattice points=" << N
 		<< " #zero-x voxels=" << num_voxels << " (" << ((num_voxels*100.0)/N) << "%%)"
@@ -1039,7 +1036,7 @@ void save_density_grid_to_png(const GPUMemory<float>& density, const char* filen
 // Distinct from `save_density_grid_to_png` not just in that is writes RGBA, but also
 // in that it writes a sequence of PNGs rather than a single large PNG.
 // TODO: make both methods configurable to do either single PNG or PNG sequence.
-void save_rgba_grid_to_png_sequence(const GPUMemory<Array4f>& rgba, const char* path, Vector3i res3d, bool swap_y_z) {
+void save_rgba_grid_to_png_sequence(const GPUMemory<Array4f>& rgba, const fs::path& path, Vector3i res3d, bool swap_y_z) {
 	std::vector<Array4f> rgba_cpu;
 	rgba_cpu.resize(rgba.size());
 	rgba.copy_to_host(rgba_cpu);
@@ -1066,10 +1063,8 @@ void save_rgba_grid_to_png_sequence(const GPUMemory<Array4f>& rgba, const char* 
 				*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].w() * 255.f, 0.f, 255.f);
 			}
 		}
-		// write slice
-		char filename[256];
-		snprintf(filename, sizeof(filename), "%s/%04d_%dx%d.png", path, z, w, h);
-		stbi_write_png(filename, w, h, 4, pngpixels, w*4);
+
+		write_stbi(path / fmt::format("{:04d}_{}x{}.png", z, w, h), w, h, 4, pngpixels);
 		free(pngpixels);
 
 		progress.update(++n_saved);
@@ -1077,7 +1072,7 @@ void save_rgba_grid_to_png_sequence(const GPUMemory<Array4f>& rgba, const char* 
 	tlog::success() << "Wrote RGBA PNG sequence to " << path;
 }
 
-void save_rgba_grid_to_raw_file(const GPUMemory<Array4f>& rgba, const char* path, Vector3i res3d, bool swap_y_z, int cascade) {
+void save_rgba_grid_to_raw_file(const GPUMemory<Array4f>& rgba, const fs::path& path, Vector3i res3d, bool swap_y_z, int cascade) {
 	std::vector<Array4f> rgba_cpu;
 	rgba_cpu.resize(rgba.size());
 	rgba.copy_to_host(rgba_cpu);
@@ -1089,9 +1084,9 @@ void save_rgba_grid_to_raw_file(const GPUMemory<Array4f>& rgba, const char* path
 	uint32_t w = res3d.x();
 	uint32_t h = res3d.y();
 	uint32_t d = res3d.z();
-	char filename[256];
-	snprintf(filename, sizeof(filename), "%s/%dx%dx%d_%d.bin", path, w, h, d, cascade);
-	FILE *f=fopen(filename,"wb");
+
+	auto actual_path = path / fmt::format("{}x{}x{}_{}.bin", w, h, d, cascade);
+	FILE* f = native_fopen(actual_path, "wb");
 	if (!f)
 		return ;
 	const static float zero[4]={0.f,0.f,0.f,0.f};
@@ -1111,7 +1106,7 @@ void save_rgba_grid_to_raw_file(const GPUMemory<Array4f>& rgba, const char* path
 		}
 	}
 	fclose(f);
-	tlog::success() << "Wrote RGBA raw file to " << filename;
+	tlog::success() << "Wrote RGBA raw file to " << actual_path.str();
 }
 
 NGP_NAMESPACE_END
