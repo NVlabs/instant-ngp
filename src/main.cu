@@ -176,6 +176,8 @@ int main_func(const std::vector<std::string>& arguments) {
 			tlog::info() << "iteration=" << testbed.m_training_step << " loss=" << testbed.m_loss_scalar.val();
 		}
 	}
+
+	return 0;
 }
 
 NGP_NAMESPACE_END
