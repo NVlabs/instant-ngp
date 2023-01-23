@@ -133,7 +133,33 @@ With an >=iPhone 12 Pro, one can use [Record3D](https://record3d.app/) to collec
 	```
 	
 ### NeRFCapture
-[NeRFCapture](https://github.com/jc211/NeRFCapture) is an iOS app that runs on any ARKit device. It allows you to stream images directly from your phone to InstantNGP thus enabling a more interactive experience. It can also collect an offline dataset for later use.
+[NeRFCapture](https://github.com/jc211/NeRFCapture) is an iOS app that runs on any ARKit device. It allows you to stream images directly from your phone to InstantNGP thus enabling a more interactive experience. It can also collect an offline dataset for later use. 
+
+The following dependencies are needed to run the NeRFCapture script:
+```
+pip install cyclonedds
+pip install opencv-python
+pip install Pillow
+```
+
+To stream:
+1. Open the NeRFCapture app
+2. Run the script with the --stream flag enabled.
+	```
+	instant-ngp$ python scripts/nerfcapture2nerf.py --stream
+	```
+3. Wait for the connection between the app and the script to occur. This will be indicated on the app.
+4. Click the send button on the app. The frame captured will be sent to InstantNGP. 
+5. Toggle training
+
+To save a dataset:
+1. Open the NeRFCapture app
+2. Run the script with the --save_path flag. The n_frames flag indicates how many frames to capture before saving the dataset.
+	```
+	instant-ngp$ python scripts/nerfcapture2nerf.py --save_path "dir1/dir2" --n_frames 20
+	```
+3. Wait for the connection between the app and the script to occur. This will be indicated on the app.
+4. Click the send button on the app. The frame captured will be saved to the dataset folder on the computer running the script.
 
 ## Tips for NeRF training data
 
