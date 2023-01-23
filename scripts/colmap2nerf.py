@@ -396,6 +396,12 @@ if __name__ == "__main__":
 		try:
 			import detectron2
 		except ModuleNotFoundError:
+			try:
+				import torch
+			except ModuleNotFoundError:
+				print("PyTorch is not installed. For automatic masking, install PyTorch from https://pytorch.org/")
+				sys.exit(1)
+
 			input("Detectron2 is not installed. Press enter to install it.")
 			import subprocess
 			package = 'git+https://github.com/facebookresearch/detectron2.git'
