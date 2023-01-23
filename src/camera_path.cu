@@ -147,7 +147,7 @@ int CameraPath::imgui(char path_filename_buf[1024], float frame_milliseconds, Ma
 	int n = std::max(0, int(keyframes.size()) - 1);
 	int read = 0; // 1=smooth, 2=hard
 
-	ImGui::InputText("##PathFile", path_filename_buf, sizeof(path_filename_buf));
+	ImGui::InputText("##PathFile", path_filename_buf, 1024);
 	ImGui::SameLine();
 	static std::string camera_path_load_error_string = "";
 
