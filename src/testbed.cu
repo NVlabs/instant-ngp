@@ -2914,7 +2914,6 @@ void Testbed::init_window(int resw, int resh, bool hidden, bool second_window) {
 
 	tlog::success() << "Initialized OpenGL version " << glGetString(GL_VERSION);
 
-
 	glfwSetWindowUserPointer(m_glfw_window, this);
 	glfwSetDropCallback(m_glfw_window, [](GLFWwindow* window, int count, const char** paths) {
 		Testbed* testbed = (Testbed*)glfwGetWindowUserPointer(window);
@@ -2977,8 +2976,18 @@ void Testbed::init_window(int resw, int resh, bool hidden, bool second_window) {
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
-	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-	io.ConfigInputTrickleEventQueue = false; // new ImGui event handling seems to make camera controls laggy if this is true.
+
+	// By default, imgui places its configuration (state of the GUI -- size of windows,
+	// which regions are expanded, etc.) in ./imgui.ini relative to the working directory.
+	// Instead, we would like to place imgui.ini in the directory that instant-ngp project
+	// resides in.
+	static std::string ini_filename;
+	ini_filename = (get_root_dir()/"imgui.ini").str();
+	io.IniFilename = ini_filename.c_str();
+
+	// New ImGui event handling seems to make camera controls laggy if input trickling is true.
+	// So disable input trickling.
+	io.ConfigInputTrickleEventQueue = false;
 	ImGui::StyleColorsDark();
 	ImGui_ImplGlfw_InitForOpenGL(m_glfw_window, true);
 	ImGui_ImplOpenGL3_Init("#version 140");
