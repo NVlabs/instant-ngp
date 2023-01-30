@@ -955,7 +955,11 @@ void Testbed::imgui() {
 
 		if (!m_dlss_provider) {
 			ImGui::SameLine();
+#ifdef NGP_VULKAN
 			ImGui::Text("(unsupported on this system)");
+#else
+			ImGui::Text("(Vulkan was missing at compilation time)");
+#endif
 			ImGui::EndDisabled();
 		}
 
@@ -3044,10 +3048,8 @@ void Testbed::destroy_window() {
 	m_pip_render_buffer.reset();
 	m_pip_render_texture.reset();
 
-#ifdef NGP_VULKAN
 	m_dlss = false;
 	m_dlss_provider.reset();
-#endif
 
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
