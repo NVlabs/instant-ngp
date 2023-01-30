@@ -5,7 +5,7 @@
 Ever wanted to train a NeRF model of a fox in under 5 seconds? Or fly around a scene captured from photos of a factory robot? Of course you have!
 
 Here you will find an implementation of four __neural graphics primitives__, being neural radiance fields (NeRF), signed distance functions (SDFs), neural images, and neural volumes.
-In each case, we train and render a MLP with multiresolution hash input encoding using the [tiny-cuda-nn](https://github.com/NVlabs/tiny-cuda-nn) framework.
+In each case, we train and render a MLP with multiresolution hash input encoding using the [__tiny-cuda-nn__](https://github.com/NVlabs/tiny-cuda-nn) framework.
 
 > __Instant Neural Graphics Primitives with a Multiresolution Hash Encoding__  
 > [Thomas Müller](https://tom94.net), [Alex Evans](https://research.nvidia.com/person/alex-evans), [Christoph Schied](https://research.nvidia.com/person/christoph-schied), [Alexander Keller](https://research.nvidia.com/person/alex-keller)  
@@ -17,84 +17,28 @@ To get started with NVIDIA Instant NeRF, check out the [blog post](https://devel
 For business inquiries, please submit the [NVIDIA research licensing form](https://www.nvidia.com/en-us/research/inquiries/).
 
 
-## Windows binary release
+## Installation
 
-If you have Windows and if you do not need developer Python bindings, you can download one of the following binary releases and then jump directly to the [usage instructions](https://github.com/NVlabs/instant-ngp#interactive-training-and-rendering) or to [creating your own NeRF from a recording](docs/nerf_dataset_tips.md).
+If you have Windows, download one of the following releases corresponding to your graphics card and extract it.
 
 - [**RTX 3000 & 4000 series, RTX A4000&ndash;A6000**, and other Ampere & Ada cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-RTX-3000-and-4000.zip)
 - [**RTX 2000 series, Titan RTX, Quadro RTX 4000&ndash;8000**, and other Turing cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-RTX-2000.zip)
 - [**GTX 1000 series, Titan Xp, Quadro P1000&ndash;P6000**, and other Pascal cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-GTX-1000.zip)
 
-If you use Linux, or want the developer Python bindings, or if your GPU is not listed above (e.g. Hopper, Volta, or Maxwell generations), use the following step-by-step instructions to compile __instant-ngp__ yourself.
+Then, keep reading for a guided tour of the application or jump to our instructions for [__creating your own NeRF__](docs/nerf_dataset_tips.md).
+
+If you use Linux, or want the [developer Python bindings](https://github.com/NVlabs/instant-ngp#python-bindings), or if your GPU is not listed above (e.g. Hopper, Volta, or Maxwell generations), follow the [step-by-step instructions to build __instant-ngp__ yourself](https://github.com/NVlabs/instant-ngp#building-instant-ngp-windows--linux).
 
 
-## Requirements
+## Usage
 
-- An __NVIDIA GPU__; tensor cores increase performance when available. All shown results come from an RTX 3090.
-- A __C++14__ capable compiler. The following choices are recommended and have been tested:
-  - __Windows:__ Visual Studio 2019 or 2022
-  - __Linux:__ GCC/G++ 8 or higher
-- A recent version of __[CUDA](https://developer.nvidia.com/cuda-toolkit)__. The following choices are recommended and have been tested:
-  - __Windows:__ CUDA 11.5 or higher
-  - __Linux:__ CUDA 10.2 or higher
-- __[CMake](https://cmake.org/) v3.21 or higher__.
-- __(optional) [Python](https://www.python.org/) 3.7 or higher__ for interactive bindings. Also, run `pip install -r requirements.txt`.
-- __(optional) [OptiX](https://developer.nvidia.com/optix) 7.6 or higher__ for faster mesh SDF training.
-- __(optional) [Vulkan SDK](https://vulkan.lunarg.com/)__ for DLSS support.
-
-
-If you are using Debian based Linux distribution, install the following packages
-```sh
-sudo apt-get install build-essential git python3-dev python3-pip libopenexr-dev libxi-dev \
-                     libglfw3-dev libglew-dev libomp-dev libxinerama-dev libxcursor-dev
-```
-
-Alternatively, if you are using Arch or Arch derivatives, install the following packages
-```sh
-sudo pacman -S cuda base-devel cmake openexr libxi glfw openmp libxinerama libxcursor
-```
-
-We also recommend installing [CUDA](https://developer.nvidia.com/cuda-toolkit) and [OptiX](https://developer.nvidia.com/optix) in `/usr/local/` and adding the CUDA installation to your PATH.
-
-For example, if you have CUDA 11.4, add the following to your `~/.bashrc`
-```sh
-export PATH="/usr/local/cuda-11.4/bin:$PATH"
-export LD_LIBRARY_PATH="/usr/local/cuda-11.4/lib64:$LD_LIBRARY_PATH"
-```
-
-
-## Compilation (Windows & Linux)
-
-Begin by cloning this repository and all its submodules using the following command:
-```sh
-$ git clone --recursive https://github.com/nvlabs/instant-ngp
-$ cd instant-ngp
-```
-
-Then, use CMake to build the project: (on Windows, this must be in a [developer command prompt](https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line?view=msvc-160#developer_command_prompt))
-```sh
-instant-ngp$ cmake . -B build
-instant-ngp$ cmake --build build --config RelWithDebInfo -j
-```
-
-If compilation fails inexplicably or takes longer than an hour, you might be running out of memory. Try running the above command without `-j` in that case.
-If this does not help, please consult [this list of possible fixes](https://github.com/NVlabs/instant-ngp#troubleshooting-compile-errors) before opening an issue.
-
-If the build succeeds, you can now run the code via the `./instant-ngp` executable or the `scripts/run.py` script described below.
-
-If automatic GPU architecture detection fails, (as can happen if you have multiple GPUs installed), set the `TCNN_CUDA_ARCHITECTURES` environment variable for the GPU you would like to use. The following table lists the values for common GPUs. If your GPU is not listed, consult [this exhaustive list](https://developer.nvidia.com/cuda-gpus).
-
-| H100 | 40X0 | 30X0 | A100 | 20X0 | TITAN V / V100 | 10X0 / TITAN Xp | 9X0 | K80 |
-|:----:|:----:|:----:|:----:|:----:|:--------------:|:---------------:|:---:|:---:|
-|   90 |   89 |   86 |   80 |   75 |             70 |              61 |  52 |  37 |
-
-
-
-## Interactive training and rendering
+### Graphical user interface
 
 <img src="docs/assets_readme/testbed.png" width="100%"/>
 
-This codebase comes with an interactive GUI that includes many features beyond our academic publication:
+__instant-ngp__ comes with an interactive GUI that includes many features beyond our academic publication:
+- VR mode for viewing neural graphics primitives through a virtual-reality headset.
+- Save and load trained neural graphics primitives ("Snapshot") so you can share them on the internet.
 - Additional training features, such as extrinsics and intrinsics optimization.
 - Marching cubes for `NeRF->Mesh` and `SDF->Mesh` conversion.
 - A spline-based camera path editor to create videos.
@@ -111,12 +55,6 @@ Simply start `instant-ngp` and drag the `data/nerf/fox` folder into the GUI. Or,
 
 ```sh
 instant-ngp$ ./instant-ngp data/nerf/fox
-```
-
-On Windows you need to reverse the slashes here (and below), i.e.:
-
-```sh
-instant-ngp> .\instant-ngp data\nerf\fox
 ```
 
 <img src="docs/assets_readme/fox.png"/>
@@ -169,7 +107,7 @@ instant-ngp$ ./instant-ngp wdas_cloud_quarter.nvdb
 <img src="docs/assets_readme/cloud.png"/>
 
 
-### GUI controls
+### Keyboard shortcuts and recommended controls
 
 Here are the main keyboard controls for the __instant-ngp__ application.
 
@@ -177,12 +115,12 @@ Here are the main keyboard controls for the __instant-ngp__ application.
 | :-------------: | ------------- |
 | WASD            | Forward / pan left / backward / pan right. |
 | Spacebar / C    | Move up / down. |
-| = or + / - or _ | Increase / decrease camera velocity. |
+| = or + / - or _ | Increase / decrease camera velocity (first person mode) or zoom in / out (third person mode). |
 | E / Shift+E     | Increase / decrease exposure. |
 | Tab             | Toggle menu visibility. |
 | T               | Toggle training. After around two minutes training tends to settle down, so can be toggled off. |
-| { }             | Go to the first/last training set image's camera view. |
-| [ ]             | Go to the previous/next training set image's camera view. |
+| { }             | Go to the first/last training image camera view. |
+| [ ]             | Go to the previous/next training image camera view. |
 | R               | Reload network from file. |
 | Shift+R         | Reset camera. |
 | O               | Toggle visualization or accumulated error map. |
@@ -194,27 +132,116 @@ Here are the main keyboard controls for the __instant-ngp__ application.
 There are many controls in the __instant-ngp__ GUI.
 First, note that this GUI can be moved and resized, as can the "Camera path" GUI (which first must be expanded to be used).
 
-Some popular user controls in __instant-ngp__ are:
+Recommended user controls in __instant-ngp__ are:
 
-* __Snapshot:__ use Save to save the NeRF solution generated, Load to reload. Necessary if you want to make an animation.
-* __Rendering -> DLSS:__ toggling this on and setting "DLSS sharpening" below it to 1.0 can often improve rendering quality.
+* __Snapshot:__ use Save to save the trained NeRF, Load to reload. Necessary if you want to make an animation.
+* __Rendering -> DLSS:__ toggling this on and setting "DLSS sharpening" to 1.0 can often improve rendering quality.
 * __Rendering -> Crop size:__ trim back the surrounding environment to focus on the model. "Crop aabb" lets you move the center of the volume of interest and fine tune. See more about this feature in [our NeRF training & dataset tips](https://github.com/NVlabs/instant-ngp/blob/master/docs/nerf_dataset_tips.md).
 
-The "Camera path" GUI lets you set frames along a path. "Add from cam" is the main button you'll want to push. Then, you can render a video `.mp4` of your camera path or export the keyframes to a `.json` file. There is a bit more information about the GUI [in this post](https://developer.nvidia.com/blog/getting-started-with-nvidia-instant-nerfs/) and [in this video guide to creating your own video](https://www.youtube.com/watch?v=3TWxO1PftMc).
+The "Camera path" GUI lets you create a camera path for rendering a video.
+The button "Add from cam" inserts keyframes from the current perspective.
+Then, you can render a video `.mp4` of your camera path or export the keyframes to a `.json` file.
+There is a bit more information about the GUI [in this post](https://developer.nvidia.com/blog/getting-started-with-nvidia-instant-nerfs/) and [in this video guide to creating your own video](https://www.youtube.com/watch?v=3TWxO1PftMc).
+
+
+## Building instant-ngp (Windows & Linux)
+
+### Requirements
+
+- An __NVIDIA GPU__; tensor cores increase performance when available. All shown results come from an RTX 3090.
+- A __C++14__ capable compiler. The following choices are recommended and have been tested:
+  - __Windows:__ Visual Studio 2019 or 2022
+  - __Linux:__ GCC/G++ 8 or higher
+- A recent version of __[CUDA](https://developer.nvidia.com/cuda-toolkit)__. The following choices are recommended and have been tested:
+  - __Windows:__ CUDA 11.5 or higher
+  - __Linux:__ CUDA 10.2 or higher
+- __[CMake](https://cmake.org/) v3.21 or higher__.
+- __(optional) [Python](https://www.python.org/) 3.7 or higher__ for interactive bindings. Also, run `pip install -r requirements.txt`.
+- __(optional) [OptiX](https://developer.nvidia.com/optix) 7.6 or higher__ for faster mesh SDF training.
+- __(optional) [Vulkan SDK](https://vulkan.lunarg.com/)__ for DLSS support.
+
+
+If you are using Debian based Linux distribution, install the following packages
+```sh
+sudo apt-get install build-essential git python3-dev python3-pip libopenexr-dev libxi-dev \
+                     libglfw3-dev libglew-dev libomp-dev libxinerama-dev libxcursor-dev
+```
+
+Alternatively, if you are using Arch or Arch derivatives, install the following packages
+```sh
+sudo pacman -S cuda base-devel cmake openexr libxi glfw openmp libxinerama libxcursor
+```
+
+We also recommend installing [CUDA](https://developer.nvidia.com/cuda-toolkit) and [OptiX](https://developer.nvidia.com/optix) in `/usr/local/` and adding the CUDA installation to your PATH.
+
+For example, if you have CUDA 11.4, add the following to your `~/.bashrc`
+```sh
+export PATH="/usr/local/cuda-11.4/bin:$PATH"
+export LD_LIBRARY_PATH="/usr/local/cuda-11.4/lib64:$LD_LIBRARY_PATH"
+```
+
+
+### Compilation
+
+Begin by cloning this repository and all its submodules using the following command:
+```sh
+$ git clone --recursive https://github.com/nvlabs/instant-ngp
+$ cd instant-ngp
+```
+
+Then, use CMake to build the project: (on Windows, this must be in a [developer command prompt](https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line?view=msvc-160#developer_command_prompt))
+```sh
+instant-ngp$ cmake . -B build
+instant-ngp$ cmake --build build --config RelWithDebInfo -j
+```
+
+If compilation fails inexplicably or takes longer than an hour, you might be running out of memory. Try running the above command without `-j` in that case.
+If this does not help, please consult [this list of possible fixes](https://github.com/NVlabs/instant-ngp#troubleshooting-compile-errors) before opening an issue.
+
+If the build succeeds, you can now run the code via the `./instant-ngp` executable or the `scripts/run.py` script described below.
+
+If automatic GPU architecture detection fails, (as can happen if you have multiple GPUs installed), set the `TCNN_CUDA_ARCHITECTURES` environment variable for the GPU you would like to use. The following table lists the values for common GPUs. If your GPU is not listed, consult [this exhaustive list](https://developer.nvidia.com/cuda-gpus).
+
+| H100 | 40X0 | 30X0 | A100 | 20X0 | TITAN V / V100 | 10X0 / TITAN Xp | 9X0 | K80 |
+|:----:|:----:|:----:|:----:|:----:|:--------------:|:---------------:|:---:|:---:|
+|   90 |   89 |   86 |   80 |   75 |             70 |              61 |  52 |  37 |
+
 
 
 ## Python bindings
 
-To conduct controlled experiments in an automated fashion, all features from the interactive GUI (and more!) have Python bindings that can be easily instrumented.
+After you have built __instant-ngp__, you can use its Python bindings to conduct controlled experiments in an automated fashion.
+All features from the interactive GUI (and more!) have Python bindings that can be easily instrumented.
 For an example of how the `./instant-ngp` application can be implemented and extended from within Python, see `./scripts/run.py`, which supports a superset of the command line arguments that `./instant-ngp` does.
 
-If you'd rather build new models from the hash encoding and fast neural networks, consider the [__tiny-cuda-nn__'s PyTorch extension](https://github.com/nvlabs/tiny-cuda-nn#pytorch-extension).
+If you would rather build new models from the hash encoding and fast neural networks, consider [__tiny-cuda-nn__'s PyTorch extension](https://github.com/nvlabs/tiny-cuda-nn#pytorch-extension).
 
 Happy hacking!
 
 
 ## Frequently asked questions (FAQ)
 
+__Q:__ The NeRF reconstruction of my custom dataset looks bad; what can I do?
+
+__A:__ There could be multiple issues:
+- COLMAP might have been unable to reconstruct camera poses.
+- There might have been movement or blur during capture. Don't treat capture as an artistic task; treat it as photogrammetry. You want _\*as little blur as possible\*_ in your dataset (motion, defocus, or otherwise) and all objects must be _\*static\*_ during the entire capture. Bonus points if you are using a wide-angle lens (iPhone wide angle works well), because it covers more space than narrow lenses.
+- The dataset parameters (in particular `aabb_scale`) might have been tuned suboptimally. We recommend starting with `aabb_scale=128` and then increasing or decreasing it by factors of two until you get optimal quality.
+- Carefully read [our NeRF training & dataset tips](https://github.com/NVlabs/instant-ngp/blob/master/docs/nerf_dataset_tips.md).
+
+##
+__Q:__ How can I save the trained model and load it again later?
+
+__A:__ Two options:
+1. Use the GUI's "Snapshot" section.
+2. Use the Python bindings `load_snapshot` / `save_snapshot` (see `scripts/run.py` for example usage).
+
+##
+__Q:__ Can this codebase use multiple GPUs at the same time?
+
+__A:__ Only for VR rendering, in which case one GPU is used per eye. Otherwise, no. To select a specific GPU to run on, use the [CUDA_VISIBLE_DEVICES](https://stackoverflow.com/questions/39649102/how-do-i-select-which-gpu-to-run-a-job-on) environment variable. To optimize the _compilation_ for that specific GPU use the [TCNN_CUDA_ARCHITECTURES](https://github.com/NVlabs/instant-ngp#compilation-windows--linux) environment variable.
+
+##
 __Q:__ How can I run __instant-ngp__ in headless mode?
 
 __A:__ Use `./instant-ngp --no-gui` or `python scripts/run.py`. You can also compile without GUI via `cmake -DNGP_BUILD_WITH_GUI=off ...`
@@ -243,36 +270,14 @@ __Q:__ How can I edit and train the underlying hash encoding or neural network o
 __A:__ Use [__tiny-cuda-nn__'s PyTorch extension](https://github.com/nvlabs/tiny-cuda-nn#pytorch-extension).
 
 ##
-__Q:__ How can I save the trained model and load it again later?
-
-__A:__ Two options:
-1. Use the GUI's "Snapshot" section.
-2. Use the Python bindings `load_snapshot` / `save_snapshot` (see `scripts/run.py` for example usage).
-
-##
-__Q:__ Can this codebase use multiple GPUs at the same time?
-
-__A:__ No. To select a specific GPU to run on, use the [CUDA_VISIBLE_DEVICES](https://stackoverflow.com/questions/39649102/how-do-i-select-which-gpu-to-run-a-job-on) environment variable. To optimize the _compilation_ for that specific GPU use the [TCNN_CUDA_ARCHITECTURES](https://github.com/NVlabs/instant-ngp#compilation-windows--linux) environment variable.
-
-##
 __Q:__ What is the coordinate system convention?
 
 __A:__ See [this helpful diagram](https://github.com/NVlabs/instant-ngp/discussions/153?converting=1#discussioncomment-2187652) by user @jc211.
 
 ##
-__Q:__ The NeRF reconstruction of my custom dataset looks bad; what can I do?
-
-__A:__ There could be multiple issues:
-- COLMAP might have been unable to reconstruct camera poses.
-- There might have been movement or blur during capture. Don't treat capture as an artistic task; treat it as photogrammetry. You want _\*as little blur as possible\*_ in your dataset (motion, defocus, or otherwise) and all objects must be _\*static\*_ during the entire capture. Bonus points if you are using a wide-angle lens (iPhone wide angle works well), because it covers more space than narrow lenses.
-- The dataset parameters (in particular `aabb_scale`) might have been tuned suboptimally. We recommend starting with `aabb_scale=128` and then increasing or decreasing it by factors of two until you get optimal quality.
-- Carefully read [our NeRF training & dataset tips](https://github.com/NVlabs/instant-ngp/blob/master/docs/nerf_dataset_tips.md).
-
-##
 __Q:__ Why are background colors randomized during NeRF training?
 
 __A:__ Transparency in the training data indicates a desire for transparency in the learned model. Using a solid background color, the model can minimize its loss by simply predicting that background color, rather than transparency (zero density). By randomizing the background colors, the model is _forced_ to learn zero density to let the randomized colors "shine through".
-
 
 ##
 __Q:__ How to mask away NeRF training pixels (e.g. for dynamic object removal)?
