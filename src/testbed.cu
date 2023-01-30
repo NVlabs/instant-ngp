@@ -1738,11 +1738,19 @@ bool Testbed::keyboard_event() {
 	}
 
 	if (ImGui::IsKeyPressed('=') || ImGui::IsKeyPressed('+')) {
-		m_camera_velocity *= 1.5f;
+		if (m_fps_camera) {
+			m_camera_velocity *= 1.5f;
+		} else {
+			set_scale(m_scale * 1.1f);
+		}
 	}
 
 	if (ImGui::IsKeyPressed('-') || ImGui::IsKeyPressed('_')) {
-		m_camera_velocity /= 1.5f;
+		if (m_fps_camera) {
+			m_camera_velocity /= 1.5f;
+		} else {
+			set_scale(m_scale / 1.1f);
+		}
 	}
 
 	// WASD camera movement
