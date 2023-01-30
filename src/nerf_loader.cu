@@ -231,6 +231,10 @@ void read_lens(const nlohmann::json& json, Lens& lens, Vector2f& principal_point
 		mode = ELensMode::LatLong;
 	}
 
+	if (json.contains("equirectangular")) {
+		mode = ELensMode::Equirectangular;
+	}
+
 	// If there was an outer distortion mode, don't override it with nothing.
 	if (mode != ELensMode::Perspective) {
 		lens.mode = mode;

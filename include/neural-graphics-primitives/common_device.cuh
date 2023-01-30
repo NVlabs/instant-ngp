@@ -28,6 +28,52 @@ NGP_NAMESPACE_BEGIN
 using precision_t = tcnn::network_precision_t;
 
 
+// The maximum depth that can be produced when rendering a frame.
+// Chosen somewhat low (rather than std::numeric_limits<float>::infinity())
+// to permit numerically stable reprojection and DLSS operation,
+// even when rendering the infinitely distant horizon.
+inline constexpr __device__ float MAX_DEPTH() { return 16384.0f; }
+
+template <typename T>
+class Buffer2D {
+public:
+	Buffer2D() = default;
+	Buffer2D(const Eigen::Vector2i& resolution) {
+		resize(resolution);
+	}
+
+	T* data() const {
+		return m_data.data();
+	}
+
+	size_t bytes() const {
+		return m_data.bytes();
+	}
+
+	void resize(const Eigen::Vector2i& resolution) {
+		m_data.resize(resolution.prod());
+		m_resolution = resolution;
+	}
+
+	const Eigen::Vector2i& resolution() const {
+		return m_resolution;
+	}
+
+	Buffer2DView<T> view() const {
+		// Row major for now.
+		return {data(), m_resolution};
+	}
+
+	Buffer2DView<const T> const_view() const {
+		// Row major for now.
+		return {data(), m_resolution};
+	}
+
+private:
+	tcnn::GPUMemory<T> m_data;
+	Eigen::Vector2i m_resolution;
+};
+
 inline NGP_HOST_DEVICE float srgb_to_linear(float srgb) {
 	if (srgb <= 0.04045f) {
 		return srgb / 12.92f;
@@ -77,41 +123,8 @@ inline NGP_HOST_DEVICE Eigen::Array3f linear_to_srgb_derivative(const Eigen::Arr
 }
 
 template <uint32_t N_DIMS, typename T>
-NGP_HOST_DEVICE Eigen::Matrix<float, N_DIMS, 1> read_image(const T* __restrict__ data, const Eigen::Vector2i& resolution, const Eigen::Vector2f& pos) {
-	const Eigen::Vector2f pos_float = Eigen::Vector2f{pos.x() * (float)(resolution.x()-1), pos.y() * (float)(resolution.y()-1)};
-	const Eigen::Vector2i texel = pos_float.cast<int>();
-
-	const Eigen::Vector2f weight = pos_float - texel.cast<float>();
-
-	auto read_val = [&](Eigen::Vector2i pos) {
-		pos.x() = std::max(std::min(pos.x(), resolution.x()-1), 0);
-		pos.y() = std::max(std::min(pos.y(), resolution.y()-1), 0);
-
-		Eigen::Matrix<float, N_DIMS, 1> result;
-		if (std::is_same<T, float>::value) {
-			result = *(Eigen::Matrix<T, N_DIMS, 1>*)&data[(pos.x() + pos.y() * resolution.x()) * N_DIMS];
-		} else {
-			auto val = *(tcnn::vector_t<T, N_DIMS>*)&data[(pos.x() + pos.y() * resolution.x()) * N_DIMS];
-
-			NGP_PRAGMA_UNROLL
-			for (uint32_t i = 0; i < N_DIMS; ++i) {
-				result[i] = (float)val[i];
-			}
-		}
-		return result;
-	};
-
-	return (
-		(1 - weight.x()) * (1 - weight.y()) * read_val({texel.x(), texel.y()}) +
-		(weight.x()) * (1 - weight.y()) * read_val({texel.x()+1, texel.y()}) +
-		(1 - weight.x()) * (weight.y()) * read_val({texel.x(), texel.y()+1}) +
-		(weight.x()) * (weight.y()) * read_val({texel.x()+1, texel.y()+1})
-	);
-}
-
-template <uint32_t N_DIMS, typename T>
 __device__ void deposit_image_gradient(const Eigen::Matrix<float, N_DIMS, 1>& value, T* __restrict__ gradient, T* __restrict__ gradient_weight, const Eigen::Vector2i& resolution, const Eigen::Vector2f& pos) {
-	const Eigen::Vector2f pos_float = Eigen::Vector2f{pos.x() * (resolution.x()-1), pos.y() * (resolution.y()-1)};
+	const Eigen::Vector2f pos_float = resolution.cast<float>().cwiseProduct(pos);
 	const Eigen::Vector2i texel = pos_float.cast<int>();
 
 	const Eigen::Vector2f weight = pos_float - texel.cast<float>();
@@ -141,6 +154,138 @@ __device__ void deposit_image_gradient(const Eigen::Matrix<float, N_DIMS, 1>& va
 	deposit_val(value, (1 - weight.x()) * (weight.y()), {texel.x(), texel.y()+1});
 	deposit_val(value, (weight.x()) * (weight.y()), {texel.x()+1, texel.y()+1});
 }
+
+struct FoveationPiecewiseQuadratic {
+	NGP_HOST_DEVICE FoveationPiecewiseQuadratic() = default;
+
+	FoveationPiecewiseQuadratic(float center_pixel_steepness, float center_inverse_piecewise_y, float center_radius) {
+		float center_inverse_radius = center_radius * center_pixel_steepness;
+		float left_inverse_piecewise_switch = center_inverse_piecewise_y - center_inverse_radius;
+		float right_inverse_piecewise_switch = center_inverse_piecewise_y + center_inverse_radius;
+
+		if (left_inverse_piecewise_switch < 0) {
+			left_inverse_piecewise_switch = 0.0f;
+		}
+
+		if (right_inverse_piecewise_switch > 1) {
+			right_inverse_piecewise_switch = 1.0f;
+		}
+
+		float am = center_pixel_steepness;
+		float d = (right_inverse_piecewise_switch - left_inverse_piecewise_switch) / center_pixel_steepness / 2;
+
+		// binary search for l,r,bm since analytical is very complex
+		float bm;
+		float m_min = 0.0f;
+		float m_max = 1.0f;
+		for (uint32_t i = 0; i < 20; i++) {
+			float m = (m_min + m_max) / 2.0f;
+			float l = m - d;
+			float r = m + d;
+
+			bm = -((am - 1) * l * l) / (r * r - 2 * r + l * l + 1);
+
+			float l_actual = (left_inverse_piecewise_switch - bm) / am;
+			float r_actual = (right_inverse_piecewise_switch - bm) / am;
+			float m_actual = (l_actual + r_actual) / 2;
+
+			if (m_actual > m) {
+				m_min = m;
+			} else {
+				m_max = m;
+			}
+		}
+
+		float l = (left_inverse_piecewise_switch - bm) / am;
+		float r = (right_inverse_piecewise_switch - bm) / am;
+
+		// Full linear case. Default construction covers this.
+		if ((l == 0.0f && r == 1.0f) || (am == 1.0f)) {
+			return;
+		}
+
+		// write out solution
+		switch_left = l;
+		switch_right = r;
+		this->am = am;
+		al = (am - 1) / (r * r - 2 * r + l * l + 1);
+		bl = (am * (r * r - 2 * r + 1) + am * l * l + (2 - 2 * am) * l) / (r * r - 2 * r + l * l + 1);
+		cl = 0;
+		this->bm = bm = -((am - 1) * l * l) / (r * r - 2 * r + l * l + 1);
+		ar = -(am - 1) / (r * r - 2 * r + l * l + 1);
+		br = (am * (r * r + 1) - 2 * r + am * l * l) / (r * r - 2 * r + l * l + 1);
+		cr = -(am * r * r - r * r + (am - 1) * l * l) / (r * r - 2 * r + l * l + 1);
+
+		inv_switch_left = am * switch_left + bm;
+		inv_switch_right = am * switch_right + bm;
+	}
+
+	// left parabola: al * x^2 + bl * x + cl
+	float al = 0.0f, bl = 0.0f, cl = 0.0f;
+	// middle linear piece: am * x + bm.  am should give 1:1 pixel mapping between warped size and full size.
+	float am = 1.0f, bm = 0.0f;
+	// right parabola: al * x^2 + bl * x + cl
+	float ar = 0.0f, br = 0.0f, cr = 0.0f;
+
+	// points where left and right switch over from quadratic to linear
+	float switch_left = 0.0f, switch_right = 1.0f;
+	// same, in inverted space
+	float inv_switch_left = 0.0f, inv_switch_right = 1.0f;
+
+	NGP_HOST_DEVICE float warp(float x) const {
+		x = tcnn::clamp(x, 0.0f, 1.0f);
+		if (x < switch_left) {
+			return al * x * x + bl * x + cl;
+		} else if (x > switch_right) {
+			return ar * x * x + br * x + cr;
+		} else {
+			return am * x + bm;
+		}
+	}
+
+	NGP_HOST_DEVICE float unwarp(float y) const {
+		y = tcnn::clamp(y, 0.0f, 1.0f);
+		if (y < inv_switch_left) {
+			return (std::sqrt(-4 * al * cl + 4 * al * y + bl * bl) - bl) / (2 * al);
+		} else if (y > inv_switch_right) {
+			return (std::sqrt(-4 * ar * cr + 4 * ar * y + br * br) - br) / (2 * ar);
+		} else {
+			return (y - bm) / am;
+		}
+	}
+
+	NGP_HOST_DEVICE float density(float x) const {
+		x = tcnn::clamp(x, 0.0f, 1.0f);
+		if (x < switch_left) {
+			return 2 * al * x + bl;
+		} else if (x > switch_right) {
+			return 2 * ar * x + br;
+		} else {
+			return am;
+		}
+	}
+};
+
+struct Foveation {
+	NGP_HOST_DEVICE Foveation() = default;
+
+	Foveation(const Eigen::Vector2f& center_pixel_steepness, const Eigen::Vector2f& center_inverse_piecewise_y, const Eigen::Vector2f& center_radius)
+	: warp_x{center_pixel_steepness.x(), center_inverse_piecewise_y.x(), center_radius.x()}, warp_y{center_pixel_steepness.y(), center_inverse_piecewise_y.y(), center_radius.y()} {}
+
+	FoveationPiecewiseQuadratic warp_x, warp_y;
+
+	NGP_HOST_DEVICE Eigen::Vector2f warp(const Eigen::Vector2f& x) const {
+		return {warp_x.warp(x.x()), warp_y.warp(x.y())};
+	}
+
+	NGP_HOST_DEVICE Eigen::Vector2f unwarp(const Eigen::Vector2f& y) const {
+		return {warp_x.unwarp(y.x()), warp_y.unwarp(y.y())};
+	}
+
+	NGP_HOST_DEVICE float density(const Eigen::Vector2f& x) const {
+		return warp_x.density(x.x()) * warp_y.density(x.y());
+	}
+};
 
 template <typename T>
 NGP_HOST_DEVICE inline void opencv_lens_distortion_delta(const T* extra_params, const T u, const T v, T* du, T* dv) {
@@ -292,37 +437,53 @@ inline NGP_HOST_DEVICE Eigen::Vector3f latlong_to_dir(const Eigen::Vector2f& uv)
 	return {sp * ct, st, cp * ct};
 }
 
-inline NGP_HOST_DEVICE Ray pixel_to_ray(
+inline NGP_HOST_DEVICE Eigen::Vector3f equirectangular_to_dir(const Eigen::Vector2f& uv) {
+	float ct = (uv.y() - 0.5f) * 2.0f;
+	float st = std::sqrt(std::max(1.0f - ct * ct, 0.0f));
+	float phi = (uv.x() - 0.5f) * PI() * 2.0f;
+	float sp, cp;
+	sincosf(phi, &sp, &cp);
+	return {sp * st, ct, cp * st};
+}
+
+inline NGP_HOST_DEVICE Ray uv_to_ray(
 	uint32_t spp,
-	const Eigen::Vector2i& pixel,
+	const Eigen::Vector2f& uv,
 	const Eigen::Vector2i& resolution,
 	const Eigen::Vector2f& focal_length,
 	const Eigen::Matrix<float, 3, 4>& camera_matrix,
 	const Eigen::Vector2f& screen_center,
-	const Eigen::Vector3f& parallax_shift,
-	bool snap_to_pixel_centers = false,
+	const Eigen::Vector3f& parallax_shift = Eigen::Vector3f::Zero(),
 	float near_distance = 0.0f,
 	float focus_z = 1.0f,
 	float aperture_size = 0.0f,
+	const Foveation& foveation = {},
+	Buffer2DView<const uint8_t> hidden_area_mask = {},
 	const Lens& lens = {},
-	const float* __restrict__ distortion_grid = nullptr,
-	const Eigen::Vector2i distortion_grid_resolution = Eigen::Vector2i::Zero()
+	Buffer2DView<const Eigen::Vector2f> distortion = {}
 ) {
-	Eigen::Vector2f offset = ld_random_pixel_offset(snap_to_pixel_centers ? 0 : spp);
-	Eigen::Vector2f uv = (pixel.cast<float>() + offset).cwiseQuotient(resolution.cast<float>());
+	Eigen::Vector2f warped_uv = foveation.warp(uv);
+
+	// Check the hidden area mask _after_ applying foveation, because foveation will be undone
+	// before blitting to the framebuffer to which the hidden area mask corresponds.
+	if (hidden_area_mask && !hidden_area_mask.at(warped_uv)) {
+		return Ray::invalid();
+	}
 
 	Eigen::Vector3f dir;
 	if (lens.mode == ELensMode::FTheta) {
-		dir = f_theta_undistortion(uv - screen_center, lens.params, {1000.f, 0.f, 0.f});
-		if (dir.x() == 1000.f) {
-			return {{1000.f, 0.f, 0.f}, {0.f, 0.f, 1.f}}; // return a point outside the aabb so the pixel is not rendered
+		dir = f_theta_undistortion(warped_uv - screen_center, lens.params, {0.f, 0.f, 0.f});
+		if (dir == Eigen::Vector3f::Zero()) {
+			return Ray::invalid();
 		}
 	} else if (lens.mode == ELensMode::LatLong) {
-		dir = latlong_to_dir(uv);
+		dir = latlong_to_dir(warped_uv);
+	} else if (lens.mode == ELensMode::Equirectangular) {
+		dir = equirectangular_to_dir(warped_uv);
 	} else {
 		dir = {
-			(uv.x() - screen_center.x()) * (float)resolution.x() / focal_length.x(),
-			(uv.y() - screen_center.y()) * (float)resolution.y() / focal_length.y(),
+			(warped_uv.x() - screen_center.x()) * (float)resolution.x() / focal_length.x(),
+			(warped_uv.y() - screen_center.y()) * (float)resolution.y() / focal_length.y(),
 			1.0f
 		};
 
@@ -332,8 +493,9 @@ inline NGP_HOST_DEVICE Ray pixel_to_ray(
 			iterative_opencv_fisheye_lens_undistortion(lens.params, &dir.x(), &dir.y());
 		}
 	}
-	if (distortion_grid) {
-		dir.head<2>() += read_image<2>(distortion_grid, distortion_grid_resolution, uv);
+
+	if (distortion) {
+		dir.head<2>() += distortion.at_lerp(warped_uv);
 	}
 
 	Eigen::Vector3f head_pos = {parallax_shift.x(), parallax_shift.y(), 0.f};
@@ -341,26 +503,60 @@ inline NGP_HOST_DEVICE Ray pixel_to_ray(
 	dir = camera_matrix.block<3, 3>(0, 0) * dir;
 
 	Eigen::Vector3f origin = camera_matrix.block<3, 3>(0, 0) * head_pos + camera_matrix.col(3);
-	
-	if (aperture_size > 0.0f) {
+	if (aperture_size != 0.0f) {
 		Eigen::Vector3f lookat = origin + dir * focus_z;
-		Eigen::Vector2f blur = aperture_size * square2disk_shirley(ld_random_val_2d(spp, (uint32_t)pixel.x() * 19349663 + (uint32_t)pixel.y() * 96925573) * 2.0f - Eigen::Vector2f::Ones());
+		Eigen::Vector2f blur = aperture_size * square2disk_shirley(ld_random_val_2d(spp, uv.cwiseProduct(resolution.cast<float>()).cast<int>().dot(Eigen::Vector2i{19349663, 96925573})) * 2.0f - Eigen::Vector2f::Ones());
 		origin += camera_matrix.block<3, 2>(0, 0) * blur;
 		dir = (lookat - origin) / focus_z;
 	}
-	
-	origin += dir * near_distance;
 
+	origin += dir * near_distance;
 	return {origin, dir};
 }
 
-inline NGP_HOST_DEVICE Eigen::Vector2f pos_to_pixel(
+inline NGP_HOST_DEVICE Ray pixel_to_ray(
+	uint32_t spp,
+	const Eigen::Vector2i& pixel,
+	const Eigen::Vector2i& resolution,
+	const Eigen::Vector2f& focal_length,
+	const Eigen::Matrix<float, 3, 4>& camera_matrix,
+	const Eigen::Vector2f& screen_center,
+	const Eigen::Vector3f& parallax_shift = Eigen::Vector3f::Zero(),
+	bool snap_to_pixel_centers = false,
+	float near_distance = 0.0f,
+	float focus_z = 1.0f,
+	float aperture_size = 0.0f,
+	const Foveation& foveation = {},
+	Buffer2DView<const uint8_t> hidden_area_mask = {},
+	const Lens& lens = {},
+	Buffer2DView<const Eigen::Vector2f> distortion = {}
+) {
+	return uv_to_ray(
+		spp,
+		(pixel.cast<float>() + ld_random_pixel_offset(snap_to_pixel_centers ? 0 : spp)).cwiseQuotient(resolution.cast<float>()),
+		resolution,
+		focal_length,
+		camera_matrix,
+		screen_center,
+		parallax_shift,
+		near_distance,
+		focus_z,
+		aperture_size,
+		foveation,
+		hidden_area_mask,
+		lens,
+		distortion
+	);
+}
+
+inline NGP_HOST_DEVICE Eigen::Vector2f pos_to_uv(
 	const Eigen::Vector3f& pos,
 	const Eigen::Vector2i& resolution,
 	const Eigen::Vector2f& focal_length,
 	const Eigen::Matrix<float, 3, 4>& camera_matrix,
 	const Eigen::Vector2f& screen_center,
 	const Eigen::Vector3f& parallax_shift,
+	const Foveation& foveation = {},
 	const Lens& lens = {}
 ) {
 	// Express ray in terms of camera frame
@@ -386,10 +582,23 @@ inline NGP_HOST_DEVICE Eigen::Vector2f pos_to_pixel(
 	dir.y() += dv;
 
 	Eigen::Vector2f uv = Eigen::Vector2f{dir.x(), dir.y()}.cwiseProduct(focal_length).cwiseQuotient(resolution.cast<float>()) + screen_center;
-	return uv.cwiseProduct(resolution.cast<float>());
+	return foveation.unwarp(uv);
 }
 
-inline NGP_HOST_DEVICE Eigen::Vector2f motion_vector_3d(
+inline NGP_HOST_DEVICE Eigen::Vector2f pos_to_pixel(
+	const Eigen::Vector3f& pos,
+	const Eigen::Vector2i& resolution,
+	const Eigen::Vector2f& focal_length,
+	const Eigen::Matrix<float, 3, 4>& camera_matrix,
+	const Eigen::Vector2f& screen_center,
+	const Eigen::Vector3f& parallax_shift,
+	const Foveation& foveation = {},
+	const Lens& lens = {}
+) {
+	return pos_to_uv(pos, resolution, focal_length, camera_matrix, screen_center, parallax_shift, foveation, lens).cwiseProduct(resolution.cast<float>());
+}
+
+inline NGP_HOST_DEVICE Eigen::Vector2f motion_vector(
 	const uint32_t sample_index,
 	const Eigen::Vector2i& pixel,
 	const Eigen::Vector2i& resolution,
@@ -400,6 +609,8 @@ inline NGP_HOST_DEVICE Eigen::Vector2f motion_vector_3d(
 	const Eigen::Vector3f& parallax_shift,
 	const bool snap_to_pixel_centers,
 	const float depth,
+	const Foveation& foveation = {},
+	const Foveation& prev_foveation = {},
 	const Lens& lens = {}
 ) {
 	Ray ray = pixel_to_ray(
@@ -414,98 +625,39 @@ inline NGP_HOST_DEVICE Eigen::Vector2f motion_vector_3d(
 		0.0f,
 		1.0f,
 		0.0f,
-		lens,
-		nullptr,
-		Eigen::Vector2i::Zero()
+		foveation,
+		{}, // No hidden area mask
+		lens
 	);
 
 	Eigen::Vector2f prev_pixel = pos_to_pixel(
-		ray.o + ray.d * depth,
+		ray(depth),
 		resolution,
 		focal_length,
 		prev_camera,
 		screen_center,
 		parallax_shift,
+		prev_foveation,
 		lens
 	);
 
 	return prev_pixel - (pixel.cast<float>() + ld_random_pixel_offset(sample_index));
 }
 
-inline NGP_HOST_DEVICE Eigen::Vector2f pixel_to_image_uv(
-	const uint32_t sample_index,
-	const Eigen::Vector2i& pixel,
-	const Eigen::Vector2i& resolution,
-	const Eigen::Vector2i& image_resolution,
-	const Eigen::Vector2f& screen_center,
-	const float view_dist,
-	const Eigen::Vector2f& image_pos,
-	const bool snap_to_pixel_centers
-) {
-	Eigen::Vector2f jit = ld_random_pixel_offset(snap_to_pixel_centers ? 0 : sample_index);
-	Eigen::Vector2f offset = screen_center.cwiseProduct(resolution.cast<float>()) + jit;
+// Maps view-space depth (physical units) in the range [znear, zfar] hyperbolically to
+// the interval [1, 0]. This is the reverse-z-component of "normalized device coordinates",
+// which are commonly used in rasterization, where linear interpolation in screen space
+// has to be equivalent to linear interpolation in real space (which, in turn, is
+// guaranteed by the hyperbolic mapping of depth). This format is commonly found in
+// z-buffers, and hence expected by downstream image processing functions, such as DLSS
+// and VR reprojection.
+inline NGP_HOST_DEVICE float to_ndc_depth(float z, float n, float f) {
+	// View depth outside of the view frustum leads to output outside of [0, 1]
+	z = tcnn::clamp(z, n, f);
 
-	float y_scale = view_dist;
-	float x_scale = y_scale * resolution.x() / resolution.y();
-
-	return {
-		((x_scale * (pixel.x() + offset.x())) / resolution.x() - view_dist * image_pos.x()) / image_resolution.x() * image_resolution.y(),
-		(y_scale * (pixel.y() + offset.y())) / resolution.y() - view_dist * image_pos.y()
-	};
-}
-
-inline NGP_HOST_DEVICE Eigen::Vector2f image_uv_to_pixel(
-	const Eigen::Vector2f& uv,
-	const Eigen::Vector2i& resolution,
-	const Eigen::Vector2i& image_resolution,
-	const Eigen::Vector2f& screen_center,
-	const float view_dist,
-	const Eigen::Vector2f& image_pos
-) {
-	Eigen::Vector2f offset = screen_center.cwiseProduct(resolution.cast<float>());
-
-	float y_scale = view_dist;
-	float x_scale = y_scale * resolution.x() / resolution.y();
-
-	return {
-		((uv.x() / image_resolution.y() * image_resolution.x()) + view_dist * image_pos.x()) * resolution.x() / x_scale - offset.x(),
-		(uv.y() + view_dist * image_pos.y()) * resolution.y() / y_scale - offset.y()
-	};
-}
-
-inline NGP_HOST_DEVICE Eigen::Vector2f motion_vector_2d(
-	const uint32_t sample_index,
-	const Eigen::Vector2i& pixel,
-	const Eigen::Vector2i& resolution,
-	const Eigen::Vector2i& image_resolution,
-	const Eigen::Vector2f& screen_center,
-	const float view_dist,
-	const float prev_view_dist,
-	const Eigen::Vector2f& image_pos,
-	const Eigen::Vector2f& prev_image_pos,
-	const bool snap_to_pixel_centers
-) {
-	Eigen::Vector2f uv = pixel_to_image_uv(
-		sample_index,
-		pixel,
-		resolution,
-		image_resolution,
-		screen_center,
-		view_dist,
-		image_pos,
-		snap_to_pixel_centers
-	);
-
-	Eigen::Vector2f prev_pixel = image_uv_to_pixel(
-		uv,
-		resolution,
-		image_resolution,
-		screen_center,
-		prev_view_dist,
-		prev_image_pos
-	);
-
-	return prev_pixel - (pixel.cast<float>() + ld_random_pixel_offset(sample_index));
+	float scale = n / (n - f);
+	float bias = -f * scale;
+	return tcnn::clamp((z * scale + bias) / z, 0.0f, 1.0f);
 }
 
 inline NGP_HOST_DEVICE float fov_to_focal_length(int resolution, float degrees) {
@@ -587,7 +739,8 @@ inline NGP_HOST_DEVICE void apply_quilting(uint32_t* x, uint32_t* y, const Eigen
 
 	if (quilting_dims == Eigen::Vector2i{2, 1}) {
 		// Likely VR: parallax_shift.x() is the IPD in this case. The following code centers the camera matrix between both eyes.
-		parallax_shift.x() = idx ? (-0.5f * parallax_shift.x()) : (0.5f * parallax_shift.x());
+		// idx == 0 -> left eye -> -1/2 x
+		parallax_shift.x() = (idx == 0) ? (-0.5f * parallax_shift.x()) : (0.5f * parallax_shift.x());
 	} else {
 		// Likely HoloPlay lenticular display: in this case, `parallax_shift.z()` is the inverse height of the head above the display.
 		// The following code computes the x-offset of views as a function of this.

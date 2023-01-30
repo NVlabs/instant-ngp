@@ -318,13 +318,11 @@ void visualize_nerf_camera(ImDrawList* list, const Matrix<float, 4, 4>& world2pr
 	add_debug_line(list, world2proj, d, a, col, thickness);
 }
 
-bool CameraPath::imgui_viz(ImDrawList* list, Matrix<float, 4, 4> &view2proj, Matrix<float, 4, 4> &world2proj, Matrix<float, 4, 4> &world2view, Vector2f focal, float aspect) {
+bool CameraPath::imgui_viz(ImDrawList* list, Matrix<float, 4, 4> &view2proj, Matrix<float, 4, 4> &world2proj, Matrix<float, 4, 4> &world2view, Vector2f focal, float aspect, float znear, float zfar) {
 	bool changed = false;
 	float flx = focal.x();
 	float fly = focal.y();
 	Matrix<float, 4, 4> view2proj_guizmo;
-	float zfar = 100.f;
-	float znear = 0.1f;
 	view2proj_guizmo <<
 		fly * 2.0f / aspect, 0, 0, 0,
 		0, -fly * 2.0f, 0, 0,

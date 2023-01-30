@@ -54,16 +54,16 @@ public:
 	virtual EDlssQuality quality() const = 0;
 };
 
-#ifdef NGP_VULKAN
-std::shared_ptr<IDlss> dlss_init(const Eigen::Vector2i& out_resolution);
+class IDlssProvider {
+public:
+	virtual ~IDlssProvider() {}
 
-void vulkan_and_ngx_init();
-size_t dlss_allocated_bytes();
-void vulkan_and_ngx_destroy();
-#else
-inline size_t dlss_allocated_bytes() {
-	return 0;
-}
+	virtual size_t allocated_bytes() const = 0;
+	virtual std::unique_ptr<IDlss> init_dlss(const Eigen::Vector2i& out_resolution) = 0;
+};
+
+#ifdef NGP_VULKAN
+std::shared_ptr<IDlssProvider> init_vulkan_and_ngx();
 #endif
 
 NGP_NAMESPACE_END

@@ -179,7 +179,10 @@ Here are the main keyboard controls for the __instant-ngp__ application.
 | Spacebar / C    | Move up / down. |
 | = or + / - or _ | Increase / decrease camera velocity. |
 | E / Shift+E     | Increase / decrease exposure. |
+| Tab             | Toggle menu visibility. |
 | T               | Toggle training. After around two minutes training tends to settle down, so can be toggled off. |
+| { }             | Go to the first/last training set image's camera view. |
+| [ ]             | Go to the previous/next training set image's camera view. |
 | R               | Reload network from file. |
 | Shift+R         | Reset camera. |
 | O               | Toggle visualization or accumulated error map. |

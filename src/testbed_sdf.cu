@@ -156,7 +156,7 @@ __global__ void advance_pos_kernel_sdf(
 	BoundingBox aabb,
 	float floor_y,
 	const TriangleOctreeNode* __restrict__ octree_nodes,
-	int max_depth,
+	int max_octree_depth,
 	float distance_scale,
 	float maximum_distance,
 	float k,
@@ -181,8 +181,8 @@ __global__ void advance_pos_kernel_sdf(
 	pos += distance * payload.dir;
 
 	// Skip over regions not covered by the octree
-	if (octree_nodes && !TriangleOctree::contains(octree_nodes, max_depth, pos)) {
-		float octree_distance = (TriangleOctree::ray_intersect(octree_nodes, max_depth, pos, payload.dir) + 1e-6f);
+	if (octree_nodes && !TriangleOctree::contains(octree_nodes, max_octree_depth, pos)) {
+		float octree_distance = (TriangleOctree::ray_intersect(octree_nodes, max_octree_depth, pos, payload.dir) + 1e-6f);
 		distance += octree_distance;
 		pos += octree_distance * payload.dir;
 	}
@@ -242,7 +242,7 @@ __global__ void prepare_shadow_rays(const uint32_t n_elements,
 	SdfPayload* __restrict__ payloads,
 	BoundingBox aabb,
 	const TriangleOctreeNode* __restrict__ octree_nodes,
-	int max_depth
+	int max_octree_depth
 ) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_elements) return;
@@ -256,21 +256,21 @@ __global__ void prepare_shadow_rays(const uint32_t n_elements,
 	float t = fmaxf(aabb.ray_intersect(view_pos, dir).x() + 1e-6f, 0.0f);
 	view_pos += t * dir;
 
-	if (octree_nodes && !TriangleOctree::contains(octree_nodes, max_depth, view_pos)) {
-		t = fmaxf(0.0f, TriangleOctree::ray_intersect(octree_nodes, max_depth, view_pos, dir) + 1e-6f);
+	if (octree_nodes && !TriangleOctree::contains(octree_nodes, max_octree_depth, view_pos)) {
+		t = fmaxf(0.0f, TriangleOctree::ray_intersect(octree_nodes, max_octree_depth, view_pos, dir) + 1e-6f);
 		view_pos += t * dir;
 	}
 
 	positions[i] = view_pos;
 
 	if (!aabb.contains(view_pos)) {
-		distances[i] = 10000.0f;
+		distances[i] = MAX_DEPTH();
 		payload.alive = false;
 		min_visibility[i] = 1.0f;
 		return;
 	}
 
-	distances[i] = 10000.0f;
+	distances[i] = MAX_DEPTH();
 	payload.idx = i;
 	payload.dir = dir;
 	payload.n_steps = 0;
@@ -322,13 +322,13 @@ __global__ void shade_kernel_sdf(
 
 	// The normal in memory isn't normalized yet
 	Vector3f normal = normals[i].normalized();
-
 	Vector3f pos = positions[i];
 	bool floor = false;
-	if (pos.y() < floor_y+0.001f && payload.dir.y() < 0.f) {
+	if (pos.y() < floor_y + 0.001f && payload.dir.y() < 0.f) {
 		normal = Vector3f(0.f, 1.f, 0.f);
 		floor = true;
 	}
+
 	Vector3f cam_pos = camera_matrix.col(3);
 	Vector3f cam_fwd = camera_matrix.col(2);
 	float ao = powf(0.92f, payload.n_steps * 0.5f) * (1.f / 0.92f);
@@ -456,12 +456,12 @@ __global__ void scale_to_aabb_kernel(uint32_t n_elements, BoundingBox aabb, Vect
 	inout[i] = aabb.min + inout[i].cwiseProduct(aabb.diag());
 }
 
-__global__ void compare_signs_kernel(uint32_t n_elements, const Vector3f *positions, const float *distances_ref, const float *distances_model, uint32_t *counters, const TriangleOctreeNode* octree_nodes, int max_depth) {
+__global__ void compare_signs_kernel(uint32_t n_elements, const Vector3f *positions, const float *distances_ref, const float *distances_model, uint32_t *counters, const TriangleOctreeNode* octree_nodes, int max_octree_depth) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i >= n_elements) return;
 	bool inside1 = distances_ref[i]<=0.f;
 	bool inside2 = distances_model[i]<=0.f;
-	if (octree_nodes && !TriangleOctree::contains(octree_nodes, max_depth, positions[i])) {
+	if (octree_nodes && !TriangleOctree::contains(octree_nodes, max_octree_depth, positions[i])) {
 		inside2=inside1; // assume, when using the octree, that the model is always correct outside the octree.
 		atomicAdd(&counters[6],1); // outside the octree
 	} else {
@@ -506,12 +506,13 @@ __global__ void init_rays_with_payload_kernel_sdf(
 	float near_distance,
 	float plane_z,
 	float aperture_size,
-	const float* __restrict__ envmap_data,
-	const Vector2i envmap_resolution,
-	Array4f* __restrict__ framebuffer,
-	float* __restrict__ depthbuffer,
+	Foveation foveation,
+	Buffer2DView<const Eigen::Array4f> envmap,
+	Array4f* __restrict__ frame_buffer,
+	float* __restrict__ depth_buffer,
+	Buffer2DView<const uint8_t> hidden_area_mask,
 	const TriangleOctreeNode* __restrict__ octree_nodes = nullptr,
-	int max_depth = 0
+	int max_octree_depth = 0
 ) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
@@ -526,30 +527,54 @@ __global__ void init_rays_with_payload_kernel_sdf(
 		aperture_size = 0.0;
 	}
 
-	Ray ray = pixel_to_ray(sample_index, {x, y}, resolution, focal_length, camera_matrix, screen_center, parallax_shift, snap_to_pixel_centers, near_distance, plane_z, aperture_size);
+	Ray ray = pixel_to_ray(
+		sample_index,
+		{x, y},
+		resolution,
+		focal_length,
+		camera_matrix,
+		screen_center,
+		parallax_shift,
+		snap_to_pixel_centers,
+		near_distance,
+		plane_z,
+		aperture_size,
+		foveation,
+		hidden_area_mask
+	);
 
-	distances[idx] = 10000.0f;
+	distances[idx] = MAX_DEPTH();
+	depth_buffer[idx] = MAX_DEPTH();
+
+	SdfPayload& payload = payloads[idx];
+
+	if (!ray.is_valid()) {
+		payload.dir = ray.d;
+		payload.idx = idx;
+		payload.n_steps = 0;
+		payload.alive = false;
+		positions[idx] = ray.o;
+		return;
+	}
 
 	if (plane_z < 0) {
 		float n = ray.d.norm();
-		SdfPayload& payload = payloads[idx];
 		payload.dir = (1.0f/n) * ray.d;
 		payload.idx = idx;
 		payload.n_steps = 0;
 		payload.alive = false;
 		positions[idx] = ray.o - plane_z * ray.d;
-		depthbuffer[idx] = -plane_z;
+		depth_buffer[idx] = -plane_z;
 		return;
 	}
 
-	depthbuffer[idx] = 1e10f;
-
 	ray.d = ray.d.normalized();
 	float t = max(aabb.ray_intersect(ray.o, ray.d).x(), 0.0f);
-	ray.o = ray.o + (t + 1e-6f) * ray.d;
 
-	if (octree_nodes && !TriangleOctree::contains(octree_nodes, max_depth, ray.o)) {
-		t = max(0.0f, TriangleOctree::ray_intersect(octree_nodes, max_depth, ray.o, ray.d));
+	ray.advance(t + 1e-6f);
+
+	if (octree_nodes && !TriangleOctree::contains(octree_nodes, max_octree_depth, ray.o)) {
+		t = max(0.0f, TriangleOctree::ray_intersect(octree_nodes, max_octree_depth, ray.o, ray.d));
 		if (ray.o.y() > floor_y && ray.d.y() < 0.f) {
 			float floor_dist = -(ray.o.y() - floor_y) / ray.d.y();
 			if (floor_dist > 0.f) {
@@ -557,16 +582,15 @@ __global__ void init_rays_with_payload_kernel_sdf(
 			}
 		}
 
-		ray.o = ray.o + (t + 1e-6f) * ray.d;
+		ray.advance(t + 1e-6f);
 	}
 
 	positions[idx] = ray.o;
 
-	if (envmap_data) {
-		framebuffer[idx] = read_envmap(envmap_data, envmap_resolution, ray.d);
+	if (envmap) {
+		frame_buffer[idx] = read_envmap(envmap, ray.d);
 	}
 
-	SdfPayload& payload = payloads[idx];
 	payload.dir = ray.d;
 	payload.idx = idx;
 	payload.n_steps = 0;
@@ -600,10 +624,11 @@ void Testbed::SphereTracer::init_rays_from_camera(
 	float near_distance,
 	float plane_z,
 	float aperture_size,
-	const float* envmap_data,
-	const Vector2i& envmap_resolution,
+	const Foveation& foveation,
+	const Buffer2DView<const Array4f>& envmap,
 	Array4f* frame_buffer,
 	float* depth_buffer,
+	const Buffer2DView<const uint8_t>& hidden_area_mask,
 	const TriangleOctree* octree,
 	uint32_t n_octree_levels,
 	cudaStream_t stream
@@ -630,10 +655,11 @@ void Testbed::SphereTracer::init_rays_from_camera(
 		near_distance,
 		plane_z,
 		aperture_size,
-		envmap_data,
-		envmap_resolution,
+		foveation,
+		envmap,
 		frame_buffer,
 		depth_buffer,
+		hidden_area_mask,
 		octree ? octree->nodes_gpu() : nullptr,
 		octree ? n_octree_levels : 0
 	);
@@ -840,14 +866,15 @@ void Testbed::FiniteDifferenceNormalsApproximator::normal(uint32_t n_elements, c
 }
 
 void Testbed::render_sdf(
+	cudaStream_t stream,
 	const distance_fun_t& distance_function,
 	const normals_fun_t& normals_function,
-	CudaRenderBuffer& render_buffer,
-	const Vector2i& max_res,
+	const CudaRenderBufferView& render_buffer,
 	const Vector2f& focal_length,
 	const Matrix<float, 3, 4>& camera_matrix,
 	const Vector2f& screen_center,
-	cudaStream_t stream
+	const Foveation& foveation,
+	int visualized_dimension
 ) {
 	float plane_z = m_slice_plane_z + m_scale;
 	if (m_render_mode == ERenderMode::Slice) {
@@ -865,8 +892,8 @@ void Testbed::render_sdf(
 	BoundingBox sdf_bounding_box = m_aabb;
 	sdf_bounding_box.inflate(m_sdf.zero_offset);
 	tracer.init_rays_from_camera(
-		render_buffer.spp(),
-		render_buffer.in_resolution(),
+		render_buffer.spp,
+		render_buffer.resolution,
 		focal_length,
 		camera_matrix,
 		screen_center,
@@ -877,10 +904,11 @@ void Testbed::render_sdf(
 		m_render_near_distance,
 		plane_z,
 		m_aperture_size,
-		m_envmap.envmap->inference_params(),
-		m_envmap.resolution,
-		render_buffer.frame_buffer(),
-		render_buffer.depth_buffer(),
+		foveation,
+		m_envmap.inference_view(),
+		render_buffer.frame_buffer,
+		render_buffer.depth_buffer,
+		render_buffer.hidden_area_mask ? render_buffer.hidden_area_mask->const_view() : Buffer2DView<const uint8_t>{},
 		octree_ptr,
 		n_octree_levels,
 		stream
@@ -912,10 +940,11 @@ void Testbed::render_sdf(
 	} else {
 		n_hit = trace(tracer);
 	}
+
 	RaysSdfSoa& rays_hit = m_render_mode == ERenderMode::Slice || gt_raytrace ? tracer.rays_init() : tracer.rays_hit();
 
 	if (m_render_mode == ERenderMode::Slice) {
-		if (m_visualized_dimension == -1) {
+		if (visualized_dimension == -1) {
 			distance_function(n_hit, rays_hit.pos, rays_hit.distance, stream);
 			extract_dimension_pos_neg_kernel<float><<<n_blocks_linear(n_hit*3), n_threads_linear, 0, stream>>>(n_hit*3, 0, 1, 3, rays_hit.distance, CM, (float*)rays_hit.normal);
 		} else {
@@ -924,11 +953,11 @@ void Testbed::render_sdf(
 
 			GPUMatrix<float> positions_matrix((float*)rays_hit.pos, 3, n_elements);
 			GPUMatrix<float> colors_matrix((float*)rays_hit.normal, 3, n_elements);
-			m_network->visualize_activation(stream, m_visualized_layer, m_visualized_dimension, positions_matrix, colors_matrix);
+			m_network->visualize_activation(stream, m_visualized_layer, visualized_dimension, positions_matrix, colors_matrix);
 		}
 	}
 
-	ERenderMode render_mode = (m_visualized_dimension > -1 || m_render_mode == ERenderMode::Slice) ? ERenderMode::EncodingVis : m_render_mode;
+	ERenderMode render_mode = (visualized_dimension > -1 || m_render_mode == ERenderMode::Slice) ? ERenderMode::EncodingVis : m_render_mode;
 	if (render_mode == ERenderMode::Shade || render_mode == ERenderMode::Normals) {
 		if (m_sdf.analytic_normals || gt_raytrace) {
 			normals_function(n_hit, rays_hit.pos, rays_hit.normal, stream);
@@ -964,6 +993,7 @@ void Testbed::render_sdf(
 				octree_ptr ? octree_ptr->nodes_gpu() : nullptr,
 				n_octree_levels
 			);
+
 			uint32_t n_hit_shadow = trace(shadow_tracer);
 			auto& shadow_rays_hit = gt_raytrace ? shadow_tracer.rays_init() : shadow_tracer.rays_hit();
 
@@ -984,7 +1014,7 @@ void Testbed::render_sdf(
 
 		GPUMatrix<float> positions_matrix((float*)rays_hit.pos, 3, n_elements);
 		GPUMatrix<float> colors_matrix((float*)rays_hit.normal, 3, n_elements);
-		m_network->visualize_activation(stream, m_visualized_layer, m_visualized_dimension, positions_matrix, colors_matrix);
+		m_network->visualize_activation(stream, m_visualized_layer, visualized_dimension, positions_matrix, colors_matrix);
 	}
 
 	linear_kernel(shade_kernel_sdf, 0, stream,
@@ -1000,8 +1030,8 @@ void Testbed::render_sdf(
 		rays_hit.normal,
 		rays_hit.distance,
 		rays_hit.payload,
-		render_buffer.frame_buffer(),
-		render_buffer.depth_buffer()
+		render_buffer.frame_buffer,
+		render_buffer.depth_buffer
 	);
 
 	if (render_mode == ERenderMode::Cost) {

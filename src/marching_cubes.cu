@@ -98,11 +98,11 @@ bool check_shader(uint32_t handle, const char* desc, bool program) {
 
 uint32_t compile_shader(bool pixel, const char* code) {
 	GLuint g_VertHandle = glCreateShader(pixel ? GL_FRAGMENT_SHADER : GL_VERTEX_SHADER );
-	const char* glsl_version = "#version 330\n";
+	const char* glsl_version = "#version 140\n";
 	const GLchar* strings[2] = { glsl_version, code};
 	glShaderSource(g_VertHandle, 2, strings, NULL);
 	glCompileShader(g_VertHandle);
-	if (!check_shader(g_VertHandle, pixel?"pixel":"vertex", false)) {
+	if (!check_shader(g_VertHandle, pixel? "pixel" : "vertex", false)) {
 		glDeleteShader(g_VertHandle);
 		return 0;
 	}
@@ -173,9 +173,9 @@ void draw_mesh_gl(
 
 	if (!program) {
 		vs = compile_shader(false, R"foo(
-layout (location = 0) in vec3 pos;
-layout (location = 1) in vec3 nor;
-layout (location = 2) in vec3 col;
+in vec3 pos;
+in vec3 nor;
+in vec3 col;
 out vec3 vtxcol;
 uniform mat4 camera;
 uniform vec2 f;
@@ -198,16 +198,11 @@ void main()
 }
 )foo");
 		ps = compile_shader(true, R"foo(
-layout (location = 0) out vec4 o;
+out vec4 o;
 in vec3 vtxcol;
 uniform int mode;
 void main() {
-	if (mode == 3) {
-		vec3 tricol = vec3((ivec3(923, 3572, 5423) * gl_PrimitiveID) & 255) * (1.0 / 255.0);
-		o = vec4(tricol, 1.0);
-	} else {
-		o = vec4(vtxcol, 1.0);
-	}
+	o = vec4(vtxcol, 1.0);
 }
 )foo");
 		program = glCreateProgram();
