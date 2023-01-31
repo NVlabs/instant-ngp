@@ -370,7 +370,8 @@ public:
 		path = fs::path::getcwd().wstr();
 #else
 		std::string tmp = fs::path::getcwd().str();
-		path = utf8_to_utf16(fs::path::getcwd().str());
+		std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> converter;
+		path = converter.from_bytes(tmp);
 #endif
 
 		NGX_CHECK_THROW(NVSDK_NGX_VULKAN_Init_with_ProjectID("ea75345e-5a42-4037-a5c9-59bf94dee157", NVSDK_NGX_ENGINE_TYPE_CUSTOM, "1.0.0", path.c_str(), m_vk_instance, m_vk_physical_device, m_vk_device));
