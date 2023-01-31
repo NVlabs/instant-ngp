@@ -553,8 +553,8 @@ void OpenXRHMD::init_xr_actions() {
 		create_binding(m_pose_action, "/user/hand/right/input/grip/pose"),
 	});
 
-	auto suggest_controller_bindings = [&](const std::string& xy, const std::string& press, const std::string& grab, const std::string& interaction_profile_path_str) {
-		suggest_bindings(interaction_profile_path_str, {
+	auto suggest_controller_bindings = [&](const std::string& xy, const std::string& press, const std::string& grab, const std::string& squeeze, const std::string& interaction_profile_path_str) {
+		std::vector<XrActionSuggestedBinding> bindings = {
 			create_binding(m_pose_action, "/user/hand/left/input/grip/pose"),
 			create_binding(m_pose_action, "/user/hand/right/input/grip/pose"),
 			create_binding(m_thumbstick_actions[0], std::string{"/user/hand/left/input/"} + xy),
@@ -563,15 +563,24 @@ void OpenXRHMD::init_xr_actions() {
 			create_binding(m_press_action, std::string{"/user/hand/right/input/"} + press),
 			create_binding(m_grab_action, std::string{"/user/hand/left/input/"} + grab),
 			create_binding(m_grab_action, std::string{"/user/hand/right/input/"} + grab),
-		});
+		};
+
+		if (!squeeze.empty()) {
+			bindings.emplace_back(create_binding(m_grab_action, std::string{"/user/hand/left/input/"} + squeeze));
+			bindings.emplace_back(create_binding(m_grab_action, std::string{"/user/hand/right/input/"} + squeeze));
+		}
+
+		suggest_bindings(interaction_profile_path_str, bindings);
 	};
 
-	suggest_controller_bindings("trackpad",   "select/click",     "trackpad/click", "/interaction_profiles/google/daydream_controller");
-	suggest_controller_bindings("trackpad",   "trackpad/click",   "trigger/click",  "/interaction_profiles/htc/vive_controller");
-	suggest_controller_bindings("thumbstick", "thumbstick/click", "trigger/value",  "/interaction_profiles/microsoft/motion_controller");
-	suggest_controller_bindings("trackpad",   "trackpad/click",   "trigger/click",  "/interaction_profiles/oculus/go_controller");
-	suggest_controller_bindings("thumbstick", "thumbstick/click", "trigger/value",  "/interaction_profiles/oculus/touch_controller");
-	suggest_controller_bindings("thumbstick", "thumbstick/click", "trigger/value",  "/interaction_profiles/valve/index_controller");
+	suggest_controller_bindings("trackpad",   "select/click",     "trackpad/click", "",                  "/interaction_profiles/google/daydream_controller");
+	suggest_controller_bindings("trackpad",   "trackpad/click",   "trigger/click",  "squeeze/click",     "/interaction_profiles/htc/vive_controller");
+	suggest_controller_bindings("thumbstick", "thumbstick/click", "trigger/value",  "squeeze/click",     "/interaction_profiles/microsoft/motion_controller");
+	suggest_controller_bindings("trackpad",   "trackpad/click",   "trigger/click",  "",                  "/interaction_profiles/oculus/go_controller");
+	suggest_controller_bindings("thumbstick", "thumbstick/click", "trigger/value",  "squeeze/value",     "/interaction_profiles/oculus/touch_controller");
+
+	// Valve Index force squeeze is very sensitive and can cause unwanted grabbing. Only permit trigger-grabbing for now.
+	suggest_controller_bindings("thumbstick", "thumbstick/click", "trigger/value",  ""/*squeeze/force*/, "/interaction_profiles/valve/index_controller");
 
 	// Xbox controller (currently not functional)
 	suggest_bindings("/interaction_profiles/microsoft/xbox_controller", {
