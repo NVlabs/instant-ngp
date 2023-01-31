@@ -223,7 +223,7 @@ fs::path Testbed::find_network_config(const fs::path& network_config_path) {
 		return network_config_path;
 	}
 
-	fs::path candidate = get_root_dir()/"configs"/to_string(m_testbed_mode)/network_config_path;
+	fs::path candidate = root_dir()/"configs"/to_string(m_testbed_mode)/network_config_path;
 	if (candidate.exists()) {
 		return candidate;
 	}
@@ -524,6 +524,14 @@ Eigen::Vector3i Testbed::compute_and_save_png_slices(const char* filename, int r
 	GPUMemory<float> density = (m_render_ground_truth && m_testbed_mode == ETestbedMode::Sdf) ? get_sdf_gt_on_grid(res3d, aabb, render_aabb_to_local) : get_density_on_grid(res3d, aabb, render_aabb_to_local);
 	save_density_grid_to_png(density, (std::string(filename) + fname).c_str(), res3d, thresh, flip_y_and_z_axes, range);
 	return res3d;
+}
+
+fs::path Testbed::root_dir() {
+	if (m_root_dir.empty()) {
+		m_root_dir = get_root_dir();
+	}
+
+	return m_root_dir;
 }
 
 inline float linear_to_db(float x) {
@@ -2409,19 +2417,19 @@ void Testbed::prepare_next_camera_path_frame() {
 #ifdef _WIN32
 			// Under Windows, try automatically downloading FFmpeg binaries if they don't exist
 			if (system(fmt::format("where {} >nul 2>nul", ffmpeg.str()).c_str()) != 0) {
-				fs::path root_dir = get_root_dir();
-				if ((root_dir/"external"/"ffmpeg").exists()) {
-					for (const auto& path : fs::directory{root_dir/"external"/"ffmpeg"}) {
+				fs::path dir = root_dir();
+				if ((dir/"external"/"ffmpeg").exists()) {
+					for (const auto& path : fs::directory{dir/"external"/"ffmpeg"}) {
 						ffmpeg = path/"bin"/"ffmpeg.exe";
 					}
 				}
 
 				if (!ffmpeg.exists()) {
 					tlog::info() << "FFmpeg not found. Downloading FFmpeg...";
-					do_system((root_dir/"scripts"/"download_ffmpeg.bat").str());
+					do_system((dir/"scripts"/"download_ffmpeg.bat").str());
 				}
 
-				for (const auto& path : fs::directory{root_dir/"external"/"ffmpeg"}) {
+				for (const auto& path : fs::directory{dir/"external"/"ffmpeg"}) {
 					ffmpeg = path/"bin"/"ffmpeg.exe";
 				}
 
@@ -2994,7 +3002,7 @@ void Testbed::init_window(int resw, int resh, bool hidden, bool second_window) {
 	// Instead, we would like to place imgui.ini in the directory that instant-ngp project
 	// resides in.
 	static std::string ini_filename;
-	ini_filename = (get_root_dir()/"imgui.ini").str();
+	ini_filename = (root_dir()/"imgui.ini").str();
 	io.IniFilename = ini_filename.c_str();
 
 	// New ImGui event handling seems to make camera controls laggy if input trickling is true.

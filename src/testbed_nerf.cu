@@ -2683,10 +2683,7 @@ void Testbed::load_nerf(const fs::path& data_path) {
 
 		// Check if the NeRF network has been previously configured.
 		// If it has not, don't reset it.
-		bool previously_configured = !m_network_config["rgb_network"].is_null()
-		                          && !m_network_config["dir_encoding"].is_null();
-
-		if (m_nerf.training.dataset.aabb_scale != prev_aabb_scale && previously_configured) {
+		if (m_nerf.training.dataset.aabb_scale != prev_aabb_scale && m_nerf_network) {
 			// The AABB scale affects network size indirectly. If it changed after loading,
 			// we need to reset the previously configured network to keep a consistent internal state.
 			reset_network();

@@ -86,6 +86,7 @@ if __name__ == "__main__":
 		print("Warning: the '--mode' argument is no longer in use. It has no effect. The mode is automatically chosen based on the scene.")
 
 	testbed = ngp.Testbed()
+	testbed.root_dir = ROOT_DIR
 
 	for file in args.files:
 		scene_info = get_scene(file)

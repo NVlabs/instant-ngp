@@ -529,6 +529,10 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("crop_box", &Testbed::crop_box, py::arg("nerf_space") = true)
 		.def("set_crop_box", &Testbed::set_crop_box, py::arg("matrix"), py::arg("nerf_space") = true)
 		.def("crop_box_corners", &Testbed::crop_box_corners, py::arg("nerf_space") = true)
+		.def_property("root_dir",
+			[](py::object& obj) { return obj.cast<Testbed&>().root_dir().str(); },
+			[](const py::object& obj, const std::string& value) { obj.cast<Testbed&>().m_root_dir = value; }
+		)
 		;
 
 	py::class_<Lens> lens(m, "Lens");

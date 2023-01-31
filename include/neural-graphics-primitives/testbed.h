@@ -496,6 +496,8 @@ public:
 	void compute_and_save_marching_cubes_mesh(const char* filename, Eigen::Vector3i res3d = Eigen::Vector3i::Constant(128), BoundingBox aabb = {}, float thresh = 2.5f, bool unwrap_it = false);
 	Eigen::Vector3i compute_and_save_png_slices(const char* filename, int res, BoundingBox aabb = {}, float thresh = 2.5f, float density_range = 4.f, bool flip_y_and_z_axes = false);
 
+	fs::path root_dir();
+
 	////////////////////////////////////////////////////////////////
 	// marching cubes related state
 	struct MeshState {
@@ -934,6 +936,8 @@ public:
 		char snapshot_path[MAX_PATH_LEN] = "base.ingp";
 		char video_path[MAX_PATH_LEN] = "video.mp4";
 	} m_imgui;
+
+	fs::path m_root_dir = "";
 
 	bool m_visualize_unit_cube = false;
 	bool m_edit_render_aabb = false;

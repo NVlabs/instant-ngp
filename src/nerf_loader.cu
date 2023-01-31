@@ -744,6 +744,7 @@ void NerfDataset::set_training_image(int frame_idx, const Eigen::Vector2i& image
 	if (frame_idx < 0 || frame_idx >= n_images) {
 		throw std::runtime_error{"NerfDataset::set_training_image: invalid frame index"};
 	}
+
 	size_t n_pixels = image_resolution.prod();
 	size_t img_size = n_pixels * 4; // 4 channels
 	size_t image_type_stride = image_type_size(image_type);
