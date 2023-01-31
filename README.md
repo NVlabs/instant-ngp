@@ -33,13 +33,14 @@ If you use Linux, or want the [developer Python bindings](https://github.com/NVl
 <img src="docs/assets_readme/testbed.png" width="100%"/>
 
 __instant-ngp__ comes with an interactive GUI that includes many features:
-- [comprehensive controls](https://github.com/NVlabs/instant-ngp#gui-controls) for interactively exploring neural graphics primitives,
+- [comprehensive controls](https://github.com/NVlabs/instant-ngp#keyboard-shortcuts-and-recommended-controls) for interactively exploring neural graphics primitives,
 - [VR mode](https://github.com/NVlabs/instant-ngp#vr-controls) for viewing neural graphics primitives through a virtual-reality headset,
 - saving and loading "snapshots" so you can share your graphics primitives on the internet,
 - a camera path editor to create videos,
 - `NeRF->Mesh` and `SDF->Mesh` conversion,
 - camera pose and lens optimization,
 - and many more.
+
 
 ### NeRF fox
 
@@ -82,9 +83,7 @@ instant-ngp$ ./instant-ngp data/image/tokyo.bin
 
 ### Volume renderer
 
-Download the [nanovdb volume for the Disney cloud](https://drive.google.com/drive/folders/1SuycSAOSG64k2KLV7oWgyNWyCvZAkafK?usp=sharing), which is derived [from here](https://disneyanimation.com/data-sets/?drawer=/resources/clouds/) ([CC BY-SA 3.0](https://media.disneyanimation.com/uploads/production/data_set_asset/6/asset/License_Cloud.pdf)).
-
-Then drag `wdas_cloud_quarter.nvdb` into the window or use the command:
+Download the [nanovdb volume for the Disney cloud](https://drive.google.com/drive/folders/1SuycSAOSG64k2KLV7oWgyNWyCvZAkafK?usp=sharing), which is derived [from here](https://disneyanimation.com/data-sets/?drawer=/resources/clouds/) ([CC BY-SA 3.0](https://media.disneyanimation.com/uploads/production/data_set_asset/6/asset/License_Cloud.pdf)). Then drag `wdas_cloud_quarter.nvdb` into the window or use the command:
 
 ```sh
 instant-ngp$ ./instant-ngp wdas_cloud_quarter.nvdb
@@ -119,7 +118,7 @@ First, note that this GUI can be moved and resized, as can the "Camera path" GUI
 
 Recommended user controls in __instant-ngp__ are:
 
-* __Snapshot:__ use Save to save the trained NeRF, Load to reload. Necessary if you want to make an animation.
+* __Snapshot:__ use "Save" to save the trained NeRF, "Load" to reload.
 * __Rendering -> DLSS:__ toggling this on and setting "DLSS sharpening" to 1.0 can often improve rendering quality.
 * __Rendering -> Crop size:__ trim back the surrounding environment to focus on the model. "Crop aabb" lets you move the center of the volume of interest and fine tune. See more about this feature in [our NeRF training & dataset tips](https://github.com/NVlabs/instant-ngp/blob/master/docs/nerf_dataset_tips.md).
 
@@ -137,6 +136,8 @@ To view the neural graphics primitive in VR, first start your VR runtime. This w
 - Any OpenXR-compatible runtime will work.
 
 Then, press the __View in VR/AR headset__ button in the __instant-ngp__ GUI and put on your headset.
+Before entering VR, we **strongly** recommend that you first finish training (press "Stop training") or load a pre-trained snapshot for maximum performance.
+
 In VR, you have the following controls.
 
 | Control                | Meaning       |
