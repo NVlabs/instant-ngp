@@ -12,22 +12,20 @@ In each case, we train and render a MLP with multiresolution hash input encoding
 > _ACM Transactions on Graphics (__SIGGRAPH__), July 2022_  
 > __[Project page](https://nvlabs.github.io/instant-ngp)&nbsp;/ [Paper](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.pdf)&nbsp;/ [Video](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.mp4)&nbsp;/ [Presentation](https://tom94.net/data/publications/mueller22instant/mueller22instant-gtc.mp4)&nbsp;/ [Real-Time Live](https://tom94.net/data/publications/mueller22instant/mueller22instant-rtl.mp4)&nbsp;/ [BibTeX](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.bib)__
 
-To get started with NVIDIA Instant NeRF, check out the [blog post](https://developer.nvidia.com/blog/getting-started-with-nvidia-instant-nerfs/) and [SIGGRAPH tutorial](https://www.nvidia.com/en-us/on-demand/session/siggraph2022-sigg22-s-16/).
-
 For business inquiries, please submit the [NVIDIA research licensing form](https://www.nvidia.com/en-us/research/inquiries/).
 
 
 ## Installation
 
-If you have Windows, download one of the following releases corresponding to your graphics card and extract it.
+If you have Windows, download one of the following releases corresponding to your graphics card and extract it. Then, start `instant-ngp.exe`.
 
 - [**RTX 3000 & 4000 series, RTX A4000&ndash;A6000**, and other Ampere & Ada cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-RTX-3000-and-4000.zip)
 - [**RTX 2000 series, Titan RTX, Quadro RTX 4000&ndash;8000**, and other Turing cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-RTX-2000.zip)
 - [**GTX 1000 series, Titan Xp, Quadro P1000&ndash;P6000**, and other Pascal cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-GTX-1000.zip)
 
-Then, keep reading for a guided tour of the application or jump to our instructions for [__creating your own NeRF__](docs/nerf_dataset_tips.md).
+Keep reading for a guided tour of the application or, if you are interested in creating your own NeRF, watch [the video tutorial](https://www.youtube.com/watch?v=3TWxO1PftMc) or read the [written instructions for creating your own NeRF](docs/nerf_dataset_tips.md).
 
-If you use Linux, or want the [developer Python bindings](https://github.com/NVlabs/instant-ngp#python-bindings), or if your GPU is not listed above (e.g. Hopper, Volta, or Maxwell generations), follow the [step-by-step instructions to build __instant-ngp__ yourself](https://github.com/NVlabs/instant-ngp#building-instant-ngp-windows--linux).
+If you use Linux, or want the [developer Python bindings](https://github.com/NVlabs/instant-ngp#python-bindings), or if your GPU is not listed above (e.g. Hopper, Volta, or Maxwell generations), you need to [build __instant-ngp__ yourself](https://github.com/NVlabs/instant-ngp#building-instant-ngp-windows--linux).
 
 
 ## Usage
@@ -36,22 +34,21 @@ If you use Linux, or want the [developer Python bindings](https://github.com/NVl
 
 <img src="docs/assets_readme/testbed.png" width="100%"/>
 
-__instant-ngp__ comes with an interactive GUI that includes many features beyond our academic publication:
-- VR mode for viewing neural graphics primitives through a virtual-reality headset.
-- Save and load trained neural graphics primitives ("Snapshot") so you can share them on the internet.
-- Additional training features, such as extrinsics and intrinsics optimization.
-- Marching cubes for `NeRF->Mesh` and `SDF->Mesh` conversion.
-- A spline-based camera path editor to create videos.
-- Debug visualizations of the activations of every neuron input and output.
-- And many more task-specific settings.
-- See also our [one minute demonstration video of the tool](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.mp4).
+__instant-ngp__ comes with an interactive GUI that includes many features beyond our academic publication, including
+- [comprehensive controls](https://github.com/NVlabs/instant-ngp#gui-controls) for interactively exploring neural graphics primitives,
+- [VR mode](https://github.com/NVlabs/instant-ngp#vr-controls) for viewing neural graphics primitives through a virtual-reality headset,
+- saving and loading "snapshots" so you can share your graphics primitives on the internet,
+- a camera path editor to create videos,
+- `NeRF->Mesh` and `SDF->Mesh` conversion,
+- camera pose and lens optimization,
+- and many more.
 
-Let's start using __instant-ngp__; more information about the GUI and other scripts follow these test scenes.
+See also our [one minute demonstration video of the tool](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.mp4).
+
 
 ### NeRF fox
 
-One test scene is provided in this repository, using a small number of frames from a casually captured phone video.
-Simply start `instant-ngp` and drag the `data/nerf/fox` folder into the GUI. Or, alternatively, use the command line:
+Simply start `instant-ngp` and drag the `data/nerf/fox` folder into the window. Or, alternatively, use the command line:
 
 ```sh
 instant-ngp$ ./instant-ngp data/nerf/fox
@@ -70,7 +67,7 @@ instant-ngp$ ./instant-ngp data/nerf_synthetic/lego/transforms_train.json
 
 ### SDF armadillo
 
-Drag `data/sdf/armadillo.obj` into the GUI or use the command:
+Drag `data/sdf/armadillo.obj` into the window or use the command:
 
 ```sh
 instant-ngp$ ./instant-ngp data/sdf/armadillo.obj
@@ -80,7 +77,7 @@ instant-ngp$ ./instant-ngp data/sdf/armadillo.obj
 
 ### Image of Einstein
 
-Drag `data/image/albert.exr` into the GUI or use the command:
+Drag `data/image/albert.exr` into the window or use the command:
 
 ```sh
 instant-ngp$ ./instant-ngp data/image/albert.exr
@@ -99,7 +96,7 @@ instant-ngp$ ./instant-ngp data/image/tokyo.bin
 
 Download the [nanovdb volume for the Disney cloud](https://drive.google.com/drive/folders/1SuycSAOSG64k2KLV7oWgyNWyCvZAkafK?usp=sharing), which is derived [from here](https://disneyanimation.com/data-sets/?drawer=/resources/clouds/) ([CC BY-SA 3.0](https://media.disneyanimation.com/uploads/production/data_set_asset/6/asset/License_Cloud.pdf)).
 
-Then drag `wdas_cloud_quarter.nvdb` into the GUI or use the command:
+Then drag `wdas_cloud_quarter.nvdb` into the window or use the command:
 
 ```sh
 instant-ngp$ ./instant-ngp wdas_cloud_quarter.nvdb
@@ -142,6 +139,25 @@ The "Camera path" GUI lets you create a camera path for rendering a video.
 The button "Add from cam" inserts keyframes from the current perspective.
 Then, you can render a video `.mp4` of your camera path or export the keyframes to a `.json` file.
 There is a bit more information about the GUI [in this post](https://developer.nvidia.com/blog/getting-started-with-nvidia-instant-nerfs/) and [in this video guide to creating your own video](https://www.youtube.com/watch?v=3TWxO1PftMc).
+
+
+### VR controls
+
+To view the neural graphics primitive in VR, first start your VR runtime. This will most likely be either
+- __OculusVR__ if you have an Oculus Rift or Meta Quest (with link cable) headset, and
+- __SteamVR__ if you have another headset.
+- Any OpenXR-compatible runtime will work.
+
+Then, press the __View in VR/AR headset__ button in the __instant-ngp__ GUI and put on your headset.
+In VR, you have the following controls.
+
+| Control                | Meaning       |
+| :--------------------: | ------------- |
+| Left stick / trackpad  | Move |
+| Right stick / trackpad | Turn camera |
+| Press stick / trackpad | Erase NeRF around the hand |
+| Grab (one-handed)      | Drag neural graphics primitive |
+| Grab (two-handed)      | Rotate and zoom (like pinch-to-zoom on a smartphone) |
 
 
 ## Building instant-ngp (Windows & Linux)
@@ -207,7 +223,6 @@ If automatic GPU architecture detection fails, (as can happen if you have multip
 |   90 |   89 |   86 |   80 |   75 |             70 |              61 |  52 |  37 |
 
 
-
 ## Python bindings
 
 After you have built __instant-ngp__, you can use its Python bindings to conduct controlled experiments in an automated fashion.
@@ -217,6 +232,12 @@ For an example of how the `./instant-ngp` application can be implemented and ext
 If you would rather build new models from the hash encoding and fast neural networks, consider [__tiny-cuda-nn__'s PyTorch extension](https://github.com/nvlabs/tiny-cuda-nn#pytorch-extension).
 
 Happy hacking!
+
+
+## Additional resources
+
+- [Getting started with NVIDIA Instant NeRF blog post](https://developer.nvidia.com/blog/getting-started-with-nvidia-instant-nerfs/)
+- [SIGGRAPH tutorial for advanced NeRF dataset creation](https://www.nvidia.com/en-us/on-demand/session/siggraph2022-sigg22-s-16/).
 
 
 ## Frequently asked questions (FAQ)
