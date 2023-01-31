@@ -23,18 +23,16 @@ If you have Windows, download one of the following releases corresponding to you
 - [**RTX 2000 series, Titan RTX, Quadro RTX 4000&ndash;8000**, and other Turing cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-RTX-2000.zip)
 - [**GTX 1000 series, Titan Xp, Quadro P1000&ndash;P6000**, and other Pascal cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-GTX-1000.zip)
 
-Keep reading for a guided tour of the application or, if you are interested in creating your own NeRF, watch [the video tutorial](https://www.youtube.com/watch?v=3TWxO1PftMc) or read the [written instructions for creating your own NeRF](docs/nerf_dataset_tips.md).
+Keep reading for a guided tour of the application or, if you are interested in creating your own NeRF, watch [the video tutorial](https://www.youtube.com/watch?v=3TWxO1PftMc) or read the [written instructions](docs/nerf_dataset_tips.md).
 
 If you use Linux, or want the [developer Python bindings](https://github.com/NVlabs/instant-ngp#python-bindings), or if your GPU is not listed above (e.g. Hopper, Volta, or Maxwell generations), you need to [build __instant-ngp__ yourself](https://github.com/NVlabs/instant-ngp#building-instant-ngp-windows--linux).
 
 
 ## Usage
 
-### Graphical user interface
-
 <img src="docs/assets_readme/testbed.png" width="100%"/>
 
-__instant-ngp__ comes with an interactive GUI that includes many features beyond our academic publication, including
+__instant-ngp__ comes with an interactive GUI that includes many features:
 - [comprehensive controls](https://github.com/NVlabs/instant-ngp#gui-controls) for interactively exploring neural graphics primitives,
 - [VR mode](https://github.com/NVlabs/instant-ngp#vr-controls) for viewing neural graphics primitives through a virtual-reality headset,
 - saving and loading "snapshots" so you can share your graphics primitives on the internet,
@@ -42,9 +40,6 @@ __instant-ngp__ comes with an interactive GUI that includes many features beyond
 - `NeRF->Mesh` and `SDF->Mesh` conversion,
 - camera pose and lens optimization,
 - and many more.
-
-See also our [one minute demonstration video of the tool](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.mp4).
-
 
 ### NeRF fox
 
@@ -56,14 +51,7 @@ instant-ngp$ ./instant-ngp data/nerf/fox
 
 <img src="docs/assets_readme/fox.png"/>
 
-Alternatively, download any NeRF-compatible scene (e.g. from the [NeRF authors' drive](https://drive.google.com/drive/folders/1JDdLGDruGNXWnM1eqY1FNL9PlStjaKWi), the [SILVR dataset](https://github.com/IDLabMedia/large-lightfields-dataset), or the [DroneDeploy dataset](https://github.com/nickponline/dd-nerf-dataset)).
-Now you can run:
-
-```sh
-instant-ngp$ ./instant-ngp data/nerf_synthetic/lego/transforms_train.json
-```
-
-**[To prepare your own dataset for use with our NeRF implementation, click here.](docs/nerf_dataset_tips.md)** See also [this video](https://www.youtube.com/watch?v=3TWxO1PftMc) for a guided walkthrough.
+You can use __any__ NeRF-compatible dataset, e.g. from [original NeRF](https://drive.google.com/drive/folders/1JDdLGDruGNXWnM1eqY1FNL9PlStjaKWi), the [SILVR dataset](https://github.com/IDLabMedia/large-lightfields-dataset), or the [DroneDeploy dataset](https://github.com/nickponline/dd-nerf-dataset). **To create your own NeRF, watch [the video tutorial](https://www.youtube.com/watch?v=3TWxO1PftMc) or read the [written instructions](docs/nerf_dataset_tips.md).**
 
 ### SDF armadillo
 
