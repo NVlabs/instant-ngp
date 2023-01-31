@@ -26,31 +26,22 @@
 
 NGP_NAMESPACE_BEGIN
 
-template <typename T>
-__device__ Eigen::Array4f read_envmap(const T* __restrict__ envmap_data, const Eigen::Vector2i envmap_resolution, const Eigen::Vector3f& dir) {
+inline __device__ Eigen::Array4f read_envmap(const Buffer2DView<const Eigen::Array4f>& envmap, const Eigen::Vector3f& dir) {
 	auto dir_cyl = dir_to_spherical_unorm({dir.z(), -dir.x(), dir.y()});
 
-	auto envmap_float = Eigen::Vector2f{dir_cyl.y() * (envmap_resolution.x()-1), dir_cyl.x() * (envmap_resolution.y()-1)};
+	auto envmap_float = Eigen::Vector2f{dir_cyl.y() * (envmap.resolution.x()-1), dir_cyl.x() * (envmap.resolution.y()-1)};
 	Eigen::Vector2i envmap_texel = envmap_float.cast<int>();
 
 	auto weight = envmap_float - envmap_texel.cast<float>();
 
 	auto read_val = [&](Eigen::Vector2i pos) {
 		if (pos.x() < 0) {
-			pos.x() += envmap_resolution.x();
-		} else if (pos.x() >= envmap_resolution.x()) {
-			pos.x() -= envmap_resolution.x();
+			pos.x() += envmap.resolution.x();
+		} else if (pos.x() >= envmap.resolution.x()) {
+			pos.x() -= envmap.resolution.x();
 		}
-		pos.y() = std::max(std::min(pos.y(), envmap_resolution.y()-1), 0);
-
-		Eigen::Array4f result;
-		if (std::is_same<T, float>::value) {
-			result = *(Eigen::Array4f*)&envmap_data[(pos.x() + pos.y() * envmap_resolution.x()) * 4];
-		} else {
-			auto val = *(tcnn::vector_t<T, 4>*)&envmap_data[(pos.x() + pos.y() * envmap_resolution.x()) * 4];
-			result = {(float)val[0], (float)val[1], (float)val[2], (float)val[3]};
-		}
-		return result;
+		pos.y() = std::max(std::min(pos.y(), envmap.resolution.y()-1), 0);
+		return envmap.at(pos);
 	};
 
 	auto result = (

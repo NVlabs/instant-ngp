@@ -28,3 +28,6 @@
 [submodule "dependencies/zlib"]
 	path = dependencies/zlib
 	url = https://github.com/Tom94/zlib
+[submodule "dependencies/OpenXR-SDK"]
+	path = dependencies/OpenXR-SDK
+	url = https://github.com/KhronosGroup/OpenXR-SDK.git

@@ -166,6 +166,7 @@ inline void to_json(nlohmann::json& j, const NerfDataset& dataset) {
 	j["from_mitsuba"] = dataset.from_mitsuba;
 	j["is_hdr"] = dataset.is_hdr;
 	j["wants_importance_sampling"] = dataset.wants_importance_sampling;
+	j["n_extra_learnable_dims"] = dataset.n_extra_learnable_dims;
 }
 
 inline void from_json(const nlohmann::json& j, NerfDataset& dataset) {
@@ -209,11 +210,14 @@ inline void from_json(const nlohmann::json& j, NerfDataset& dataset) {
 	dataset.aabb_scale = j.at("aabb_scale");
 	dataset.from_mitsuba = j.at("from_mitsuba");
 	dataset.is_hdr = j.value("is_hdr", false);
+
 	if (j.contains("wants_importance_sampling")) {
 		dataset.wants_importance_sampling = j.at("wants_importance_sampling");
 	} else {
 		dataset.wants_importance_sampling = true;
 	}
+
+	dataset.n_extra_learnable_dims = j.value("n_extra_learnable_dims", 0);
 }
 
 NGP_NAMESPACE_END

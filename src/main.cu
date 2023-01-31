@@ -62,6 +62,13 @@ int main_func(const std::vector<std::string>& arguments) {
 		{"no-gui"},
 	};
 
+	Flag vr_flag{
+		parser,
+		"VR",
+		"Enables VR",
+		{"vr"}
+	};
+
 	Flag no_train_flag{
 		parser,
 		"NO_TRAIN",
@@ -168,6 +175,10 @@ int main_func(const std::vector<std::string>& arguments) {
 
 	if (gui) {
 		testbed.init_window(width_flag ? get(width_flag) : 1920, height_flag ? get(height_flag) : 1080);
+	}
+
+	if (vr_flag) {
+		testbed.init_vr();
 	}
 
 	// Render/training loop
