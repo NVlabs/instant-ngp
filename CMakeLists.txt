@@ -334,18 +334,16 @@ target_link_libraries(instant-ngp PRIVATE ngp)
 # Copy DLSS shared libraries
 if (NGP_VULKAN)
 	set(NGX_BUILD_DIR "$<IF:$<CONFIG:Debug>,dev,rel>")
-
 	if (MSVC)
-		add_custom_command(TARGET instant-ngp POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/${NGX_BUILD_DIR}/nvngx_dlss.dll" $<TARGET_FILE_DIR:instant-ngp>
-			COMMAND_EXPAND_LISTS
-		)
+		set(NGX_SHARED_LIB "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/${NGX_BUILD_DIR}/nvngx_dlss.dll")
 	else()
-		add_custom_command(TARGET instant-ngp POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64/${NGX_BUILD_DIR}/libnvidia-ngx-dlss.so.*" $<TARGET_FILE_DIR:instant-ngp>
-			COMMAND_EXPAND_LISTS
-		)
+		set(NGX_SHARED_LIB "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64/${NGX_BUILD_DIR}/libnvidia-ngx-dlss.so.*")
 	endif()
+
+	add_custom_command(TARGET instant-ngp POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy "${NGX_SHARED_LIB}" $<TARGET_FILE_DIR:instant-ngp>
+		COMMAND_EXPAND_LISTS
+	)
 endif()
 
 if (MSVC)
@@ -373,7 +371,9 @@ set(NGP_BINARY_FILE "\"${CMAKE_CURRENT_SOURCE_DIR}/$<TARGET_FILE_NAME:instant-ng
 if (MSVC)
 	add_custom_command(TARGET instant-ngp POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:instant-ngp> ${CMAKE_CURRENT_SOURCE_DIR})
 	file(GLOB NGP_REQUIRED_DLLS "${CUDA_COMPILER_BIN}/cudart64*.dll")
-	list(APPEND NGP_REQUIRED_DLLS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/${NGX_BUILD_DIR}/nvngx_dlss.dll")
+	if (NGP_VULKAN)
+		list(APPEND NGP_REQUIRED_DLLS "${NGX_SHARED_LIB}")
+	endif()
 	if (NGP_REQUIRED_DLLS)
 		add_custom_command(TARGET instant-ngp POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E copy ${NGP_REQUIRED_DLLS} ${CMAKE_CURRENT_SOURCE_DIR}
