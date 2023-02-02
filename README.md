@@ -135,7 +135,7 @@ To view the neural graphics primitive in VR, first start your VR runtime. This w
 - __SteamVR__ if you have another headset.
 - Any OpenXR-compatible runtime will work.
 
-Then, press the __View in VR/AR headset__ button in the __instant-ngp__ GUI and put on your headset.
+Then, press the __Connect to VR/AR headset__ button in the __instant-ngp__ GUI and put on your headset.
 Before entering VR, we **strongly** recommend that you first finish training (press "Stop training") or load a pre-trained snapshot for maximum performance.
 
 In VR, you have the following controls.
