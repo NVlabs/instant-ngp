@@ -47,6 +47,21 @@
 
 NGP_NAMESPACE_BEGIN
 
+enum class EnvironmentBlendMode {
+	Opaque = XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
+	Additive = XR_ENVIRONMENT_BLEND_MODE_ADDITIVE,
+	AlphaBlend = XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND,
+};
+
+inline std::string to_string(EnvironmentBlendMode mode) {
+	switch (mode) {
+		case EnvironmentBlendMode::Opaque: return "Opaque";
+		case EnvironmentBlendMode::Additive: return "Additive";
+		case EnvironmentBlendMode::AlphaBlend: return "Blend";
+		default: throw std::runtime_error{"Invalid blend mode."};
+	}
+}
+
 class OpenXRHMD {
 public:
 	enum class ControlFlow {
@@ -108,6 +123,22 @@ public:
 	// must be called for each begin_frame
 	void end_frame(FrameInfoPtr frame_info, float znear, float zfar);
 
+	void set_environment_blend_mode(EnvironmentBlendMode mode) {
+		m_environment_blend_mode = mode;
+	}
+
+	EnvironmentBlendMode environment_blend_mode() const {
+		return m_environment_blend_mode;
+	}
+
+	const std::vector<EnvironmentBlendMode>& supported_environment_blend_modes() const {
+		return m_supported_environment_blend_modes;
+	}
+
+	const std::string& supported_environment_blend_modes_string() const {
+		return m_supported_environment_blend_modes_string;
+	}
+
 	// if true call begin_frame and end_frame - does not imply visibility
 	bool must_run_frame_loop() const {
 		return
@@ -161,8 +192,9 @@ private:
 	XrViewConfigurationType m_view_configuration_type = {};
 	XrViewConfigurationProperties m_view_configuration_properties = {XR_TYPE_VIEW_CONFIGURATION_PROPERTIES};
 	std::vector<XrViewConfigurationView> m_view_configuration_views;
-	std::vector<XrEnvironmentBlendMode> m_environment_blend_modes;
-	XrEnvironmentBlendMode m_environment_blend_mode = {XR_ENVIRONMENT_BLEND_MODE_OPAQUE};
+	std::vector<EnvironmentBlendMode> m_supported_environment_blend_modes;
+	std::string m_supported_environment_blend_modes_string;
+	EnvironmentBlendMode m_environment_blend_mode = EnvironmentBlendMode::Opaque;
 
 	// actions
 	std::array<XrPath, 2> m_hand_paths;

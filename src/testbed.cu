@@ -925,16 +925,32 @@ void Testbed::imgui() {
 					ImGui::OpenPopup("Error");
 				}
 			}
-		} else if (ImGui::TreeNodeEx("VR/AR settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			if (m_devices.size() > 1 && m_testbed_mode == ETestbedMode::Nerf) {
-				ImGui::Checkbox("Multi-GPU rendering (one per eye)", &m_use_aux_devices);
-			}
+		} else {
+			if (ImGui::Button("Disconnect from VR/AR headset")) {
+				m_hmd.reset();
+				m_vr_frame_info = nullptr;
+				m_render_transparency_as_checkerboard = false;
+			} else if (ImGui::TreeNodeEx("VR/AR settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+				static int blend_mode_idx = 0;
+				const auto& supported_blend_modes = m_hmd->supported_environment_blend_modes();
+				if (supported_blend_modes.size() > 1) {
+					if (ImGui::Combo("Environment blend mode", &blend_mode_idx, m_hmd->supported_environment_blend_modes_string().c_str())) {
+						auto b = m_hmd->supported_environment_blend_modes().at(blend_mode_idx);
+						m_hmd->set_environment_blend_mode(b);
+						m_render_transparency_as_checkerboard = (b == EnvironmentBlendMode::Opaque);
+					}
+				}
 
-			accum_reset |= ImGui::Checkbox("Foveated rendering", &m_foveated_rendering) && !m_dlss;
-			if (m_foveated_rendering) {
-				accum_reset |= ImGui::SliderFloat("Maximum foveation", &m_foveated_rendering_max_scaling, 1.0f, 16.0f, "%.01f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat) && !m_dlss;
+				if (m_devices.size() > 1 && m_testbed_mode == ETestbedMode::Nerf) {
+					ImGui::Checkbox("Multi-GPU rendering (one per eye)", &m_use_aux_devices);
+				}
+
+				accum_reset |= ImGui::Checkbox("Foveated rendering", &m_foveated_rendering) && !m_dlss;
+				if (m_foveated_rendering) {
+					accum_reset |= ImGui::SliderFloat("Maximum foveation", &m_foveated_rendering_max_scaling, 1.0f, 16.0f, "%.01f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat) && !m_dlss;
+				}
+				ImGui::TreePop();
 			}
-			ImGui::TreePop();
 		}
 
 		ImGui::Checkbox("Render", &m_render);
@@ -3144,7 +3160,7 @@ bool Testbed::frame() {
 		ImGui::EndFrame();
 	}
 
-	if (m_vr_frame_info) {
+	if (m_hmd && m_vr_frame_info) {
 		// If HMD is visible to the user, splat rendered images to the HMD
 		if (m_hmd->is_visible()) {
 			size_t n_views = std::min(m_views.size(), m_vr_frame_info->views.size());
@@ -4186,7 +4202,7 @@ void Testbed::render_frame_epilogue(
 		Matrix<float, 3, 4> checkerboard_transform = Matrix<float, 3, 4>::Identity();
 
 #if NGP_GUI
-		if (m_vr_frame_info && !m_vr_frame_info->views.empty()) {
+		if (m_hmd && m_vr_frame_info && !m_vr_frame_info->views.empty()) {
 			checkerboard_transform = m_vr_frame_info->views[0].pose;
 		}
 #endif
@@ -4266,7 +4282,7 @@ void Testbed::render_frame_epilogue(
 
 #if NGP_GUI
 	// If in VR, indicate the hand position and render transparent background
-	if (m_vr_frame_info) {
+	if (m_hmd && m_vr_frame_info) {
 		auto& hands = m_vr_frame_info->hands;
 
 		auto res = render_buffer.out_resolution();

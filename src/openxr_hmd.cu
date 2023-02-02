@@ -425,34 +425,39 @@ void OpenXRHMD::init_check_for_xr_blend_mode() {
 	// enumerate environment blend modes
 	uint32_t size;
 	XR_CHECK_THROW(xrEnumerateEnvironmentBlendModes(m_instance, m_system_id, m_view_configuration_type, 0, &size, nullptr));
-	m_environment_blend_modes.resize(size);
+	std::vector<XrEnvironmentBlendMode> supported_blend_modes(size);
 	XR_CHECK_THROW(xrEnumerateEnvironmentBlendModes(
 		m_instance,
 		m_system_id,
 		m_view_configuration_type,
 		size,
 		&size,
-		m_environment_blend_modes.data()
+		supported_blend_modes.data()
 	));
 
+	if (supported_blend_modes.empty()) {
+		throw std::runtime_error{"No OpenXR environment blend modes found"};
+	}
+
 	if (m_print_environment_blend_modes) {
-		tlog::info() << fmt::format("Environment Blend Modes ({}):", m_environment_blend_modes.size());
+		tlog::info() << fmt::format("Environment Blend Modes ({}):", supported_blend_modes.size());
 	}
 
-	bool found = false;
-	for (const auto& m : m_environment_blend_modes) {
+	m_supported_environment_blend_modes.resize(size);
+	m_supported_environment_blend_modes_string = "";
+	for (size_t i = 0; i < supported_blend_modes.size(); ++i) {
 		if (m_print_environment_blend_modes) {
-			tlog::info() << fmt::format("\t{}", XrEnumStr(m));
+			tlog::info() << fmt::format("\t{}", XrEnumStr(supported_blend_modes[i]));
 		}
 
-		if (m == m_environment_blend_mode) {
-			found = true;
-		}
+		auto b = (EnvironmentBlendMode)supported_blend_modes[i];
+		m_supported_environment_blend_modes[i] = b;
+		m_supported_environment_blend_modes_string += to_string(b) + "\0";
 	}
 
-	if (!found) {
-		throw std::runtime_error{fmt::format("OpenXR environment blend mode {} not found", XrEnumStr(m_environment_blend_mode))};
-	}
+	m_supported_environment_blend_modes_string += "\0";
+
+	m_environment_blend_mode = m_supported_environment_blend_modes.front();
 }
 
 void OpenXRHMD::init_xr_actions() {
@@ -1236,7 +1241,7 @@ void OpenXRHMD::end_frame(FrameInfoPtr frame_info, float znear, float zfar) {
 
 	XrFrameEndInfo frame_end_info{XR_TYPE_FRAME_END_INFO};
 	frame_end_info.displayTime = m_frame_state.predictedDisplayTime;
-	frame_end_info.environmentBlendMode = m_environment_blend_mode;
+	frame_end_info.environmentBlendMode = (XrEnvironmentBlendMode)m_environment_blend_mode;
 	frame_end_info.layerCount = (uint32_t)layers.size();
 	frame_end_info.layers = layers.data();
 	XR_CHECK_THROW(xrEndFrame(m_session, &frame_end_info));
