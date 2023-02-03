@@ -946,10 +946,12 @@ void Testbed::imgui() {
 					ImGui::Checkbox("Multi-GPU rendering (one per eye)", &m_use_aux_devices);
 				}
 
+				accum_reset |= ImGui::Checkbox("Depth-based reprojection", &m_vr_depth_reproject);
 				accum_reset |= ImGui::Checkbox("Foveated rendering", &m_foveated_rendering) && !m_dlss;
 				if (m_foveated_rendering) {
 					accum_reset |= ImGui::SliderFloat("Maximum foveation", &m_foveated_rendering_max_scaling, 1.0f, 16.0f, "%.01f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat) && !m_dlss;
 				}
+
 				ImGui::TreePop();
 			}
 		}
@@ -3202,7 +3204,7 @@ bool Testbed::frame() {
 		// Far and near planes are intentionally reversed, because we map depth inversely
 		// to z. I.e. a window-space depth of 1 refers to the near plane and a depth of 0
 		// to the far plane. This results in much better numeric precision.
-		m_hmd->end_frame(m_vr_frame_info, m_ndc_zfar / m_scale, m_ndc_znear / m_scale);
+		m_hmd->end_frame(m_vr_frame_info, m_ndc_zfar / m_scale, m_ndc_znear / m_scale, m_vr_depth_reproject);
 	}
 #endif
 

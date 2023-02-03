@@ -121,7 +121,7 @@ public:
 	// begin OpenXR frame, return views to render
 	FrameInfoPtr begin_frame();
 	// must be called for each begin_frame
-	void end_frame(FrameInfoPtr frame_info, float znear, float zfar);
+	void end_frame(FrameInfoPtr frame_info, float znear, float zfar, bool submit_depth);
 
 	void set_environment_blend_mode(EEnvironmentBlendMode mode) {
 		m_environment_blend_mode = mode;

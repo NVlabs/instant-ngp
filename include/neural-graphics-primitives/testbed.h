@@ -604,6 +604,8 @@ public:
 
 	std::unique_ptr<OpenXRHMD> m_hmd;
 	OpenXRHMD::FrameInfoPtr m_vr_frame_info;
+	bool m_vr_depth_reproject = false;
+
 	void init_vr();
 	void update_vr_performance_settings();
 	void set_n_views(size_t n_views);

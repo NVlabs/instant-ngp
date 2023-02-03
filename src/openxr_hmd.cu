@@ -1208,7 +1208,7 @@ OpenXRHMD::FrameInfoPtr OpenXRHMD::begin_frame() {
 	return frame_info;
 }
 
-void OpenXRHMD::end_frame(FrameInfoPtr frame_info, float znear, float zfar) {
+void OpenXRHMD::end_frame(FrameInfoPtr frame_info, float znear, float zfar, bool submit_depth) {
 	std::vector<XrCompositionLayerProjectionView> layer_projection_views(frame_info->views.size());
 	for (size_t i = 0; i < layer_projection_views.size(); ++i) {
 		auto& v = frame_info->views[i];
@@ -1224,11 +1224,14 @@ void OpenXRHMD::end_frame(FrameInfoPtr frame_info, float znear, float zfar) {
 			XR_CHECK_THROW(xrReleaseSwapchainImage(v.depth_info.subImage.swapchain, &release_info));
 			v.depth_info.nearZ = znear;
 			v.depth_info.farZ = zfar;
-			// The following line being commented means that our provided depth buffer
-			// _isn't_ actually passed to the runtime for reprojection. So far,
-			// experimentation has shown that runtimes do a better job at reprojection
-			// without getting a depth buffer from us, so we leave it disabled for now.
-			// view.next = &v.depth_info;
+
+			// Submitting the depth buffer to the runtime for reprojection is optional,
+			// because, while depth-based reprojection can make the experience smoother,
+			// it also results in distortion around geometric edges. Many users prefer
+			// a more stuttery experience without this distortion.
+			if (submit_depth) {
+				view.next = &v.depth_info;
+			}
 		}
 	}
 
