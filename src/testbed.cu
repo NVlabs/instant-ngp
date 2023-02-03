@@ -929,7 +929,7 @@ void Testbed::imgui() {
 			if (ImGui::Button("Disconnect from VR/AR headset")) {
 				m_hmd.reset();
 				m_vr_frame_info = nullptr;
-				m_render_transparency_as_checkerboard = false;
+				update_vr_performance_settings();
 			} else if (ImGui::TreeNodeEx("VR/AR settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 				static int blend_mode_idx = 0;
 				const auto& supported_blend_modes = m_hmd->supported_environment_blend_modes();
@@ -937,7 +937,7 @@ void Testbed::imgui() {
 					if (ImGui::Combo("Environment", &blend_mode_idx, m_hmd->supported_environment_blend_modes_imgui_string())) {
 						auto b = m_hmd->supported_environment_blend_modes().at(blend_mode_idx);
 						m_hmd->set_environment_blend_mode(b);
-						m_render_transparency_as_checkerboard = (b == EnvironmentBlendMode::Opaque);
+						update_vr_performance_settings();
 					}
 				}
 
@@ -2847,33 +2847,51 @@ void Testbed::init_vr() {
 		m_hmd = std::make_unique<OpenXRHMD>(glfwGetWaylandDisplay());
 #endif
 
-		// DLSS + sharpening is instrumental in getting VR to look good.
-		if (m_dlss_provider) {
-			m_dlss = true;
-			m_foveated_rendering = true;
-
-			// VERY aggressive performance settings (detriment to quality)
-			// to allow maintaining VR-adequate frame rates.
-			m_nerf.render_min_transmittance = 0.2f;
-		}
+		// Enable aggressive optimizations to make the VR experience smooth.
+		update_vr_performance_settings();
 
 		// If multiple GPUs are available, shoot for 60 fps in VR.
 		// Otherwise, it wouldn't be realistic to expect more than 30.
 		m_dynamic_res_target_fps = m_devices.size() > 1 ? 60 : 30;
-
-		// Many VR runtimes perform optical flow for automatic reprojection / motion smoothing.
-		// This breaks down for solid-color background, sometimes leading to artifacts. Hence:
-		// set background color to transparent and, in spherical_checkerboard_kernel(...),
-		// blend a checkerboard. If the user desires a solid background nonetheless, they can
-		// set the background color to have an alpha value of 1.0 manually via the GUI or via Python.
 		m_background_color = {0.0f, 0.0f, 0.0f, 0.0f};
-		m_render_transparency_as_checkerboard = true;
 	} catch (const std::runtime_error& e) {
 		if (std::string{e.what()}.find("XR_ERROR_FORM_FACTOR_UNAVAILABLE") != std::string::npos) {
 			throw std::runtime_error{"Could not initialize VR. Ensure that SteamVR, OculusVR, or any other OpenXR-compatible runtime is running. Also set it as the active OpenXR runtime."};
 		} else {
 			throw std::runtime_error{fmt::format("Could not initialize VR: {}", e.what())};
 		}
+	}
+}
+
+void Testbed::update_vr_performance_settings() {
+	if (m_hmd) {
+		auto blend_mode = m_hmd->environment_blend_mode();
+
+		// DLSS is instrumental in getting VR to look good. Enable if possible.
+		// If the environment is blended in (such as in XR/AR applications),
+		// DLSS causes jittering at object sillhouettes (doesn't deal well with alpha),
+		// and hence stays disabled.
+		m_dlss = (blend_mode == EnvironmentBlendMode::Opaque) && m_dlss_provider;
+
+		// Foveated rendering is similarly vital in getting high performance without losing
+		// resolution in the middle of the view.
+		m_foveated_rendering = true;
+
+		// Large minimum transmittance results in another 20-30% performance increase
+		// at the detriment of some transparent edges. Not super noticeable, though.
+		m_nerf.render_min_transmittance = 0.2f;
+
+		// Many VR runtimes perform optical flow for automatic reprojection / motion smoothing.
+		// This breaks down for solid-color background, sometimes leading to artifacts. Hence:
+		// set background color to transparent and, in spherical_checkerboard_kernel(...),
+		// blend a checkerboard. If the user desires a solid background nonetheless, they can
+		// set the background color to have an alpha value of 1.0 manually via the GUI or via Python.
+		m_render_transparency_as_checkerboard = (blend_mode == EnvironmentBlendMode::Opaque);
+	} else {
+		m_dlss = (m_testbed_mode == ETestbedMode::Nerf) && m_dlss_provider;
+		m_foveated_rendering = false;
+		m_nerf.render_min_transmittance = 0.01f;
+		m_render_transparency_as_checkerboard = false;
 	}
 }
 
