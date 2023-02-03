@@ -211,6 +211,7 @@ void Testbed::set_mode(ETestbedMode mode) {
 	}
 
 	reset_camera();
+	update_vr_performance_settings();
 }
 
 fs::path Testbed::find_network_config(const fs::path& network_config_path) {
