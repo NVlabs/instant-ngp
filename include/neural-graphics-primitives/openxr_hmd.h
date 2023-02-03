@@ -65,9 +65,9 @@ inline std::string to_string(EnvironmentBlendMode mode) {
 class OpenXRHMD {
 public:
 	enum class ControlFlow {
-		CONTINUE,
-		RESTART,
-		QUIT,
+		Continue,
+		Restart,
+		Quit,
 	};
 
 	struct FrameInfo {
@@ -135,8 +135,8 @@ public:
 		return m_supported_environment_blend_modes;
 	}
 
-	const std::string& supported_environment_blend_modes_string() const {
-		return m_supported_environment_blend_modes_string;
+	const char* supported_environment_blend_modes_imgui_string() const {
+		return m_supported_environment_blend_modes_imgui_string.data();
 	}
 
 	// if true call begin_frame and end_frame - does not imply visibility
@@ -193,7 +193,7 @@ private:
 	XrViewConfigurationProperties m_view_configuration_properties = {XR_TYPE_VIEW_CONFIGURATION_PROPERTIES};
 	std::vector<XrViewConfigurationView> m_view_configuration_views;
 	std::vector<EnvironmentBlendMode> m_supported_environment_blend_modes;
-	std::string m_supported_environment_blend_modes_string;
+	std::vector<char> m_supported_environment_blend_modes_imgui_string;
 	EnvironmentBlendMode m_environment_blend_mode = EnvironmentBlendMode::Opaque;
 
 	// actions

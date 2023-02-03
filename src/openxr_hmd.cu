@@ -439,12 +439,13 @@ void OpenXRHMD::init_check_for_xr_blend_mode() {
 		throw std::runtime_error{"No OpenXR environment blend modes found"};
 	}
 
+	std::sort(std::begin(supported_blend_modes), std::end(supported_blend_modes));
 	if (m_print_environment_blend_modes) {
 		tlog::info() << fmt::format("Environment Blend Modes ({}):", supported_blend_modes.size());
 	}
 
-	m_supported_environment_blend_modes.resize(size);
-	m_supported_environment_blend_modes_string = "";
+	m_supported_environment_blend_modes.resize(supported_blend_modes.size());
+	m_supported_environment_blend_modes_imgui_string.clear();
 	for (size_t i = 0; i < supported_blend_modes.size(); ++i) {
 		if (m_print_environment_blend_modes) {
 			tlog::info() << fmt::format("\t{}", XrEnumStr(supported_blend_modes[i]));
@@ -452,11 +453,13 @@ void OpenXRHMD::init_check_for_xr_blend_mode() {
 
 		auto b = (EnvironmentBlendMode)supported_blend_modes[i];
 		m_supported_environment_blend_modes[i] = b;
-		m_supported_environment_blend_modes_string += to_string(b) + "\0";
+
+		auto b_str = to_string(b);
+		std::copy(std::begin(b_str), std::end(b_str), std::back_inserter(m_supported_environment_blend_modes_imgui_string));
+		m_supported_environment_blend_modes_imgui_string.emplace_back('\0');
 	}
 
-	m_supported_environment_blend_modes_string += "\0";
-
+	m_supported_environment_blend_modes_imgui_string.emplace_back('\0');
 	m_environment_blend_mode = m_supported_environment_blend_modes.front();
 }
 
@@ -813,11 +816,11 @@ void OpenXRHMD::session_state_change(XrSessionState state, ControlFlow& flow) {
 			break;
 		}
 		case XR_SESSION_STATE_EXITING: {
-			flow = ControlFlow::QUIT;
+			flow = ControlFlow::Quit;
 			break;
 		}
 		case XR_SESSION_STATE_LOSS_PENDING: {
-			flow = ControlFlow::RESTART;
+			flow = ControlFlow::Restart;
 			break;
 		}
 		default: {
@@ -828,7 +831,7 @@ void OpenXRHMD::session_state_change(XrSessionState state, ControlFlow& flow) {
 
 OpenXRHMD::ControlFlow OpenXRHMD::poll_events() {
 	bool more = true;
-	ControlFlow flow = ControlFlow::CONTINUE;
+	ControlFlow flow = ControlFlow::Continue;
 	while (more) {
 		// poll events
 		XrEventDataBuffer event {XR_TYPE_EVENT_DATA_BUFFER, nullptr};
@@ -849,7 +852,7 @@ OpenXRHMD::ControlFlow OpenXRHMD::poll_events() {
 				}
 
 				case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING: {
-					flow = ControlFlow::RESTART;
+					flow = ControlFlow::Restart;
 					break;
 				}
 

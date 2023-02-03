@@ -934,7 +934,7 @@ void Testbed::imgui() {
 				static int blend_mode_idx = 0;
 				const auto& supported_blend_modes = m_hmd->supported_environment_blend_modes();
 				if (supported_blend_modes.size() > 1) {
-					if (ImGui::Combo("Environment blend mode", &blend_mode_idx, m_hmd->supported_environment_blend_modes_string().c_str())) {
+					if (ImGui::Combo("Environment", &blend_mode_idx, m_hmd->supported_environment_blend_modes_imgui_string())) {
 						auto b = m_hmd->supported_environment_blend_modes().at(blend_mode_idx);
 						m_hmd->set_environment_blend_mode(b);
 						m_render_transparency_as_checkerboard = (b == EnvironmentBlendMode::Opaque);
@@ -2112,7 +2112,7 @@ void Testbed::SecondWindow::draw(GLuint texture) {
 	glfwMakeContextCurrent(window);
 	glfwGetFramebufferSize(window, &display_w, &display_h);
 	glViewport(0, 0, display_w, display_h);
-	glClearColor(0.f,0.f,0.f, 1.f);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glEnable(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, texture);
