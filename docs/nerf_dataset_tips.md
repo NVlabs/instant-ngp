@@ -53,14 +53,12 @@ See [nerf_loader.cu](src/nerf_loader.cu) for implementation details and addition
 
 ## Preparing new NeRF datasets
 
-To train on self-captured data, one has to process the data into an existing format supported by `instant-ngp`. We provide scripts to support three approaches:
+To train on self-captured data, one has to process the data into an existing format supported by __instant-ngp__. We provide scripts to support three approaches:
 - [COLMAP](#COLMAP) to create a dataset from a set of photos or a video you took
-
 - [Record3D](#Record3D) to create a dataset with an iPhone 12 Pro or newer (based on ARKit)
+- [NeRFCapture](#NeRFCapture) to create a dataset or stream posed images directly to __instant-ngp__ with an iOS device.
 
-- [NeRFCapture](#NeRFCapture) to create a dataset or stream posed images directly to `instant-ngp` with an iOS device.
-
-Both require [Python](https://www.python.org/) 3.7 or higher to be installed and available in your PATH.
+All require [Python](https://www.python.org/) 3.7 or higher to be installed and available in your PATH.
 
 If you are using Debian based Linux distribution, install Python with
 ```sh
@@ -106,9 +104,9 @@ The script will run (and install, if you use Windows) FFmpeg and COLMAP as neede
 By default, the script invokes colmap with the "sequential matcher", which is suitable for images taken from a smoothly changing camera path, as in a video. The exhaustive matcher is more appropriate if the images are in no particular order, as shown in the image example above.
 For more options, you can run the script with `--help`. For more advanced uses of COLMAP or for challenging scenes, please see the [COLMAP documentation](https://colmap.github.io/cli.html); you may need to modify the [scripts/colmap2nerf.py](/scripts/colmap2nerf.py) script itself.
 
-The `aabb_scale` parameter is the most important `instant-ngp` specific parameter. It specifies the extent of the scene, defaulting to 1; that is, the scene is scaled such that the camera positions are at an average distance of 1 unit from the origin. For small synthetic scenes such as the original NeRF dataset, the default `aabb_scale` of 1 is ideal and leads to fastest training. The NeRF model makes the assumption that the training images can entirely be explained by a scene contained within this bounding box. However, for natural scenes where there is a background that extends beyond this bounding box, the NeRF model will struggle and may hallucinate "floaters" at the boundaries of the box. By setting `aabb_scale` to a larger power of 2 (up to a maximum of 16), the NeRF model will extend rays to a much larger bounding box. Note that this can impact training speed slightly. If in doubt, for natural scenes, start with an `aabb_scale` of 128, and subsequently reduce it if possible. The value can be directly edited in the `transforms.json` output file, without re-running the [scripts/colmap2nerf.py](/scripts/colmap2nerf.py) script.
+The `aabb_scale` parameter is the most important __instant-ngp__ specific parameter. It specifies the extent of the scene, defaulting to 1; that is, the scene is scaled such that the camera positions are at an average distance of 1 unit from the origin. For small synthetic scenes such as the original NeRF dataset, the default `aabb_scale` of 1 is ideal and leads to fastest training. The NeRF model makes the assumption that the training images can entirely be explained by a scene contained within this bounding box. However, for natural scenes where there is a background that extends beyond this bounding box, the NeRF model will struggle and may hallucinate "floaters" at the boundaries of the box. By setting `aabb_scale` to a larger power of 2 (up to a maximum of 16), the NeRF model will extend rays to a much larger bounding box. Note that this can impact training speed slightly. If in doubt, for natural scenes, start with an `aabb_scale` of 128, and subsequently reduce it if possible. The value can be directly edited in the `transforms.json` output file, without re-running the [scripts/colmap2nerf.py](/scripts/colmap2nerf.py) script.
 
-Assuming success, you can now train your NeRF model as follows, starting in the `instant-ngp` folder:
+Assuming success, you can now train your NeRF model as follows, starting in the __instant-ngp__ folder:
 
 ```sh
 instant-ngp$ ./instant-ngp [path to training data folder containing transforms.json]
@@ -116,7 +114,7 @@ instant-ngp$ ./instant-ngp [path to training data folder containing transforms.j
 
 ### Record3D
 
-With an >=iPhone 12 Pro, one can use [Record3D](https://record3d.app/) to collect data and avoid COLMAP. [Record3D](https://record3d.app/) is an iOS app that relies on ARKit to estimate each image's camera pose. It is more robust than COLMAP for scenes that lack textures or contain repetitive patterns. To train `instant-ngp` with Record3D data, follow these steps: 
+With an >=iPhone 12 Pro, one can use [Record3D](https://record3d.app/) to collect data and avoid COLMAP. [Record3D](https://record3d.app/) is an iOS app that relies on ARKit to estimate each image's camera pose. It is more robust than COLMAP for scenes that lack textures or contain repetitive patterns. To train __instant-ngp__ with Record3D data, follow these steps: 
 
 1. Record a video and export with the "Shareable/Internal format (.r3d)".
 2. Send the exported data to your computer.
@@ -127,13 +125,14 @@ With an >=iPhone 12 Pro, one can use [Record3D](https://record3d.app/) to collec
 	```
 	If you capture the scene in the landscape orientation, add `--rotate`.
 
-5. Launch `instant-ngp` training:
+5. Launch __instant-ngp__ training:
 	```
 	instant-ngp$ ./instant-ngp path/to/data
 	```
 	
 ### NeRFCapture
-[NeRFCapture](ttps://github.com/jc211/NeRFCapture) is an iOS app that runs on any ARKit device. It allows you to stream images directly from your phone to `instant-ngp` thus enabling a more interactive experience. It can also collect an offline dataset for later use. 
+
+[NeRFCapture](https://github.com/jc211/NeRFCapture) is an iOS app that runs on any ARKit device. It allows you to stream images directly from your phone to __instant-ngp__ thus enabling a more interactive experience. It can also collect an offline dataset for later use. 
 
 The following dependencies are needed to run the NeRFCapture script:
 ```
@@ -147,7 +146,7 @@ To stream:
 	instant-ngp$ python scripts/nerfcapture2nerf.py --stream
 	```
 3. Wait for the connection between the app and the script to occur. This will be indicated on the app.
-4. Click the send button on the app. The frame captured will be sent to `instant-ngp`. 
+4. Click the send button on the app. The frame captured will be sent to __instant-ngp__. 
 5. Toggle training
 
 To save a dataset:
@@ -159,9 +158,10 @@ To save a dataset:
 3. Wait for the connection between the app and the script to occur. This will be indicated on the app.
 4. Click the send button on the app. The frame captured will be saved to the dataset folder on the computer running the script.
 
+
 ## Tips for NeRF training data
 
-The NeRF model trains best with between 50-150 images which exhibit minimal scene movement, motion blur or other blurring artefacts. The quality of reconstruction is predicated on COLMAP being able to extract accurate camera parameters from the images.
+The NeRF model trains best with between 50-150 images which exhibit minimal scene movement, motion blur or other blurring artifacts. The quality of reconstruction is predicated on the previous scripts being able to extract accurate camera parameters from the images.
 Review the earlier sections for information on how to verify this.
 
-The `colmap2nerf.py` script assumes that the training images are all pointing approximately at a shared point of interest, which it places at the origin. This point is found by taking a weighted average of the closest points of approach between the rays through the central pixel of all pairs of training images. In practice, this means that the script works best when the training images have been captured pointing inwards towards the object of interest, although they do not need to complete a full 360 view of it. Any background visible behind the object of interest will still be reconstructed if `aabb_scale` is set to a number larger than 1, as explained above.
+The `colmap2nerf.py` and `record3d2nerf.py` scripts assumes that the training images are all pointing approximately at a shared point of interest, which it places at the origin. This point is found by taking a weighted average of the closest points of approach between the rays through the central pixel of all pairs of training images. In practice, this means that the script works best when the training images have been captured pointing inwards towards the object of interest, although they do not need to complete a full 360 view of it. Any background visible behind the object of interest will still be reconstructed if `aabb_scale` is set to a number larger than 1, as explained above.
