@@ -2872,7 +2872,7 @@ void Testbed::update_vr_performance_settings() {
 		// If the environment is blended in (such as in XR/AR applications),
 		// DLSS causes jittering at object sillhouettes (doesn't deal well with alpha),
 		// and hence stays disabled.
-		m_dlss = (blend_mode == EnvironmentBlendMode::Opaque) && m_dlss_provider;
+		m_dlss = (blend_mode == EEnvironmentBlendMode::Opaque) && m_dlss_provider;
 
 		// Foveated rendering is similarly vital in getting high performance without losing
 		// resolution in the middle of the view.
@@ -2887,7 +2887,7 @@ void Testbed::update_vr_performance_settings() {
 		// set background color to transparent and, in spherical_checkerboard_kernel(...),
 		// blend a checkerboard. If the user desires a solid background nonetheless, they can
 		// set the background color to have an alpha value of 1.0 manually via the GUI or via Python.
-		m_render_transparency_as_checkerboard = (blend_mode == EnvironmentBlendMode::Opaque);
+		m_render_transparency_as_checkerboard = (blend_mode == EEnvironmentBlendMode::Opaque);
 	} else {
 		m_dlss = (m_testbed_mode == ETestbedMode::Nerf) && m_dlss_provider;
 		m_foveated_rendering = false;

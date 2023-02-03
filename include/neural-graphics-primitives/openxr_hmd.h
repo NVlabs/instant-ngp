@@ -47,24 +47,24 @@
 
 NGP_NAMESPACE_BEGIN
 
-enum class EnvironmentBlendMode {
+enum class EEnvironmentBlendMode {
 	Opaque = XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
 	Additive = XR_ENVIRONMENT_BLEND_MODE_ADDITIVE,
 	AlphaBlend = XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND,
 };
 
-inline std::string to_string(EnvironmentBlendMode mode) {
+inline std::string to_string(EEnvironmentBlendMode mode) {
 	switch (mode) {
-		case EnvironmentBlendMode::Opaque: return "Opaque";
-		case EnvironmentBlendMode::Additive: return "Additive";
-		case EnvironmentBlendMode::AlphaBlend: return "Blend";
+		case EEnvironmentBlendMode::Opaque: return "Opaque";
+		case EEnvironmentBlendMode::Additive: return "Additive";
+		case EEnvironmentBlendMode::AlphaBlend: return "Blend";
 		default: throw std::runtime_error{"Invalid blend mode."};
 	}
 }
 
 class OpenXRHMD {
 public:
-	enum class ControlFlow {
+	enum class EControlFlow {
 		Continue,
 		Restart,
 		Quit,
@@ -116,22 +116,22 @@ public:
 	void clear();
 
 	// poll events, handle state changes, return control flow information
-	ControlFlow poll_events();
+	EControlFlow poll_events();
 
 	// begin OpenXR frame, return views to render
 	FrameInfoPtr begin_frame();
 	// must be called for each begin_frame
 	void end_frame(FrameInfoPtr frame_info, float znear, float zfar);
 
-	void set_environment_blend_mode(EnvironmentBlendMode mode) {
+	void set_environment_blend_mode(EEnvironmentBlendMode mode) {
 		m_environment_blend_mode = mode;
 	}
 
-	EnvironmentBlendMode environment_blend_mode() const {
+	EEnvironmentBlendMode environment_blend_mode() const {
 		return m_environment_blend_mode;
 	}
 
-	const std::vector<EnvironmentBlendMode>& supported_environment_blend_modes() const {
+	const std::vector<EEnvironmentBlendMode>& supported_environment_blend_modes() const {
 		return m_supported_environment_blend_modes;
 	}
 
@@ -177,7 +177,7 @@ private:
 	void init_open_gl_shaders();
 
 	// session state change
-	void session_state_change(XrSessionState state, ControlFlow& flow);
+	void session_state_change(XrSessionState state, EControlFlow& flow);
 
 	std::shared_ptr<Buffer2D<uint8_t>> rasterize_hidden_area_mask(uint32_t view_index, const XrCompositionLayerProjectionView& view);
 	// system/instance
@@ -192,9 +192,9 @@ private:
 	XrViewConfigurationType m_view_configuration_type = {};
 	XrViewConfigurationProperties m_view_configuration_properties = {XR_TYPE_VIEW_CONFIGURATION_PROPERTIES};
 	std::vector<XrViewConfigurationView> m_view_configuration_views;
-	std::vector<EnvironmentBlendMode> m_supported_environment_blend_modes;
+	std::vector<EEnvironmentBlendMode> m_supported_environment_blend_modes;
 	std::vector<char> m_supported_environment_blend_modes_imgui_string;
-	EnvironmentBlendMode m_environment_blend_mode = EnvironmentBlendMode::Opaque;
+	EEnvironmentBlendMode m_environment_blend_mode = EEnvironmentBlendMode::Opaque;
 
 	// actions
 	std::array<XrPath, 2> m_hand_paths;

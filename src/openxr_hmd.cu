@@ -451,7 +451,7 @@ void OpenXRHMD::init_check_for_xr_blend_mode() {
 			tlog::info() << fmt::format("\t{}", XrEnumStr(supported_blend_modes[i]));
 		}
 
-		auto b = (EnvironmentBlendMode)supported_blend_modes[i];
+		auto b = (EEnvironmentBlendMode)supported_blend_modes[i];
 		m_supported_environment_blend_modes[i] = b;
 
 		auto b_str = to_string(b);
@@ -802,7 +802,7 @@ void OpenXRHMD::init_open_gl_shaders() {
 	}
 }
 
-void OpenXRHMD::session_state_change(XrSessionState state, ControlFlow& flow) {
+void OpenXRHMD::session_state_change(XrSessionState state, EControlFlow& flow) {
 	//tlog::info() << fmt::format("New session state {}", XrEnumStr(state));
 	switch (state) {
 		case XR_SESSION_STATE_READY: {
@@ -816,11 +816,11 @@ void OpenXRHMD::session_state_change(XrSessionState state, ControlFlow& flow) {
 			break;
 		}
 		case XR_SESSION_STATE_EXITING: {
-			flow = ControlFlow::Quit;
+			flow = EControlFlow::Quit;
 			break;
 		}
 		case XR_SESSION_STATE_LOSS_PENDING: {
-			flow = ControlFlow::Restart;
+			flow = EControlFlow::Restart;
 			break;
 		}
 		default: {
@@ -829,9 +829,9 @@ void OpenXRHMD::session_state_change(XrSessionState state, ControlFlow& flow) {
 	}
 }
 
-OpenXRHMD::ControlFlow OpenXRHMD::poll_events() {
+OpenXRHMD::EControlFlow OpenXRHMD::poll_events() {
 	bool more = true;
-	ControlFlow flow = ControlFlow::Continue;
+	EControlFlow flow = EControlFlow::Continue;
 	while (more) {
 		// poll events
 		XrEventDataBuffer event {XR_TYPE_EVENT_DATA_BUFFER, nullptr};
@@ -852,7 +852,7 @@ OpenXRHMD::ControlFlow OpenXRHMD::poll_events() {
 				}
 
 				case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING: {
-					flow = ControlFlow::Restart;
+					flow = EControlFlow::Restart;
 					break;
 				}
 
@@ -1234,6 +1234,10 @@ void OpenXRHMD::end_frame(FrameInfoPtr frame_info, float znear, float zfar) {
 
 	XrCompositionLayerProjection layer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
 	layer.space = m_space;
+	if (m_environment_blend_mode != EEnvironmentBlendMode::Opaque) {
+		layer.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+	}
+
 	layer.viewCount = uint32_t(layer_projection_views.size());
 	layer.views = layer_projection_views.data();
 
