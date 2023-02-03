@@ -3886,6 +3886,7 @@ __global__ void spherical_checkerboard_kernel(
 	Vector3f parallax_shift,
 	Foveation foveation,
 	Lens lens,
+	Array4f background_color,
 	Array4f* frame_buffer
 ) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
@@ -3919,8 +3920,13 @@ __global__ void spherical_checkerboard_kernel(
 	const Array4f light_gray = {0.55f, 0.55f, 0.55f, 1.0f};
 	Array4f checker = fabsf(fmodf(floorf(spherical.x()) + floorf(spherical.y()), 2.0f)) < 0.5f ? dark_gray : light_gray;
 
+	// Blend background color on top of checkerboard first (checkerboard is meant to be "behind" the background,
+	// representing transparency), and then blend the result behind the frame buffer.
+	background_color.head<3>() = srgb_to_linear(background_color.head<3>());
+	background_color += (1.0f - background_color.w()) * checker;
+
 	uint32_t idx = x + resolution.x() * y;
-	frame_buffer[idx] += (1.0f - frame_buffer[idx].w()) * checker;
+	frame_buffer[idx] += (1.0f - frame_buffer[idx].w()) * background_color;
 }
 
 __global__ void vr_overlay_hands_kernel(
@@ -4237,6 +4243,7 @@ void Testbed::render_frame_epilogue(
 			m_parallax_shift,
 			foveation,
 			lens,
+			m_background_color,
 			render_buffer.frame_buffer()
 		);
 	}
