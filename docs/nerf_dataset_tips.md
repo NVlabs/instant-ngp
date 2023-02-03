@@ -53,12 +53,12 @@ See [nerf_loader.cu](src/nerf_loader.cu) for implementation details and addition
 
 ## Preparing new NeRF datasets
 
-To train on self-captured data, one has to process the data into an existing format supported by Instant-NGP. We provide scripts to support three approaches:
+To train on self-captured data, one has to process the data into an existing format supported by `instant-ngp`. We provide scripts to support three approaches:
 - [COLMAP](#COLMAP) to create a dataset from a set of photos or a video you took
 
 - [Record3D](#Record3D) to create a dataset with an iPhone 12 Pro or newer (based on ARKit)
 
-- [NeRFCapture](https://github.com/jc211/NeRFCapture) to create a dataset or stream posed images directly to InsantNGP with an iOS device.
+- [NeRFCapture](#NeRFCapture) to create a dataset or stream posed images directly to `instant-ngp` with an iOS device.
 
 Both require [Python](https://www.python.org/) 3.7 or higher to be installed and available in your PATH.
 
@@ -116,7 +116,7 @@ instant-ngp$ ./instant-ngp [path to training data folder containing transforms.j
 
 ### Record3D
 
-With an >=iPhone 12 Pro, one can use [Record3D](https://record3d.app/) to collect data and avoid COLMAP. [Record3D](https://record3d.app/) is an iOS app that relies on ARKit to estimate each image's camera pose. It is more robust than COLMAP for scenes that lack textures or contain repetitive patterns. To train Instant-NGPs with Record3D data, follow these steps: 
+With an >=iPhone 12 Pro, one can use [Record3D](https://record3d.app/) to collect data and avoid COLMAP. [Record3D](https://record3d.app/) is an iOS app that relies on ARKit to estimate each image's camera pose. It is more robust than COLMAP for scenes that lack textures or contain repetitive patterns. To train `instant-ngp` with Record3D data, follow these steps: 
 
 1. Record a video and export with the "Shareable/Internal format (.r3d)".
 2. Send the exported data to your computer.
@@ -127,19 +127,17 @@ With an >=iPhone 12 Pro, one can use [Record3D](https://record3d.app/) to collec
 	```
 	If you capture the scene in the landscape orientation, add `--rotate`.
 
-5. Launch Instant-NGP training:
+5. Launch `instant-ngp` training:
 	```
 	instant-ngp$ ./instant-ngp path/to/data
 	```
 	
 ### NeRFCapture
-[NeRFCapture](https://github.com/jc211/NeRFCapture) is an iOS app that runs on any ARKit device. It allows you to stream images directly from your phone to InstantNGP thus enabling a more interactive experience. It can also collect an offline dataset for later use. 
+[NeRFCapture](ttps://github.com/jc211/NeRFCapture) is an iOS app that runs on any ARKit device. It allows you to stream images directly from your phone to `instant-ngp` thus enabling a more interactive experience. It can also collect an offline dataset for later use. 
 
 The following dependencies are needed to run the NeRFCapture script:
 ```
 pip install cyclonedds
-pip install opencv-python
-pip install Pillow
 ```
 
 To stream:
@@ -149,7 +147,7 @@ To stream:
 	instant-ngp$ python scripts/nerfcapture2nerf.py --stream
 	```
 3. Wait for the connection between the app and the script to occur. This will be indicated on the app.
-4. Click the send button on the app. The frame captured will be sent to InstantNGP. 
+4. Click the send button on the app. The frame captured will be sent to `instant-ngp`. 
 5. Toggle training
 
 To save a dataset:

@@ -5,9 +5,7 @@ import argparse
 import cv2
 from pathlib import Path
 import json
-import time
 import shutil
-from PIL import Image
 
 import cyclonedds.idl as idl
 import cyclonedds.idl.annotations as annotate
@@ -27,7 +25,7 @@ def parse_args():
     parser.add_argument("--stream", action="store_true", help="Stream images directly to InstantNGP.")
     parser.add_argument("--n_frames", default=10, type=int, help="Number of frames before saving the dataset. Also used as the number of cameras to remember when streaming.")
     parser.add_argument("--save_path", required='--stream' not in sys.argv, type=str, help="Path to save the dataset.")
-    parser.add_argument("--depth_scale", default=4.0, type=float, help="Depth scale used when saving depth. Only used when saving dataset.")
+    parser.add_argument("--depth_scale", default=10.0, type=float, help="Depth scale used when saving depth. Only used when saving dataset.")
     parser.add_argument("--overwrite", action="store_true", help="Rewrite over dataset if it exists.")
     return parser.parse_args()
 
@@ -80,8 +78,8 @@ def set_frame(testbed, frame_idx: int, rgb: np.ndarray, depth: np.ndarray, depth
 def live_streaming_loop(reader: DataReader, max_cameras: int):
     # Start InstantNGP
     testbed = ngp.Testbed(ngp.TestbedMode.Nerf)
-    testbed.init_window(640, 480)
-    testbed.reload_network_from_file(f"configs/nerf/base.json")
+    testbed.init_window(1920, 1080)
+    testbed.reload_network_from_file()
     testbed.visualize_unit_cube = True
     testbed.nerf.visualize_cameras = True
 
@@ -97,7 +95,7 @@ def live_streaming_loop(reader: DataReader, max_cameras: int):
     while testbed.frame():
         sample = reader.read_next() # Get frame from NeRFCapture
         if sample:
-            print(f"Frame received")
+            print(f"Frame {total_frames + 1} received")
 
             # RGB
             image = np.asarray(sample.image, dtype=np.uint8).reshape(
@@ -105,14 +103,13 @@ def live_streaming_loop(reader: DataReader, max_cameras: int):
             image = np.concatenate(
                 [image, np.zeros((sample.height, sample.width, 1), dtype=np.float32)], axis=-1)
 
-            # Depth if avaiable
+            # Depth if available
             depth = None
             if sample.has_depth:
                 depth = np.asarray(sample.depth_image, dtype=np.uint8).view(
                     dtype=np.float32).reshape((sample.depth_height, sample.depth_width))
                 depth = cv2.resize(depth, dsize=(
                     sample.width, sample.height), interpolation=cv2.INTER_NEAREST)
-
 
             # Transform
             X_WV = np.asarray(sample.transform_matrix,
@@ -140,19 +137,17 @@ def live_streaming_loop(reader: DataReader, max_cameras: int):
                 testbed.render_groundtruth = True
 
 def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n_frames: int):
-
     if save_path.exists():
         if overwrite:
             # Prompt user to confirm deletion
-            res = input("Warning, directory exists already. Press Y to delete anyway: ")
-            if res == 'Y':
-                shutil.rmtree(save_path)
-            else:
-                exit()
+            if (input(f"warning! folder '{save_path}' will be deleted/replaced. continue? (Y/n)").lower().strip()+"y")[:1] != "y":
+                sys.exit(1)
+            shutil.rmtree(save_path)
         else:
-            print("save_path already exists")
-            exit()
+            print(f"save_path {save_path} already exists")
+            sys.exit(1)
     
+    print("Waiting for frames...")
     # Make directory
     images_dir = save_path.joinpath("images")
 
@@ -170,10 +165,9 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
 
     # Start DDS Loop
     while True:
-        time.sleep(0.001)
         sample = reader.read_next() # Get frame from NeRFCapture
         if sample:
-            print(f"Frame received")
+            print(f"{total_frames + 1}/{n_frames} frames received")
 
             if total_frames == 0:
                 save_path.mkdir(parents=True)
@@ -187,11 +181,8 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
                 manifest["integer_depth_scale"] = float(args.depth_scale)/65535.0
 
             # RGB
-            image = np.asarray(sample.image, dtype=np.uint8).reshape(
-                (sample.height, sample.width, 3))
-            image = np.concatenate(
-                [image, 255*np.ones((sample.height, sample.width, 1), dtype=np.uint8)], axis=-1)
-            Image.fromarray(image).save(images_dir.joinpath(f"{total_frames}.png"))
+            image = np.asarray(sample.image, dtype=np.uint8).reshape((sample.height, sample.width, 3))
+            cv2.imwrite(str(images_dir.joinpath(f"{total_frames}.png")), cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
 
             # Depth if avaiable
             depth = None
@@ -201,13 +192,11 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
                 depth = (depth*65535/float(args.depth_scale)).astype(np.uint16)
                 depth = cv2.resize(depth, dsize=(
                     sample.width, sample.height), interpolation=cv2.INTER_NEAREST)
-                Image.fromarray(depth).save(images_dir.joinpath(f"{total_frames}.depth.png"))
-
+                cv2.imwrite(str(images_dir.joinpath(f"{total_frames}.depth.png")), depth) 
 
             # Transform
             X_WV = np.asarray(sample.transform_matrix,
                               dtype=np.float32).reshape((4, 4)).T
-
             
             frame = {
                 "transform_matrix": X_WV.tolist(),
@@ -226,14 +215,15 @@ def dataset_capture_loop(reader: DataReader, save_path: Path, overwrite: bool, n
             manifest["frames"].append(frame)
 
             # Update index
-            total_frames += 1
-            if total_frames == n_frames:
+            if total_frames == n_frames - 1:
+                print("Saving manifest...")
                 # Write manifest as json
                 manifest_json = json.dumps(manifest, indent=4)
                 with open(save_path.joinpath("transforms.json"), "w") as f:
                     f.write(manifest_json)
                 print("Done")
-                exit()
+                sys.exit(0)
+            total_frames += 1
 
 
 if __name__ == "__main__":
