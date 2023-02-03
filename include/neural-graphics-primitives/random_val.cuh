@@ -61,11 +61,16 @@ inline __host__ __device__ Eigen::Vector2f dir_to_cylindrical(const Eigen::Vecto
 	return {(cos_theta + 1.0f) / 2.0f, (phi / (2.0f * PI())) + 0.5f};
 }
 
-inline __host__ __device__ Eigen::Vector2f dir_to_spherical_unorm(const Eigen::Vector3f& d) {
+inline __host__ __device__ Eigen::Vector2f dir_to_spherical(const Eigen::Vector3f& d) {
 	const float cos_theta = fminf(fmaxf(d.z(), -1.0f), 1.0f);
 	const float theta = acosf(cos_theta);
 	float phi = std::atan2(d.y(), d.x());
-	return {theta / PI(), (phi / (2.0f * PI()) + 0.5f)};
+	return {theta, phi};
+}
+
+inline __host__ __device__ Eigen::Vector2f dir_to_spherical_unorm(const Eigen::Vector3f& d) {
+	Eigen::Vector2f spherical = dir_to_spherical(d);
+	return {spherical.x() / PI(), (spherical.y() / (2.0f * PI()) + 0.5f)};
 }
 
 template <typename RNG>

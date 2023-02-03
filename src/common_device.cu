@@ -36,25 +36,25 @@ Matrix<float, 3, 4> log_space_lerp(const Matrix<float, 3, 4>& begin, const Matri
 	return ((log_space_a_to_b * t).exp() * A).block<3,4>(0,0);
 }
 
-GPUMemory<float> load_exr(const std::string& filename, int& width, int& height) {
+GPUMemory<float> load_exr_gpu(const fs::path& path, int* width, int* height) {
 	float* out; // width * height * RGBA
-	load_exr(&out, &width, &height, filename.c_str());
+	load_exr(&out, width, height, path.str().c_str());
 	ScopeGuard mem_guard{[&]() { free(out); }};
 
-	GPUMemory<float> result(width * height * 4);
+	GPUMemory<float> result((*width) * (*height) * 4);
 	result.copy_from_host(out);
 	return result;
 }
 
-GPUMemory<float> load_stbi(const std::string& filename, int& width, int& height) {
-	bool is_hdr = stbi_is_hdr(filename.c_str());
+GPUMemory<float> load_stbi_gpu(const fs::path& path, int* width, int* height) {
+	bool is_hdr = is_hdr_stbi(path);
 
 	void* data; // width * height * RGBA
 	int comp;
 	if (is_hdr) {
-		data = stbi_loadf(filename.c_str(), &width, &height, &comp, 4);
+		data = load_stbi_float(path, width, height, &comp, 4);
 	} else {
-		data = stbi_load(filename.c_str(), &width, &height, &comp, 4);
+		data = load_stbi(path, width, height, &comp, 4);
 	}
 
 	if (!data) {
@@ -63,17 +63,17 @@ GPUMemory<float> load_stbi(const std::string& filename, int& width, int& height)
 
 	ScopeGuard mem_guard{[&]() { stbi_image_free(data); }};
 
-	if (width == 0 || height == 0) {
+	if (*width == 0 || *height == 0) {
 		throw std::runtime_error{"Image has zero pixels."};
 	}
 
-	GPUMemory<float> result(width * height * 4);
+	GPUMemory<float> result((*width) * (*height) * 4);
 	if (is_hdr) {
 		result.copy_from_host((float*)data);
 	} else {
-		GPUMemory<uint8_t> bytes(width * height * 4);
+		GPUMemory<uint8_t> bytes((*width) * (*height) * 4);
 		bytes.copy_from_host((uint8_t*)data);
-		linear_kernel(from_rgba32<float>, 0, nullptr, width * height, bytes.data(), result.data(), false, false, 0);
+		linear_kernel(from_rgba32<float>, 0, nullptr, (*width) * (*height), bytes.data(), result.data(), false, false, 0);
 	}
 
 	return result;

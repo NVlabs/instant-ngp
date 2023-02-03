@@ -17,6 +17,7 @@
 #include <neural-graphics-primitives/random_val.cuh>
 #include <neural-graphics-primitives/render_buffer.h>
 #include <neural-graphics-primitives/testbed.h>
+#include <neural-graphics-primitives/tinyexr_wrapper.h>
 
 #include <tiny-cuda-nn/gpu_matrix.h>
 #include <tiny-cuda-nn/network_with_input_encoding.h>
@@ -27,7 +28,6 @@
 
 using namespace Eigen;
 using namespace tcnn;
-namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
@@ -77,14 +77,20 @@ __global__ void stratify2_kernel(uint32_t n_elements, uint32_t log2_batch_size, 
 }
 
 __global__ void init_image_coords(
+	uint32_t sample_index,
 	Vector2f* __restrict__ positions,
+	float* __restrict__ depth_buffer,
 	Vector2i resolution,
-	Vector2i image_resolution,
-	float view_dist,
-	Vector2f image_pos,
+	float aspect,
+	Vector2f focal_length,
+	Matrix<float, 3, 4> camera_matrix,
 	Vector2f screen_center,
+	Vector3f parallax_shift,
 	bool snap_to_pixel_centers,
-	uint32_t sample_index
+	float plane_z,
+	float aperture_size,
+	Foveation foveation,
+	Buffer2DView<const uint8_t> hidden_area_mask
 ) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
@@ -93,49 +99,47 @@ __global__ void init_image_coords(
 		return;
 	}
 
-	uint32_t idx = x + resolution.x() * y;
-	positions[idx] = pixel_to_image_uv(
+	// The image is displayed on the plane [0.5, 0.5, 0.5] + [X, Y, 0] to facilitate
+	// a top-down view by default, while permitting general camera movements (for
+	// motion vectors and code sharing with 3D tasks).
+	// Hence: generate rays and intersect that plane.
+	Ray ray = pixel_to_ray(
 		sample_index,
 		{x, y},
 		resolution,
-		image_resolution,
+		focal_length,
+		camera_matrix,
 		screen_center,
-		view_dist,
-		image_pos,
-		snap_to_pixel_centers
+		parallax_shift,
+		snap_to_pixel_centers,
+		0.0f, // near distance
+		plane_z,
+		aperture_size,
+		foveation,
+		hidden_area_mask
 	);
+
+	// Intersect the Z=0.5 plane
+	float t = ray.is_valid() ? (0.5f - ray.o.z()) / ray.d.z() : -1.0f;
+
+	uint32_t idx = x + resolution.x() * y;
+	if (t <= 0.0f) {
+		depth_buffer[idx] = MAX_DEPTH();
+		positions[idx] = -Vector2f::Ones();
+		return;
+	}
+
+	Vector2f uv = ray(t).head<2>();
+
+	// Flip from world coordinates where Y goes up to image coordinates where Y goes down.
+	// Also, multiply the x-axis by the image's aspect ratio to make it have the right proportions.
+	uv = (uv - Vector2f::Constant(0.5f)).cwiseProduct(Vector2f{aspect, -1.0f}) + Vector2f::Constant(0.5f);
+
+	depth_buffer[idx] = t;
+	positions[idx] = uv;
 }
 
-// #define COLOR_SPACE_CONVERT convert to ycrcb experiment - causes some color shift tho it does lead to very slightly sharper edges. not a net win if you like colors :)
-#define CHROMA_SCALE 0.2f
-
-__global__ void colorspace_convert_image_half(Vector2i resolution, const char* __restrict__ texture) {
-	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
-	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
-	if (x >= resolution.x() || y >= resolution.y()) return;
-	__half val[4];
-	*(int2*)&val[0] = ((int2*)texture)[y * resolution.x() + x];
-	float R=val[0],G=val[1],B=val[2];
-	val[0]=(0.2126f * R + 0.7152f * G + 0.0722f * B);
-	val[1]=((-0.1146f * R - 0.3845f * G + 0.5f * B)+0.f)*CHROMA_SCALE;
-	val[2]=((0.5f * R - 0.4542f * G - 0.0458f * B)+0.f)*CHROMA_SCALE;
-	((int2*)texture)[y * resolution.x() + x] = *(int2*)&val[0];
-}
-
-__global__ void colorspace_convert_image_float(Vector2i resolution, const char* __restrict__ texture) {
-	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
-	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
-	if (x >= resolution.x() || y >= resolution.y()) return;
-	float val[4];
-	*(float4*)&val[0] = ((float4*)texture)[y * resolution.x() + x];
-	float R=val[0],G=val[1],B=val[2];
-	val[0]=(0.2126f * R + 0.7152f * G + 0.0722f * B);
-	val[1]=((-0.1146f * R - 0.3845f * G + 0.5f * B)+0.f)*CHROMA_SCALE;
-	val[2]=((0.5f * R - 0.4542f * G - 0.0458f * B)+0.f)*CHROMA_SCALE;
-	((float4*)texture)[y * resolution.x() + x] = *(float4*)&val[0];
-}
-
-__global__ void shade_kernel_image(Vector2i resolution, const Vector2f* __restrict__ positions, const Array3f* __restrict__ colors, Array4f* __restrict__ frame_buffer, float* __restrict__ depth_buffer, bool linear_colors) {
+__global__ void shade_kernel_image(Vector2i resolution, const Vector2f* __restrict__ positions, const Array3f* __restrict__ colors, Array4f* __restrict__ frame_buffer, bool linear_colors) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
 
@@ -148,7 +152,6 @@ __global__ void shade_kernel_image(Vector2i resolution, const Vector2f* __restri
 	const Vector2f uv = positions[idx];
 	if (uv.x() < 0.0f || uv.x() > 1.0f || uv.y() < 0.0f || uv.y() > 1.0f) {
 		frame_buffer[idx] = Array4f::Zero();
-		depth_buffer[idx] = 1e10f;
 		return;
 	}
 
@@ -158,16 +161,7 @@ __global__ void shade_kernel_image(Vector2i resolution, const Vector2f* __restri
 		color = srgb_to_linear(color);
 	}
 
-#ifdef COLOR_SPACE_CONVERT
-	float Y=color.x(), Cb =color.y()*(1.f/CHROMA_SCALE) -0.f, Cr = color.z() * (1.f/CHROMA_SCALE) - 0.f;
-	float R = Y                + 1.5748f * Cr;
-	float G = Y - 0.1873f * Cb - 0.4681 * Cr;
-	float B = Y + 1.8556f * Cb;
-	frame_buffer[idx] = {R, G, B, 1.0f};
-#else
 	frame_buffer[idx] = {color.x(), color.y(), color.z(), 1.0f};
-#endif
-	depth_buffer[idx] = 1.0f;
 }
 
 template <typename T, uint32_t stride>
@@ -291,8 +285,16 @@ void Testbed::train_image(size_t target_batch_size, bool get_loss_scalar, cudaSt
 	m_training_step++;
 }
 
-void Testbed::render_image(CudaRenderBuffer& render_buffer, cudaStream_t stream) {
-	auto res = render_buffer.in_resolution();
+void Testbed::render_image(
+	cudaStream_t stream,
+	const CudaRenderBufferView& render_buffer,
+	const Vector2f& focal_length,
+	const Matrix<float, 3, 4>& camera_matrix,
+	const Vector2f& screen_center,
+	const Foveation& foveation,
+	int visualized_dimension
+) {
+	auto res = render_buffer.resolution;
 
 	// Make sure we have enough memory reserved to render at the requested resolution
 	size_t n_pixels = (size_t)res.x() * res.y();
@@ -300,18 +302,27 @@ void Testbed::render_image(CudaRenderBuffer& render_buffer, cudaStream_t stream)
 	m_image.render_coords.enlarge(n_elements);
 	m_image.render_out.enlarge(n_elements);
 
+	float plane_z = m_slice_plane_z + m_scale;
+	float aspect = (float)m_image.resolution.y() / (float)m_image.resolution.x();
+
 	// Generate 2D coords at which to query the network
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
 	init_image_coords<<<blocks, threads, 0, stream>>>(
+		render_buffer.spp,
 		m_image.render_coords.data(),
+		render_buffer.depth_buffer,
 		res,
-		m_image.resolution,
-		m_scale,
-		m_image.pos,
-		m_screen_center - Vector2f::Constant(0.5f),
+		aspect,
+		focal_length,
+		camera_matrix,
+		screen_center,
+		m_parallax_shift,
 		m_snap_to_pixel_centers,
-		render_buffer.spp()
+		plane_z,
+		m_aperture_size,
+		foveation,
+		render_buffer.hidden_area_mask ? render_buffer.hidden_area_mask->const_view() : Buffer2DView<const uint8_t>{}
 	);
 
 	// Obtain colors for each 2D coord
@@ -338,10 +349,10 @@ void Testbed::render_image(CudaRenderBuffer& render_buffer, cudaStream_t stream)
 	}
 
 	if (!m_render_ground_truth) {
-		if (m_visualized_dimension >= 0) {
+		if (visualized_dimension >= 0) {
 			GPUMatrix<float> positions_matrix((float*)m_image.render_coords.data(), 2, n_elements);
 			GPUMatrix<float> colors_matrix((float*)m_image.render_out.data(), 3, n_elements);
-			m_network->visualize_activation(stream, m_visualized_layer, m_visualized_dimension, positions_matrix, colors_matrix);
+			m_network->visualize_activation(stream, m_visualized_layer, visualized_dimension, positions_matrix, colors_matrix);
 		} else {
 			GPUMatrix<float> positions_matrix((float*)m_image.render_coords.data(), 2, n_elements);
 			GPUMatrix<float> colors_matrix((float*)m_image.render_out.data(), 3, n_elements);
@@ -354,8 +365,7 @@ void Testbed::render_image(CudaRenderBuffer& render_buffer, cudaStream_t stream)
 		res,
 		m_image.render_coords.data(),
 		m_image.render_out.data(),
-		render_buffer.frame_buffer(),
-		render_buffer.depth_buffer(),
+		render_buffer.frame_buffer,
 		m_image.training.linear_colors
 	);
 }
@@ -382,7 +392,7 @@ void Testbed::load_exr_image(const fs::path& data_path) {
 	tlog::info() << "Loading EXR image from " << data_path;
 
 	// First step: load an image that we'd like to learn
-	GPUMemory<float> image = load_exr(data_path.str(), m_image.resolution.x(), m_image.resolution.y());
+	GPUMemory<float> image = load_exr_gpu(data_path, &m_image.resolution.x(), &m_image.resolution.y());
 	m_image.data.resize(image.size() * sizeof(float));
 	CUDA_CHECK_THROW(cudaMemcpy(m_image.data.data(), image.data(), image.size() * sizeof(float), cudaMemcpyDeviceToDevice));
 
@@ -397,7 +407,7 @@ void Testbed::load_stbi_image(const fs::path& data_path) {
 	tlog::info() << "Loading STBI image from " << data_path;
 
 	// First step: load an image that we'd like to learn
-	GPUMemory<float> image = load_stbi(data_path.str(), m_image.resolution.x(), m_image.resolution.y());
+	GPUMemory<float> image = load_stbi_gpu(data_path, &m_image.resolution.x(), &m_image.resolution.y());
 	m_image.data.resize(image.size() * sizeof(float));
 	CUDA_CHECK_THROW(cudaMemcpy(m_image.data.data(), image.data(), image.size() * sizeof(float), cudaMemcpyDeviceToDevice));
 
@@ -412,7 +422,7 @@ void Testbed::load_binary_image(const fs::path& data_path) {
 
 	tlog::info() << "Loading binary image from " << data_path;
 
-	std::ifstream f(data_path.str(), std::ios::in | std::ios::binary);
+	std::ifstream f{native_string(data_path), std::ios::in | std::ios::binary};
 	f.read(reinterpret_cast<char*>(&m_image.resolution.y()), sizeof(int));
 	f.read(reinterpret_cast<char*>(&m_image.resolution.x()), sizeof(int));
 

@@ -1,4 +1,4 @@
-Copyright (c) 2022, NVIDIA Corporation & affiliates. All rights reserved.
+Copyright (c) 2022-2023, NVIDIA Corporation & affiliates. All rights reserved.
 
 
 NVIDIA Source Code License for instant neural graphics primitives

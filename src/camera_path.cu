@@ -107,20 +107,20 @@ void from_json(bool is_first, const json& j, CameraKeyframe& p, const CameraKeyf
 }
 
 
-void CameraPath::save(const std::string& filepath_string) {
+void CameraPath::save(const fs::path& path) {
 	json j = {
 		{"loop", loop},
 		{"time", play_time},
 		{"path", keyframes},
 	};
-	std::ofstream f(filepath_string);
+	std::ofstream f(native_string(path));
 	f << j;
 }
 
-void CameraPath::load(const std::string& filepath_string, const Eigen::Matrix<float, 3, 4>& first_xform) {
-	std::ifstream f(filepath_string);
+void CameraPath::load(const fs::path& path, const Eigen::Matrix<float, 3, 4>& first_xform) {
+	std::ifstream f{native_string(path)};
 	if (!f) {
-		throw std::runtime_error{fmt::format("Camera path {} does not exist.", filepath_string)};
+		throw std::runtime_error{fmt::format("Camera path {} does not exist.", path.str())};
 	}
 
 	json j;
@@ -147,7 +147,7 @@ int CameraPath::imgui(char path_filename_buf[1024], float frame_milliseconds, Ma
 	int n = std::max(0, int(keyframes.size()) - 1);
 	int read = 0; // 1=smooth, 2=hard
 
-	ImGui::InputText("##PathFile", path_filename_buf, sizeof(path_filename_buf));
+	ImGui::InputText("##PathFile", path_filename_buf, 1024);
 	ImGui::SameLine();
 	static std::string camera_path_load_error_string = "";
 
@@ -318,13 +318,11 @@ void visualize_nerf_camera(ImDrawList* list, const Matrix<float, 4, 4>& world2pr
 	add_debug_line(list, world2proj, d, a, col, thickness);
 }
 
-bool CameraPath::imgui_viz(ImDrawList* list, Matrix<float, 4, 4> &view2proj, Matrix<float, 4, 4> &world2proj, Matrix<float, 4, 4> &world2view, Vector2f focal, float aspect) {
+bool CameraPath::imgui_viz(ImDrawList* list, Matrix<float, 4, 4> &view2proj, Matrix<float, 4, 4> &world2proj, Matrix<float, 4, 4> &world2view, Vector2f focal, float aspect, float znear, float zfar) {
 	bool changed = false;
 	float flx = focal.x();
 	float fly = focal.y();
 	Matrix<float, 4, 4> view2proj_guizmo;
-	float zfar = 100.f;
-	float znear = 0.1f;
 	view2proj_guizmo <<
 		fly * 2.0f / aspect, 0, 0, 0,
 		0, -fly * 2.0f, 0, 0,

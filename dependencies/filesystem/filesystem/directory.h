@@ -39,8 +39,8 @@ public:
         iterator(const directory& dir) {
             m_dir = dir;
 #if defined(_WIN32)
-            std::string search_path(dir.make_absolute().str() + "/*.*");
-            m_handle = _findfirst(search_path.c_str(), &m_data);
+            std::wstring search_path(dir.make_absolute().wstr() + L"/*.*");
+            m_handle = _wfindfirst(search_path.c_str(), &m_data);
             if (is_valid_handler())
             {
                 m_result = m_dir / m_data.name;
@@ -72,7 +72,7 @@ public:
             if (is_valid_handler())
             {
 #if defined(_WIN32)
-                if (_findnext(m_handle, &m_data))
+                if (_wfindnext(m_handle, &m_data))
                 {
                     if (ENOENT == errno) /* reaching the end */
                     {
@@ -133,7 +133,7 @@ public:
         path m_result;
 #if defined(_WIN32)
         intptr_t m_handle;
-        _finddata_t m_data;
+        _wfinddata_t m_data;
 #else
         DIR* m_handle;
         struct dirent* m_data;

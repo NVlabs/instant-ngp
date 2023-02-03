@@ -24,9 +24,10 @@ using namespace args;
 using namespace ngp;
 using namespace std;
 using namespace tcnn;
-namespace fs = ::filesystem;
 
-int main(int argc, char** argv) {
+NGP_NAMESPACE_BEGIN
+
+int main_func(const std::vector<std::string>& arguments) {
 	ArgumentParser parser{
 		"Instant Neural Graphics Primitives\n"
 		"Version " NGP_VERSION,
@@ -61,6 +62,13 @@ int main(int argc, char** argv) {
 		{"no-gui"},
 	};
 
+	Flag vr_flag{
+		parser,
+		"VR",
+		"Enables VR",
+		{"vr"}
+	};
+
 	Flag no_train_flag{
 		parser,
 		"NO_TRAIN",
@@ -71,7 +79,7 @@ int main(int argc, char** argv) {
 	ValueFlag<string> scene_flag{
 		parser,
 		"SCENE",
-		"The scene to load. Can be NeRF dataset, a *.obj/*.ply mesh for training a SDF, an image, or a *.nvdb volume.",
+		"The scene to load. Can be NeRF dataset, a *.obj/*.stl mesh for training a SDF, an image, or a *.nvdb volume.",
 		{'s', "scene"},
 	};
 
@@ -79,7 +87,7 @@ int main(int argc, char** argv) {
 		parser,
 		"SNAPSHOT",
 		"Optional snapshot to load upon startup.",
-		{"snapshot"},
+		{"snapshot", "load_snapshot"},
 	};
 
 	ValueFlag<uint32_t> width_flag{
@@ -112,7 +120,13 @@ int main(int argc, char** argv) {
 	// Parse command line arguments and react to parsing
 	// errors using exceptions.
 	try {
-		parser.ParseCLI(argc, argv);
+		if (arguments.empty()) {
+			tlog::error() << "Number of arguments must be bigger than 0.";
+			return -3;
+		}
+
+		parser.Prog(arguments.front());
+		parser.ParseArgs(begin(arguments) + 1, end(arguments));
 	} catch (const Help&) {
 		cout << parser;
 		return 0;
@@ -131,47 +145,73 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 
-	try {
-		if (mode_flag) {
-			tlog::warning() << "The '--mode' argument is no longer in use. It has no effect. The mode is automatically chosen based on the scene.";
-		}
+	if (mode_flag) {
+		tlog::warning() << "The '--mode' argument is no longer in use. It has no effect. The mode is automatically chosen based on the scene.";
+	}
 
-		Testbed testbed;
+	Testbed testbed;
 
-		for (auto file : get(files)) {
-			testbed.load_file(file);
-		}
+	for (auto file : get(files)) {
+		testbed.load_file(file);
+	}
 
-		if (scene_flag) {
-			testbed.load_training_data(get(scene_flag));
-		}
+	if (scene_flag) {
+		testbed.load_training_data(get(scene_flag));
+	}
 
-		if (snapshot_flag) {
-			testbed.load_snapshot(get(snapshot_flag));
-		} else if (network_config_flag) {
-			testbed.reload_network_from_file(get(network_config_flag));
-		}
+	if (snapshot_flag) {
+		testbed.load_snapshot(get(snapshot_flag));
+	} else if (network_config_flag) {
+		testbed.reload_network_from_file(get(network_config_flag));
+	}
 
-		testbed.m_train = !no_train_flag;
+	testbed.m_train = !no_train_flag;
 
 #ifdef NGP_GUI
-		bool gui = !no_gui_flag;
+	bool gui = !no_gui_flag;
 #else
-		bool gui = false;
+	bool gui = false;
 #endif
 
-		if (gui) {
-			testbed.init_window(width_flag ? get(width_flag) : 1920, height_flag ? get(height_flag) : 1080);
+	if (gui) {
+		testbed.init_window(width_flag ? get(width_flag) : 1920, height_flag ? get(height_flag) : 1080);
+	}
+
+	if (vr_flag) {
+		testbed.init_vr();
+	}
+
+	// Render/training loop
+	while (testbed.frame()) {
+		if (!gui) {
+			tlog::info() << "iteration=" << testbed.m_training_step << " loss=" << testbed.m_loss_scalar.val();
+		}
+	}
+
+	return 0;
+}
+
+NGP_NAMESPACE_END
+
+#ifdef _WIN32
+int wmain(int argc, wchar_t* argv[]) {
+	SetConsoleOutputCP(CP_UTF8);
+#else
+int main(int argc, char* argv[]) {
+#endif
+	try {
+		std::vector<std::string> arguments;
+		for (int i = 0; i < argc; ++i) {
+#ifdef _WIN32
+			arguments.emplace_back(ngp::utf16_to_utf8(argv[i]));
+#else
+			arguments.emplace_back(argv[i]);
+#endif
 		}
 
-		// Render/training loop
-		while (testbed.frame()) {
-			if (!gui) {
-				tlog::info() << "iteration=" << testbed.m_training_step << " loss=" << testbed.m_loss_scalar.val();
-			}
-		}
+		return ngp::main_func(arguments);
 	} catch (const exception& e) {
-		tlog::error() << "Uncaught exception: " << e.what();
+		tlog::error() << fmt::format("Uncaught exception: {}", e.what());
 		return 1;
 	}
 }

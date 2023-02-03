@@ -63,10 +63,20 @@
 
 NGP_NAMESPACE_BEGIN
 
+namespace fs = filesystem;
+
 bool is_wsl();
 
-filesystem::path get_executable_dir();
-filesystem::path get_root_dir();
+fs::path get_executable_dir();
+fs::path get_root_dir();
+
+#ifdef _WIN32
+std::string utf16_to_utf8(const std::wstring& utf16);
+std::wstring utf8_to_utf16(const std::string& utf16);
+std::wstring native_string(const fs::path& path);
+#else
+std::string native_string(const fs::path& path);
+#endif
 
 bool ends_with(const std::string& str, const std::string& ending);
 bool ends_with_case_insensitive(const std::string& str, const std::string& ending);
@@ -222,8 +232,13 @@ enum class ELensMode : int {
 	FTheta,
 	LatLong,
 	OpenCVFisheye,
+	Equirectangular,
 };
-static constexpr const char* LensModeStr = "Perspective\0OpenCV\0F-Theta\0LatLong\0OpenCV Fisheye\0\0";
+static constexpr const char* LensModeStr = "Perspective\0OpenCV\0F-Theta\0LatLong\0OpenCV Fisheye\0Equirectangular\0\0";
+
+inline bool supports_dlss(ELensMode mode) {
+	return mode == ELensMode::Perspective || mode == ELensMode::OpenCV || mode == ELensMode::OpenCVFisheye;
+}
 
 struct Lens {
 	ELensMode mode = ELensMode::Perspective;
@@ -332,5 +347,54 @@ private:
 	int64_t m_last_progress = 0;
 	std::chrono::time_point<std::chrono::steady_clock> m_creation_time;
 };
+
+template <typename T>
+struct Buffer2DView {
+	T* data = nullptr;
+	Eigen::Vector2i resolution = Eigen::Vector2i::Zero();
+
+	// Lookup via integer pixel position (no bounds checking)
+	NGP_HOST_DEVICE T at(const Eigen::Vector2i& xy) const {
+		return data[xy.x() + xy.y() * resolution.x()];
+	}
+
+	// Lookup via UV coordinates in [0,1]^2
+	NGP_HOST_DEVICE T at(const Eigen::Vector2f& uv) const {
+		Eigen::Vector2i xy = resolution.cast<float>().cwiseProduct(uv).cast<int>().cwiseMax(0).cwiseMin(resolution - Eigen::Vector2i::Ones());
+		return at(xy);
+	}
+
+	// Lookup via UV coordinates in [0,1]^2 and LERP the nearest texels
+	NGP_HOST_DEVICE T at_lerp(const Eigen::Vector2f& uv) const {
+		const Eigen::Vector2f xy_float = resolution.cast<float>().cwiseProduct(uv);
+		const Eigen::Vector2i xy = xy_float.cast<int>();
+
+		const Eigen::Vector2f weight = xy_float - xy.cast<float>();
+
+		auto read_val = [&](Eigen::Vector2i pos) {
+			pos = pos.cwiseMax(0).cwiseMin(resolution - Eigen::Vector2i::Ones());
+			return at(pos);
+		};
+
+		return (
+			(1 - weight.x()) * (1 - weight.y()) * read_val({xy.x(), xy.y()}) +
+			(weight.x()) * (1 - weight.y()) * read_val({xy.x()+1, xy.y()}) +
+			(1 - weight.x()) * (weight.y()) * read_val({xy.x(), xy.y()+1}) +
+			(weight.x()) * (weight.y()) * read_val({xy.x()+1, xy.y()+1})
+		);
+	}
+
+	NGP_HOST_DEVICE operator bool() const {
+		return data;
+	}
+};
+
+uint8_t* load_stbi(const fs::path& path, int* width, int* height, int* comp, int req_comp);
+float* load_stbi_float(const fs::path& path, int* width, int* height, int* comp, int req_comp);
+uint16_t* load_stbi_16(const fs::path& path, int* width, int* height, int* comp, int req_comp);
+bool is_hdr_stbi(const fs::path& path);
+int write_stbi(const fs::path& path, int width, int height, int comp, const uint8_t* pixels, int quality = 100);
+
+FILE* native_fopen(const fs::path& path, const char* mode);
 
 NGP_NAMESPACE_END

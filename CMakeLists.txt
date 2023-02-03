@@ -71,7 +71,6 @@ set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
 if (MSVC)
 	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=/bigobj")
 else()
-	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-mf16c")
 	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-Wno-float-conversion")
 	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-fno-strict-aliasing")
 	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-fPIC")
@@ -104,11 +103,7 @@ if (NGP_BUILD_WITH_GUI)
 		list(APPEND NGP_INCLUDE_DIRECTORIES "dependencies/dlss/include")
 		if (MSVC)
 			list(APPEND NGP_LINK_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/x86_64")
-			if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-				list(APPEND NGP_LIBRARIES nvsdk_ngx_d_dbg)
-			else()
-				list(APPEND NGP_LIBRARIES nvsdk_ngx_d)
-			endif()
+			list(APPEND NGP_LIBRARIES "$<IF:$<CONFIG:Debug>,nvsdk_ngx_d_dbg,nvsdk_ngx_d>")
 		else()
 			list(APPEND NGP_LINK_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64")
 			list(APPEND NGP_LIBRARIES nvsdk_ngx)
@@ -123,6 +118,38 @@ if (NGP_BUILD_WITH_GUI)
 		endif()
 	endif()
 
+	# OpenXR
+	if (WIN32)
+		list(APPEND NGP_DEFINITIONS -DXR_USE_PLATFORM_WIN32 -DGLFW_EXPOSE_NATIVE_WGL)
+	elseif (UNIX AND NOT APPLE)
+		list(APPEND NGP_DEFINITIONS -DGLFW_EXPOSE_NATIVE_GLX)
+		if (JK_USE_WAYLAND)
+			set(PRESENTATION_BACKEND wayland CACHE STRING " " FORCE)
+			set(BUILD_WITH_XLIB_HEADERS OFF CACHE BOOL " " FORCE)
+			set(BUILD_WITH_XCB_HEADERS OFF CACHE BOOL " " FORCE)
+			set(BUILD_WITH_WAYLAND_HEADERS ON CACHE BOOL " " FORCE)
+			list(APPEND NGP_DEFINITIONS -DGLFW_EXPOSE_NATIVE_WAYLAND -DXR_USE_PLATFORM_WAYLAND)
+		else()
+			set(PRESENTATION_BACKEND xlib CACHE STRING " " FORCE)
+			set(BUILD_WITH_XLIB_HEADERS ON CACHE BOOL " " FORCE)
+			set(BUILD_WITH_XCB_HEADERS OFF CACHE BOOL " " FORCE)
+			set(BUILD_WITH_WAYLAND_HEADERS OFF CACHE BOOL " " FORCE)
+			list(APPEND NGP_DEFINITIONS -DGLFW_EXPOSE_NATIVE_X11 -DXR_USE_PLATFORM_XLIB)
+		endif()
+	else()
+		message(FATAL_ERROR "No OpenXR platform set for this OS")
+	endif()
+
+	add_subdirectory(dependencies/OpenXR-SDK)
+
+	list(APPEND NGP_INCLUDE_DIRECTORIES "dependencies/OpenXR-SDK/include" "dependencies/OpenXR-SDK/src/common")
+	list(APPEND NGP_LIBRARIES openxr_loader)
+	list(APPEND GUI_SOURCES src/openxr_hmd.cu)
+
+	# OpenGL
+	find_package(OpenGL REQUIRED)
+
+	# GLFW
 	set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL " " FORCE)
 	set(GLFW_BUILD_TESTS OFF CACHE BOOL " " FORCE)
 	set(GLFW_BUILD_DOCS OFF CACHE BOOL " " FORCE)
@@ -192,6 +219,26 @@ find_package(Python 3.7 COMPONENTS Interpreter Development)
 if (Python_FOUND)
 	add_subdirectory("dependencies/pybind11")
 endif()
+
+# Compile zlib (only on Windows)
+if (WIN32)
+	set(ZLIB_USE_STATIC_LIBS ON CACHE BOOL " " FORCE)
+	set(ZLIB_BUILD_STATIC_LIBS ON CACHE BOOL " " FORCE)
+	set(ZLIB_BUILD_SHARED_LIBS OFF CACHE BOOL " " FORCE)
+	set(SKIP_INSTALL_ALL ON CACHE BOOL " " FORCE)
+	add_subdirectory("dependencies/zlib")
+	set_property(TARGET zlibstatic PROPERTY FOLDER "dependencies")
+
+	set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/zlib" CACHE PATH " " FORCE)
+	set(ZLIB_LIBRARY zlibstatic)
+
+	include_directories(${ZLIB_INCLUDE_DIR} "${CMAKE_CURRENT_BINARY_DIR}/dependencies/zlib")
+
+	list(APPEND NGP_LIBRARIES zlibstatic)
+endif()
+
+add_subdirectory("dependencies/zstr")
+list(APPEND NGP_LIBRARIES zstr::zstr)
 
 
 ###############################################################################
@@ -286,24 +333,17 @@ target_link_libraries(instant-ngp PRIVATE ngp)
 
 # Copy DLSS shared libraries
 if (NGP_VULKAN)
-	if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-		set(NGX_BUILD_DIR "dev")
+	set(NGX_BUILD_DIR "$<IF:$<CONFIG:Debug>,dev,rel>")
+	if (MSVC)
+		set(NGX_SHARED_LIB "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/${NGX_BUILD_DIR}/nvngx_dlss.dll")
 	else()
-		set(NGX_BUILD_DIR "rel")
+		set(NGX_SHARED_LIB "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64/${NGX_BUILD_DIR}/libnvidia-ngx-dlss.so.*")
 	endif()
 
-	if (MSVC)
-		add_custom_command(TARGET instant-ngp POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/${NGX_BUILD_DIR}/nvngx_dlss.dll" $<TARGET_FILE_DIR:instant-ngp>
-			COMMAND_EXPAND_LISTS
-		)
-	else()
-		file(GLOB DLSS_SOS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Linux_x86_64/${NGX_BUILD_DIR}/libnvidia-ngx-dlss.so.*")
-		add_custom_command(TARGET instant-ngp POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy ${DLSS_SOS} $<TARGET_FILE_DIR:instant-ngp>
-			COMMAND_EXPAND_LISTS
-		)
-	endif()
+	add_custom_command(TARGET instant-ngp POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy "${NGX_SHARED_LIB}" $<TARGET_FILE_DIR:instant-ngp>
+		COMMAND_EXPAND_LISTS
+	)
 endif()
 
 if (MSVC)
@@ -329,9 +369,11 @@ endif()
 # Link the executable to the project directory and copy over DLLs such that instant-ngp can be invoked without going into the build folder.
 set(NGP_BINARY_FILE "\"${CMAKE_CURRENT_SOURCE_DIR}/$<TARGET_FILE_NAME:instant-ngp>\"")
 if (MSVC)
-	file(TO_NATIVE_PATH ${NGP_BINARY_FILE} NGP_BINARY_FILE)
-	add_custom_command(TARGET instant-ngp POST_BUILD COMMAND cmd /C del /F /Q "${NGP_BINARY_FILE}" && cmd /C mklink /H "${NGP_BINARY_FILE}" "\"$<TARGET_FILE:instant-ngp>\"")
-	file(GLOB NGP_REQUIRED_DLLS "${CUDA_COMPILER_BIN}/cudart64*.dll" "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/dlss/lib/Windows_x86_64/${NGX_BUILD_DIR}/nvngx_dlss.dll")
+	add_custom_command(TARGET instant-ngp POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:instant-ngp> ${CMAKE_CURRENT_SOURCE_DIR})
+	file(GLOB NGP_REQUIRED_DLLS "${CUDA_COMPILER_BIN}/cudart64*.dll")
+	if (NGP_VULKAN)
+		list(APPEND NGP_REQUIRED_DLLS "${NGX_SHARED_LIB}")
+	endif()
 	if (NGP_REQUIRED_DLLS)
 		add_custom_command(TARGET instant-ngp POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E copy ${NGP_REQUIRED_DLLS} ${CMAKE_CURRENT_SOURCE_DIR}

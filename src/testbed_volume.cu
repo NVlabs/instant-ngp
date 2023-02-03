@@ -33,7 +33,6 @@
 
 using namespace Eigen;
 using namespace tcnn;
-namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
@@ -219,10 +218,11 @@ __global__ void init_rays_volume(
 	float near_distance,
 	float plane_z,
 	float aperture_size,
-	const float* __restrict__ envmap_data,
-	const Vector2i envmap_resolution,
-	Array4f* __restrict__ framebuffer,
-	float* __restrict__ depthbuffer,
+	Foveation foveation,
+	Buffer2DView<const Array4f> envmap,
+	Array4f* __restrict__ frame_buffer,
+	float* __restrict__ depth_buffer,
+	Buffer2DView<const uint8_t> hidden_area_mask,
 	default_rng_t rng,
 	const uint8_t *bitgrid,
 	float distance_scale,
@@ -241,20 +241,42 @@ __global__ void init_rays_volume(
 	if (plane_z < 0) {
 		aperture_size = 0.0;
 	}
-	Ray ray = pixel_to_ray(sample_index, {x, y}, resolution, focal_length, camera_matrix, screen_center, parallax_shift, snap_to_pixel_centers, near_distance, plane_z, aperture_size);
+
+	Ray ray = pixel_to_ray(
+		sample_index,
+		{x, y},
+		resolution,
+		focal_length,
+		camera_matrix,
+		screen_center,
+		parallax_shift,
+		snap_to_pixel_centers,
+		near_distance,
+		plane_z,
+		aperture_size,
+		foveation,
+		hidden_area_mask
+	);
+
+	if (!ray.is_valid()) {
+		depth_buffer[idx] = MAX_DEPTH();
+		return;
+	}
+
 	ray.d = ray.d.normalized();
 	auto box_intersection = aabb.ray_intersect(ray.o, ray.d);
 	float t = max(box_intersection.x(), 0.0f);
-	ray.o = ray.o + (t + 1e-6f) * ray.d;
+	ray.advance(t + 1e-6f);
 	float scale = distance_scale / global_majorant;
+
 	if (t >= box_intersection.y() || !walk_to_next_event(rng, aabb, ray.o, ray.d, bitgrid, scale)) {
-		framebuffer[idx] = proc_envmap_render(ray.d, up_dir, sun_dir, sky_col);
-		depthbuffer[idx] = 1e10f;
+		frame_buffer[idx] = proc_envmap_render(ray.d, up_dir, sun_dir, sky_col);
+		depth_buffer[idx] = MAX_DEPTH();
 	} else {
 		uint32_t dstidx = atomicAdd(pixel_counter, 1);
 		positions[dstidx] = ray.o;
 		payloads[dstidx] = {ray.d, Array4f::Constant(0.f), idx};
-		depthbuffer[idx] = camera_matrix.col(2).dot(ray.o - camera_matrix.col(3));
+		depth_buffer[idx] = camera_matrix.col(2).dot(ray.o - camera_matrix.col(3));
 	}
 }
 
@@ -277,8 +299,7 @@ __global__ void volume_render_kernel_gt(
 	float distance_scale,
 	float albedo,
 	float scattering,
-	Array4f* __restrict__ framebuffer,
-	float* __restrict__ depthbuffer
+	Array4f* __restrict__ frame_buffer
 ) {
 	uint32_t idx = threadIdx.x + blockDim.x * blockIdx.x;
 	if (idx>=n_pixels || idx>=pixel_counter_in[0])
@@ -326,7 +347,7 @@ __global__ void volume_render_kernel_gt(
 	} else {
 		col = proc_envmap_render(dir, up_dir, sun_dir, sky_col);
 	}
-	framebuffer[pixidx] = col;
+	frame_buffer[pixidx] = col;
 }
 
 __global__ void volume_render_kernel_step(
@@ -352,8 +373,7 @@ __global__ void volume_render_kernel_step(
 	float distance_scale,
 	float albedo,
 	float scattering,
-	Array4f* __restrict__ framebuffer,
-	float* __restrict__ depthbuffer,
+	Array4f* __restrict__ frame_buffer,
 	bool force_finish_ray
 ) {
 	uint32_t idx = threadIdx.x + blockDim.x * blockIdx.x;
@@ -383,23 +403,25 @@ __global__ void volume_render_kernel_step(
 	payload.col.w() += alpha;
 	if (payload.col.w() > 0.99f || !walk_to_next_event(rng, aabb, pos, dir, bitgrid, scale) || force_finish_ray) {
 		payload.col += (1.f-payload.col.w()) * proc_envmap_render(dir, up_dir, sun_dir, sky_col);
-		framebuffer[pixidx] = payload.col;
+		frame_buffer[pixidx] = payload.col;
 		return;
 	}
 	uint32_t dstidx = atomicAdd(pixel_counter_out, 1);
-	positions_out[dstidx]=pos;
-	payloads_out[dstidx]=payload;
+	positions_out[dstidx] = pos;
+	payloads_out[dstidx] = payload;
 }
 
-void Testbed::render_volume(CudaRenderBuffer& render_buffer,
+void Testbed::render_volume(
+	cudaStream_t stream,
+	const CudaRenderBufferView& render_buffer,
 	const Vector2f& focal_length,
 	const Matrix<float, 3, 4>& camera_matrix,
 	const Vector2f& screen_center,
-	cudaStream_t stream
+	const Foveation& foveation
 ) {
 	float plane_z = m_slice_plane_z + m_scale;
 	float distance_scale = 1.f/std::max(m_volume.inv_distance_scale,0.01f);
-	auto res = render_buffer.in_resolution();
+	auto res = render_buffer.resolution;
 
 	size_t n_pixels = (size_t)res.x() * res.y();
 	for (uint32_t i=0;i<2;++i) {
@@ -414,7 +436,7 @@ void Testbed::render_volume(CudaRenderBuffer& render_buffer,
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
 	init_rays_volume<<<blocks, threads, 0, stream>>>(
-		render_buffer.spp(),
+		render_buffer.spp,
 		m_volume.pos[0].data(),
 		m_volume.payload[0].data(),
 		m_volume.hit_counter.data(),
@@ -428,10 +450,11 @@ void Testbed::render_volume(CudaRenderBuffer& render_buffer,
 		m_render_near_distance,
 		plane_z,
 		m_aperture_size,
-		m_envmap.envmap->inference_params(),
-		m_envmap.resolution,
-		render_buffer.frame_buffer(),
-		render_buffer.depth_buffer(),
+		foveation,
+		m_envmap.inference_view(),
+		render_buffer.frame_buffer,
+		render_buffer.depth_buffer,
+		render_buffer.hidden_area_mask ? render_buffer.hidden_area_mask->const_view() : Buffer2DView<const uint8_t>{},
 		m_rng,
 		m_volume.bitgrid.data(),
 		distance_scale,
@@ -467,8 +490,7 @@ void Testbed::render_volume(CudaRenderBuffer& render_buffer,
 			distance_scale,
 			std::min(m_volume.albedo,0.995f),
 			m_volume.scattering,
-			render_buffer.frame_buffer(),
-			render_buffer.depth_buffer()
+			render_buffer.frame_buffer
 		);
 		m_rng.advance(n_pixels*256);
 	} else {
@@ -509,8 +531,7 @@ void Testbed::render_volume(CudaRenderBuffer& render_buffer,
 				distance_scale,
 				std::min(m_volume.albedo,0.995f),
 				m_volume.scattering,
-				render_buffer.frame_buffer(),
-				render_buffer.depth_buffer(),
+				render_buffer.frame_buffer,
 				(iter>=max_iter-1)
 			);
 			m_rng.advance(n_pixels*256);
@@ -555,7 +576,7 @@ void Testbed::load_volume(const fs::path& data_path) {
 		throw std::runtime_error{data_path.str() + " does not exist."};
 	}
 	tlog::info() << "Loading NanoVDB file from " << data_path;
-	std::ifstream f(data_path.str(), std::ios::in | std::ios::binary);
+	std::ifstream f{native_string(data_path), std::ios::in | std::ios::binary};
 	NanoVDBFileHeader header;
 	NanoVDBMetaData metadata;
 	f.read(reinterpret_cast<char*>(&header), sizeof(header));

@@ -5,30 +5,153 @@
 Ever wanted to train a NeRF model of a fox in under 5 seconds? Or fly around a scene captured from photos of a factory robot? Of course you have!
 
 Here you will find an implementation of four __neural graphics primitives__, being neural radiance fields (NeRF), signed distance functions (SDFs), neural images, and neural volumes.
-In each case, we train and render a MLP with multiresolution hash input encoding using the [tiny-cuda-nn](https://github.com/NVlabs/tiny-cuda-nn) framework.
+In each case, we train and render a MLP with multiresolution hash input encoding using the [__tiny-cuda-nn__](https://github.com/NVlabs/tiny-cuda-nn) framework.
 
 > __Instant Neural Graphics Primitives with a Multiresolution Hash Encoding__  
 > [Thomas Müller](https://tom94.net), [Alex Evans](https://research.nvidia.com/person/alex-evans), [Christoph Schied](https://research.nvidia.com/person/christoph-schied), [Alexander Keller](https://research.nvidia.com/person/alex-keller)  
 > _ACM Transactions on Graphics (__SIGGRAPH__), July 2022_  
 > __[Project page](https://nvlabs.github.io/instant-ngp)&nbsp;/ [Paper](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.pdf)&nbsp;/ [Video](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.mp4)&nbsp;/ [Presentation](https://tom94.net/data/publications/mueller22instant/mueller22instant-gtc.mp4)&nbsp;/ [Real-Time Live](https://tom94.net/data/publications/mueller22instant/mueller22instant-rtl.mp4)&nbsp;/ [BibTeX](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.bib)__
 
-To get started with NVIDIA Instant NeRF, check out the [blog post](https://developer.nvidia.com/blog/getting-started-with-nvidia-instant-nerfs/) and [SIGGRAPH tutorial](https://www.nvidia.com/en-us/on-demand/session/siggraph2022-sigg22-s-16/).
-
 For business inquiries, please submit the [NVIDIA research licensing form](https://www.nvidia.com/en-us/research/inquiries/).
 
 
-## Windows binary release
+## Installation
 
-If you have Windows and if you do not need developer Python bindings, you can download one of the following binary releases and then jump directly to the [usage instructions](https://github.com/NVlabs/instant-ngp#interactive-training-and-rendering) or to [creating your own NeRF from a recording](docs/nerf_dataset_tips.md).
+If you have Windows, download one of the following releases corresponding to your graphics card and extract it. Then, start `instant-ngp.exe`.
 
 - [**RTX 3000 & 4000 series, RTX A4000&ndash;A6000**, and other Ampere & Ada cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-RTX-3000-and-4000.zip)
 - [**RTX 2000 series, Titan RTX, Quadro RTX 4000&ndash;8000**, and other Turing cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-RTX-2000.zip)
 - [**GTX 1000 series, Titan Xp, Quadro P1000&ndash;P6000**, and other Pascal cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-GTX-1000.zip)
 
-If you use Linux, or want the developer Python bindings, or if your GPU is not listed above (e.g. Hopper, Volta, or Maxwell generations), use the following step-by-step instructions to compile __instant-ngp__ yourself.
+Keep reading for a guided tour of the application or, if you are interested in creating your own NeRF, watch [the video tutorial](https://www.youtube.com/watch?v=3TWxO1PftMc) or read the [written instructions](docs/nerf_dataset_tips.md).
+
+If you use Linux, or want the [developer Python bindings](https://github.com/NVlabs/instant-ngp#python-bindings), or if your GPU is not listed above (e.g. Hopper, Volta, or Maxwell generations), you need to [build __instant-ngp__ yourself](https://github.com/NVlabs/instant-ngp#building-instant-ngp-windows--linux).
 
 
-## Requirements
+## Usage
+
+<img src="docs/assets_readme/testbed.png" width="100%"/>
+
+__instant-ngp__ comes with an interactive GUI that includes many features:
+- [comprehensive controls](https://github.com/NVlabs/instant-ngp#keyboard-shortcuts-and-recommended-controls) for interactively exploring neural graphics primitives,
+- [VR mode](https://github.com/NVlabs/instant-ngp#vr-controls) for viewing neural graphics primitives through a virtual-reality headset,
+- saving and loading "snapshots" so you can share your graphics primitives on the internet,
+- a camera path editor to create videos,
+- `NeRF->Mesh` and `SDF->Mesh` conversion,
+- camera pose and lens optimization,
+- and many more.
+
+
+### NeRF fox
+
+Simply start `instant-ngp` and drag the `data/nerf/fox` folder into the window. Or, alternatively, use the command line:
+
+```sh
+instant-ngp$ ./instant-ngp data/nerf/fox
+```
+
+<img src="docs/assets_readme/fox.png"/>
+
+You can use __any__ NeRF-compatible dataset, e.g. from [original NeRF](https://drive.google.com/drive/folders/1JDdLGDruGNXWnM1eqY1FNL9PlStjaKWi), the [SILVR dataset](https://github.com/IDLabMedia/large-lightfields-dataset), or the [DroneDeploy dataset](https://github.com/nickponline/dd-nerf-dataset). **To create your own NeRF, watch [the video tutorial](https://www.youtube.com/watch?v=3TWxO1PftMc) or read the [written instructions](docs/nerf_dataset_tips.md).**
+
+### SDF armadillo
+
+Drag `data/sdf/armadillo.obj` into the window or use the command:
+
+```sh
+instant-ngp$ ./instant-ngp data/sdf/armadillo.obj
+```
+
+<img src="docs/assets_readme/armadillo.png"/>
+
+### Image of Einstein
+
+Drag `data/image/albert.exr` into the window or use the command:
+
+```sh
+instant-ngp$ ./instant-ngp data/image/albert.exr
+```
+
+<img src="docs/assets_readme/albert.png"/>
+
+To reproduce the gigapixel results, download, for example, [the Tokyo image](https://www.flickr.com/photos/trevor_dobson_inefekt69/29314390837) and convert it to `.bin` using the `scripts/convert_image.py` script. This custom format improves compatibility and loading speed when resolution is high. Now you can run:
+
+```sh
+instant-ngp$ ./instant-ngp data/image/tokyo.bin
+```
+
+
+### Volume renderer
+
+Download the [nanovdb volume for the Disney cloud](https://drive.google.com/drive/folders/1SuycSAOSG64k2KLV7oWgyNWyCvZAkafK?usp=sharing), which is derived [from here](https://disneyanimation.com/data-sets/?drawer=/resources/clouds/) ([CC BY-SA 3.0](https://media.disneyanimation.com/uploads/production/data_set_asset/6/asset/License_Cloud.pdf)). Then drag `wdas_cloud_quarter.nvdb` into the window or use the command:
+
+```sh
+instant-ngp$ ./instant-ngp wdas_cloud_quarter.nvdb
+```
+<img src="docs/assets_readme/cloud.png"/>
+
+
+### Keyboard shortcuts and recommended controls
+
+Here are the main keyboard controls for the __instant-ngp__ application.
+
+| Key             | Meaning       |
+| :-------------: | ------------- |
+| WASD            | Forward / pan left / backward / pan right. |
+| Spacebar / C    | Move up / down. |
+| = or + / - or _ | Increase / decrease camera velocity (first person mode) or zoom in / out (third person mode). |
+| E / Shift+E     | Increase / decrease exposure. |
+| Tab             | Toggle menu visibility. |
+| T               | Toggle training. After around two minutes training tends to settle down, so can be toggled off. |
+| { }             | Go to the first/last training image camera view. |
+| [ ]             | Go to the previous/next training image camera view. |
+| R               | Reload network from file. |
+| Shift+R         | Reset camera. |
+| O               | Toggle visualization or accumulated error map. |
+| G               | Toggle visualization of the ground truth. |
+| M               | Toggle multi-view visualization of layers of the neural model. See the paper's video for a little more explanation. |
+| , / .           | Shows the previous / next visualized layer; hit M to escape. |
+| 1-8             | Switches among various render modes, with 2 being the standard one. You can see the list of render mode names in the control interface. |
+
+There are many controls in the __instant-ngp__ GUI.
+First, note that this GUI can be moved and resized, as can the "Camera path" GUI (which first must be expanded to be used).
+
+Recommended user controls in __instant-ngp__ are:
+
+* __Snapshot:__ use "Save" to save the trained NeRF, "Load" to reload.
+* __Rendering -> DLSS:__ toggling this on and setting "DLSS sharpening" to 1.0 can often improve rendering quality.
+* __Rendering -> Crop size:__ trim back the surrounding environment to focus on the model. "Crop aabb" lets you move the center of the volume of interest and fine tune. See more about this feature in [our NeRF training & dataset tips](https://github.com/NVlabs/instant-ngp/blob/master/docs/nerf_dataset_tips.md).
+
+The "Camera path" GUI lets you create a camera path for rendering a video.
+The button "Add from cam" inserts keyframes from the current perspective.
+Then, you can render a video `.mp4` of your camera path or export the keyframes to a `.json` file.
+There is a bit more information about the GUI [in this post](https://developer.nvidia.com/blog/getting-started-with-nvidia-instant-nerfs/) and [in this video guide to creating your own video](https://www.youtube.com/watch?v=3TWxO1PftMc).
+
+
+### VR controls
+
+To view the neural graphics primitive in VR, first start your VR runtime. This will most likely be either
+- __OculusVR__ if you have an Oculus Rift or Meta Quest (with link cable) headset, and
+- __SteamVR__ if you have another headset.
+- Any OpenXR-compatible runtime will work.
+
+Then, press the __Connect to VR/AR headset__ button in the __instant-ngp__ GUI and put on your headset.
+Before entering VR, we **strongly** recommend that you first finish training (press "Stop training") or load a pre-trained snapshot for maximum performance.
+
+In VR, you have the following controls.
+
+| Control                | Meaning       |
+| :--------------------: | ------------- |
+| Left stick / trackpad  | Move |
+| Right stick / trackpad | Turn camera |
+| Press stick / trackpad | Erase NeRF around the hand |
+| Grab (one-handed)      | Drag neural graphics primitive |
+| Grab (two-handed)      | Rotate and zoom (like pinch-to-zoom on a smartphone) |
+
+
+## Building instant-ngp (Windows & Linux)
+
+### Requirements
 
 - An __NVIDIA GPU__; tensor cores increase performance when available. All shown results come from an RTX 3090.
 - A __C++14__ capable compiler. The following choices are recommended and have been tested:
@@ -63,7 +186,7 @@ export LD_LIBRARY_PATH="/usr/local/cuda-11.4/lib64:$LD_LIBRARY_PATH"
 ```
 
 
-## Compilation (Windows & Linux)
+### Compilation
 
 Begin by cloning this repository and all its submodules using the following command:
 ```sh
@@ -89,135 +212,46 @@ If automatic GPU architecture detection fails, (as can happen if you have multip
 |   90 |   89 |   86 |   80 |   75 |             70 |              61 |  52 |  37 |
 
 
-
-## Interactive training and rendering
-
-<img src="docs/assets_readme/testbed.png" width="100%"/>
-
-This codebase comes with an interactive GUI that includes many features beyond our academic publication:
-- Additional training features, such as extrinsics and intrinsics optimization.
-- Marching cubes for `NeRF->Mesh` and `SDF->Mesh` conversion.
-- A spline-based camera path editor to create videos.
-- Debug visualizations of the activations of every neuron input and output.
-- And many more task-specific settings.
-- See also our [one minute demonstration video of the tool](https://nvlabs.github.io/instant-ngp/assets/mueller2022instant.mp4).
-
-Let's start using __instant-ngp__; more information about the GUI and other scripts follow these test scenes.
-
-### NeRF fox
-
-One test scene is provided in this repository, using a small number of frames from a casually captured phone video.
-Simply start `instant-ngp` and drag the `data/nerf/fox` folder into the GUI. Or, alternatively, use the command line:
-
-```sh
-instant-ngp$ ./instant-ngp data/nerf/fox
-```
-
-On Windows you need to reverse the slashes here (and below), i.e.:
-
-```sh
-instant-ngp> .\instant-ngp data\nerf\fox
-```
-
-<img src="docs/assets_readme/fox.png"/>
-
-Alternatively, download any NeRF-compatible scene (e.g. from the [NeRF authors' drive](https://drive.google.com/drive/folders/1JDdLGDruGNXWnM1eqY1FNL9PlStjaKWi), the [SILVR dataset](https://github.com/IDLabMedia/large-lightfields-dataset), or the [DroneDeploy dataset](https://github.com/nickponline/dd-nerf-dataset)).
-Now you can run:
-
-```sh
-instant-ngp$ ./instant-ngp data/nerf_synthetic/lego/transforms_train.json
-```
-
-**[To prepare your own dataset for use with our NeRF implementation, click here.](docs/nerf_dataset_tips.md)** See also [this video](https://www.youtube.com/watch?v=8GbENSmdVeE) for a guided walkthrough.
-
-### SDF armadillo
-
-Drag `data/sdf/armadillo.obj` into the GUI or use the command:
-
-```sh
-instant-ngp$ ./instant-ngp data/sdf/armadillo.obj
-```
-
-<img src="docs/assets_readme/armadillo.png"/>
-
-### Image of Einstein
-
-Drag `data/image/albert.exr` into the GUI or use the command:
-
-```sh
-instant-ngp$ ./instant-ngp data/image/albert.exr
-```
-
-<img src="docs/assets_readme/albert.png"/>
-
-To reproduce the gigapixel results, download, for example, [the Tokyo image](https://www.flickr.com/photos/trevor_dobson_inefekt69/29314390837) and convert it to `.bin` using the `scripts/convert_image.py` script. This custom format improves compatibility and loading speed when resolution is high. Now you can run:
-
-```sh
-instant-ngp$ ./instant-ngp data/image/tokyo.bin
-```
-
-
-### Volume renderer
-
-Download the [nanovdb volume for the Disney cloud](https://drive.google.com/drive/folders/1SuycSAOSG64k2KLV7oWgyNWyCvZAkafK?usp=sharing), which is derived [from here](https://disneyanimation.com/data-sets/?drawer=/resources/clouds/) ([CC BY-SA 3.0](https://media.disneyanimation.com/uploads/production/data_set_asset/6/asset/License_Cloud.pdf)).
-
-Then drag `wdas_cloud_quarter.nvdb` into the GUI or use the command:
-
-```sh
-instant-ngp$ ./instant-ngp wdas_cloud_quarter.nvdb
-```
-<img src="docs/assets_readme/cloud.png"/>
-
-
-### GUI controls
-
-Here are the main keyboard controls for the __instant-ngp__ application.
-
-| Key             | Meaning       |
-| :-------------: | ------------- |
-| WASD            | Forward / pan left / backward / pan right. |
-| Spacebar / C    | Move up / down. |
-| = or + / - or _ | Increase / decrease camera velocity. |
-| E / Shift+E     | Increase / decrease exposure. |
-| T               | Toggle training. After around two minutes training tends to settle down, so can be toggled off. |
-| R               | Reload network from file. |
-| Shift+R         | Reset camera. |
-| O               | Toggle visualization or accumulated error map. |
-| G               | Toggle visualization of the ground truth. |
-| M               | Toggle multi-view visualization of layers of the neural model. See the paper's video for a little more explanation. |
-| , / .           | Shows the previous / next visualized layer; hit M to escape. |
-| 1-8             | Switches among various render modes, with 2 being the standard one. You can see the list of render mode names in the control interface. |
-
-There are many controls in the __instant-ngp__ GUI.
-First, note that this GUI can be moved and resized, as can the "Camera path" GUI (which first must be expanded to be used).
-
-Some popular user controls in __instant-ngp__ are:
-
-* __Snapshot:__ use Save to save the NeRF solution generated, Load to reload. Necessary if you want to make an animation.
-* __Rendering -> DLSS:__ toggling this on and setting "DLSS sharpening" below it to 1.0 can often improve rendering quality.
-* __Rendering -> Crop size:__ trim back the surrounding environment to focus on the model. "Crop aabb" lets you move the center of the volume of interest and fine tune. See more about this feature in [our NeRF training & dataset tips](https://github.com/NVlabs/instant-ngp/blob/master/docs/nerf_dataset_tips.md).
-
-The "Camera path" GUI lets you set frames along a path. "Add from cam" is the main button you'll want to push. Then, you can render a video `.mp4` of your camera path or export the keyframes to a `.json` file. There is a bit more information about the GUI [in this post](https://developer.nvidia.com/blog/getting-started-with-nvidia-instant-nerfs/) and [in this (bit dated) video](https://www.youtube.com/watch?v=z3-fjYzd0BA).
-
-
 ## Python bindings
 
-To conduct controlled experiments in an automated fashion, all features from the interactive GUI (and more!) have Python bindings that can be easily instrumented.
+After you have built __instant-ngp__, you can use its Python bindings to conduct controlled experiments in an automated fashion.
+All features from the interactive GUI (and more!) have Python bindings that can be easily instrumented.
 For an example of how the `./instant-ngp` application can be implemented and extended from within Python, see `./scripts/run.py`, which supports a superset of the command line arguments that `./instant-ngp` does.
 
-Here is a typical command line using `scripts/run.py` to generate a 5-second flythrough of the fox dataset to the (default) file `video.mp4`, after using the GUI to save a (default) NeRF snapshot `base.msgpack` and a set of camera key frames: (see [this video](https://www.youtube.com/watch?v=8GbENSmdVeE) for a guided walkthrough)
-
-```sh
-instant-ngp$ python scripts/run.py data/nerf/fox/base.msgpack --video_camera_path data/nerf/fox/base_cam.json --video_n_seconds 5 --video_fps 60 --width 1920 --height 1080
-```
-
-If you'd rather build new models from the hash encoding and fast neural networks, consider the [__tiny-cuda-nn__'s PyTorch extension](https://github.com/nvlabs/tiny-cuda-nn#pytorch-extension).
+If you would rather build new models from the hash encoding and fast neural networks, consider [__tiny-cuda-nn__'s PyTorch extension](https://github.com/nvlabs/tiny-cuda-nn#pytorch-extension).
 
 Happy hacking!
 
 
+## Additional resources
+
+- [Getting started with NVIDIA Instant NeRF blog post](https://developer.nvidia.com/blog/getting-started-with-nvidia-instant-nerfs/)
+- [SIGGRAPH tutorial for advanced NeRF dataset creation](https://www.nvidia.com/en-us/on-demand/session/siggraph2022-sigg22-s-16/).
+
+
 ## Frequently asked questions (FAQ)
 
+__Q:__ The NeRF reconstruction of my custom dataset looks bad; what can I do?
+
+__A:__ There could be multiple issues:
+- COLMAP might have been unable to reconstruct camera poses.
+- There might have been movement or blur during capture. Don't treat capture as an artistic task; treat it as photogrammetry. You want _\*as little blur as possible\*_ in your dataset (motion, defocus, or otherwise) and all objects must be _\*static\*_ during the entire capture. Bonus points if you are using a wide-angle lens (iPhone wide angle works well), because it covers more space than narrow lenses.
+- The dataset parameters (in particular `aabb_scale`) might have been tuned suboptimally. We recommend starting with `aabb_scale=128` and then increasing or decreasing it by factors of two until you get optimal quality.
+- Carefully read [our NeRF training & dataset tips](https://github.com/NVlabs/instant-ngp/blob/master/docs/nerf_dataset_tips.md).
+
+##
+__Q:__ How can I save the trained model and load it again later?
+
+__A:__ Two options:
+1. Use the GUI's "Snapshot" section.
+2. Use the Python bindings `load_snapshot` / `save_snapshot` (see `scripts/run.py` for example usage).
+
+##
+__Q:__ Can this codebase use multiple GPUs at the same time?
+
+__A:__ Only for VR rendering, in which case one GPU is used per eye. Otherwise, no. To select a specific GPU to run on, use the [CUDA_VISIBLE_DEVICES](https://stackoverflow.com/questions/39649102/how-do-i-select-which-gpu-to-run-a-job-on) environment variable. To optimize the _compilation_ for that specific GPU use the [TCNN_CUDA_ARCHITECTURES](https://github.com/NVlabs/instant-ngp#compilation-windows--linux) environment variable.
+
+##
 __Q:__ How can I run __instant-ngp__ in headless mode?
 
 __A:__ Use `./instant-ngp --no-gui` or `python scripts/run.py`. You can also compile without GUI via `cmake -DNGP_BUILD_WITH_GUI=off ...`
@@ -246,36 +280,14 @@ __Q:__ How can I edit and train the underlying hash encoding or neural network o
 __A:__ Use [__tiny-cuda-nn__'s PyTorch extension](https://github.com/nvlabs/tiny-cuda-nn#pytorch-extension).
 
 ##
-__Q:__ How can I save the trained model and load it again later?
-
-__A:__ Two options:
-1. Use the GUI's "Snapshot" section.
-2. Use the Python bindings `load_snapshot` / `save_snapshot` (see `scripts/run.py` for example usage).
-
-##
-__Q:__ Can this codebase use multiple GPUs at the same time?
-
-__A:__ No. To select a specific GPU to run on, use the [CUDA_VISIBLE_DEVICES](https://stackoverflow.com/questions/39649102/how-do-i-select-which-gpu-to-run-a-job-on) environment variable. To optimize the _compilation_ for that specific GPU use the [TCNN_CUDA_ARCHITECTURES](https://github.com/NVlabs/instant-ngp#compilation-windows--linux) environment variable.
-
-##
 __Q:__ What is the coordinate system convention?
 
 __A:__ See [this helpful diagram](https://github.com/NVlabs/instant-ngp/discussions/153?converting=1#discussioncomment-2187652) by user @jc211.
 
 ##
-__Q:__ The NeRF reconstruction of my custom dataset looks bad; what can I do?
-
-__A:__ There could be multiple issues:
-- COLMAP might have been unable to reconstruct camera poses.
-- There might have been movement or blur during capture. Don't treat capture as an artistic task; treat it as photogrammetry. You want _\*as little blur as possible\*_ in your dataset (motion, defocus, or otherwise) and all objects must be _\*static\*_ during the entire capture. Bonus points if you are using a wide-angle lens (iPhone wide angle works well), because it covers more space than narrow lenses.
-- The dataset parameters (in particular `aabb_scale`) might have been tuned suboptimally. We recommend starting with `aabb_scale=16` and then increasing or decreasing it by factors of two until you get optimal quality.
-- Carefully read [our NeRF training & dataset tips](https://github.com/NVlabs/instant-ngp/blob/master/docs/nerf_dataset_tips.md).
-
-##
 __Q:__ Why are background colors randomized during NeRF training?
 
 __A:__ Transparency in the training data indicates a desire for transparency in the learned model. Using a solid background color, the model can minimize its loss by simply predicting that background color, rather than transparency (zero density). By randomizing the background colors, the model is _forced_ to learn zero density to let the randomized colors "shine through".
-
 
 ##
 __Q:__ How to mask away NeRF training pixels (e.g. for dynamic object removal)?

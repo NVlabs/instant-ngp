@@ -23,6 +23,8 @@
 
 #include <filesystem/path.h>
 
+#include <stb_image/stb_image.h>
+
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <cstdlib>
@@ -31,28 +33,9 @@
 #include <string>
 #include <vector>
 
-#define STB_IMAGE_IMPLEMENTATION
-
-#ifdef __NVCC__
-#  ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
-#    pragma nv_diag_suppress 550
-#  else
-#    pragma diag_suppress 550
-#  endif
-#endif
-#include <stb_image/stb_image.h>
-#ifdef __NVCC__
-#  ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
-#    pragma nv_diag_default 550
-#  else
-#    pragma diag_default 550
-#  endif
-#endif
-
 using namespace tcnn;
 using namespace std::literals;
 using namespace Eigen;
-namespace fs = filesystem;
 
 NGP_NAMESPACE_BEGIN
 
@@ -248,6 +231,10 @@ void read_lens(const nlohmann::json& json, Lens& lens, Vector2f& principal_point
 		mode = ELensMode::LatLong;
 	}
 
+	if (json.contains("equirectangular")) {
+		mode = ELensMode::Equirectangular;
+	}
+
 	// If there was an outer distortion mode, don't override it with nothing.
 	if (mode != ELensMode::Perspective) {
 		lens.mode = mode;
@@ -284,7 +271,7 @@ bool read_focal_length(const nlohmann::json &json, Vector2f &focal_length, const
 	return true;
 }
 
-NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float sharpen_amount) {
+NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amount) {
 	if (jsonpaths.empty()) {
 		throw std::runtime_error{"Cannot load NeRF data from an empty set of paths."};
 	}
@@ -293,7 +280,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 
 	NerfDataset result{};
 
-	std::ifstream f{jsonpaths.front().str()};
+	std::ifstream f{native_string(jsonpaths.front())};
 	nlohmann::json transforms = nlohmann::json::parse(f, nullptr, true, true);
 
 	ThreadPool pool;
@@ -322,7 +309,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 	std::transform(
 		jsonpaths.begin(), jsonpaths.end(),
 		std::back_inserter(jsons), [](const auto& path) {
-			return nlohmann::json::parse(std::ifstream{path.str()}, nullptr, true, true);
+			return nlohmann::json::parse(std::ifstream{native_string(path)}, nullptr, true, true);
 		}
 	);
 
@@ -546,10 +533,10 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 			}
 
 			if (equals_case_insensitive(envmap_path.extension(), "exr")) {
-				result.envmap_data = load_exr(envmap_path.str(), result.envmap_resolution.x(), result.envmap_resolution.y());
+				result.envmap_data = load_exr_gpu(envmap_path, &result.envmap_resolution.x(), &result.envmap_resolution.y());
 				result.is_hdr = true;
 			} else {
-				result.envmap_data = load_stbi(envmap_path.str(), result.envmap_resolution.x(), result.envmap_resolution.y());
+				result.envmap_data = load_stbi_gpu(envmap_path, &result.envmap_resolution.x(), &result.envmap_resolution.y());
 			}
 		}
 
@@ -580,7 +567,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 				result.is_hdr = true;
 			} else {
 				dst.image_data_on_gpu = false;
-				uint8_t* img = stbi_load(path.str().c_str(), &dst.res.x(), &dst.res.y(), &comp, 4);
+				uint8_t* img = load_stbi(path, &dst.res.x(), &dst.res.y(), &comp, 4);
 				if (!img) {
 					throw std::runtime_error{"Could not open image file: "s + std::string{stbi_failure_reason()}};
 				}
@@ -588,7 +575,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 				fs::path alphapath = resolve_path(base_path, fmt::format("{}.alpha.{}", frame["file_path"], path.extension()));
 				if (alphapath.exists()) {
 					int wa = 0, ha = 0;
-					uint8_t* alpha_img = stbi_load(alphapath.str().c_str(), &wa, &ha, &comp, 4);
+					uint8_t* alpha_img = load_stbi(alphapath, &wa, &ha, &comp, 4);
 					if (!alpha_img) {
 						throw std::runtime_error{"Could not load alpha image "s + alphapath.str()};
 					}
@@ -607,7 +594,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 				fs::path maskpath = path.parent_path() / fmt::format("dynamic_mask_{}.png", path.basename());
 				if (maskpath.exists()) {
 					int wa = 0, ha = 0;
-					uint8_t* mask_img = stbi_load(maskpath.str().c_str(), &wa, &ha, &comp, 4);
+					uint8_t* mask_img = load_stbi(maskpath, &wa, &ha, &comp, 4);
 					if (!mask_img) {
 						throw std::runtime_error{fmt::format("Dynamic mask {} could not be loaded.", maskpath.str())};
 					}
@@ -637,7 +624,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 				fs::path depthpath = resolve_path(base_path, frame["depth_path"]);
 				if (depthpath.exists()) {
 					int wa = 0, ha = 0;
-					dst.depth_pixels = stbi_load_16(depthpath.str().c_str(), &wa, &ha, &comp, 1);
+					dst.depth_pixels = load_stbi_16(depthpath, &wa, &ha, &comp, 1);
 					if (!dst.depth_pixels) {
 						throw std::runtime_error{fmt::format("Could not load depth image '{}'.", depthpath.str())};
 					}
@@ -653,7 +640,7 @@ NerfDataset load_nerf(const std::vector<filesystem::path>& jsonpaths, float shar
 				uint32_t n_pixels = dst.res.prod();
 				dst.rays = (Ray*)malloc(n_pixels * sizeof(Ray));
 
-				std::ifstream rays_file{rayspath.str(), std::ios::binary};
+				std::ifstream rays_file{native_string(rayspath), std::ios::binary};
 				rays_file.read((char*)dst.rays, n_pixels * sizeof(Ray));
 
 				std::streampos fsize = 0;
@@ -757,6 +744,7 @@ void NerfDataset::set_training_image(int frame_idx, const Eigen::Vector2i& image
 	if (frame_idx < 0 || frame_idx >= n_images) {
 		throw std::runtime_error{"NerfDataset::set_training_image: invalid frame index"};
 	}
+
 	size_t n_pixels = image_resolution.prod();
 	size_t img_size = n_pixels * 4; // 4 channels
 	size_t image_type_stride = image_type_size(image_type);
