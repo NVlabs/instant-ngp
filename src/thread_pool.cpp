@@ -47,7 +47,7 @@ void ThreadPool::start_threads(size_t num) {
 					m_worker_condition.wait(lock);
 				}
 
-				if (i >= m_num_threads) {
+				if (i >= m_num_threads && m_task_queue.empty()) {
 					break;
 				}
 
