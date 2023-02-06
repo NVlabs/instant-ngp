@@ -39,6 +39,7 @@ jobs:
             cuda: "10.2"
             arch: 37
             python: "3.7"
+            cmake_flags: "-DNGP_BUILD_WITH_GUI=OFF -DNGP_BUILD_WITH_VULKAN=OFF -DNGP_BUILD_WITH_OPTIX=OFF"
     env:
       build_dir: "build"
       config: "Release"
@@ -61,7 +62,7 @@ jobs:
       - name: Install Vulkan SDK
         uses: humbletim/install-vulkan-sdk@v1.1.1
       - name: CMake
-        run: cmake . -B ${{ env.build_dir }} -DCMAKE_BUILD_TYPE=${{ env.config }}
+        run: cmake . -B ${{ env.build_dir }} ${{ matrix.cmake_flags }} -DCMAKE_BUILD_TYPE=${{ env.config }}
       - name: Build
         working-directory: ${{ env.build_dir }}
         run: cmake --build . --target all --verbose -j `nproc`
@@ -100,6 +101,7 @@ jobs:
             cuda: "11.5.1"
             arch: 53
             python: "3.7"
+            cmake_flags: "-DNGP_BUILD_WITH_GUI=OFF -DNGP_BUILD_WITH_VULKAN=OFF -DNGP_BUILD_WITH_OPTIX=OFF"
           - os: windows-2019
             visual_studio: "Visual Studio 16 2019"
             cuda: "11.5.1"
@@ -126,7 +128,7 @@ jobs:
       - name: Install Vulkan SDK
         uses: humbletim/install-vulkan-sdk@v1.1.1
       - name: CMake
-        run: cmake . -B ${{ env.build_dir }} -G "${{ matrix.visual_studio }}" -A x64
+        run: cmake . -B ${{ env.build_dir }} ${{ matrix.cmake_flags }} -G "${{ matrix.visual_studio }}" -A x64
       - name: Build
         working-directory: ${{ env.build_dir }}
         run: cmake --build . --config ${{ env.config }} --target ALL_BUILD --verbose
