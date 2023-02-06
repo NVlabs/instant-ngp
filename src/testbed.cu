@@ -2875,87 +2875,6 @@ void Testbed::create_second_window() {
 	glBindVertexArray(0);
 }
 
-void Testbed::init_vr() {
-	try {
-		if (!m_glfw_window) {
-			throw std::runtime_error{"`init_window` must be called before `init_vr`"};
-		}
-
-#if defined(XR_USE_PLATFORM_WIN32)
-		m_hmd = std::make_unique<OpenXRHMD>(wglGetCurrentDC(), glfwGetWGLContext(m_glfw_window));
-#elif defined(XR_USE_PLATFORM_XLIB)
-		Display* xDisplay = glfwGetX11Display();
-		GLXContext glxContext = glfwGetGLXContext(m_glfw_window);
-
-		int glxFBConfigXID = 0;
-		glXQueryContext(xDisplay, glxContext, GLX_FBCONFIG_ID, &glxFBConfigXID);
-		int attributes[3] = { GLX_FBCONFIG_ID, glxFBConfigXID, 0 };
-		int nelements = 1;
-		GLXFBConfig* pglxFBConfig = glXChooseFBConfig(xDisplay, 0, attributes, &nelements);
-		if (nelements != 1 || !pglxFBConfig) {
-			throw std::runtime_error{"init_vr(): Couldn't obtain GLXFBConfig"};
-		}
-
-		GLXFBConfig glxFBConfig = *pglxFBConfig;
-
-		XVisualInfo* visualInfo = glXGetVisualFromFBConfig(xDisplay, glxFBConfig);
-		if (!visualInfo) {
-			throw std::runtime_error{"init_vr(): Couldn't obtain XVisualInfo"};
-		}
-
-		m_hmd = std::make_unique<OpenXRHMD>(xDisplay, visualInfo->visualid, glxFBConfig, glXGetCurrentDrawable(), glxContext);
-#elif defined(XR_USE_PLATFORM_WAYLAND)
-		m_hmd = std::make_unique<OpenXRHMD>(glfwGetWaylandDisplay());
-#endif
-
-		// Enable aggressive optimizations to make the VR experience smooth.
-		update_vr_performance_settings();
-
-		// If multiple GPUs are available, shoot for 60 fps in VR.
-		// Otherwise, it wouldn't be realistic to expect more than 30.
-		m_dynamic_res_target_fps = m_devices.size() > 1 ? 60 : 30;
-		m_background_color = {0.0f, 0.0f, 0.0f, 0.0f};
-	} catch (const std::runtime_error& e) {
-		if (std::string{e.what()}.find("XR_ERROR_FORM_FACTOR_UNAVAILABLE") != std::string::npos) {
-			throw std::runtime_error{"Could not initialize VR. Ensure that SteamVR, OculusVR, or any other OpenXR-compatible runtime is running. Also set it as the active OpenXR runtime."};
-		} else {
-			throw std::runtime_error{fmt::format("Could not initialize VR: {}", e.what())};
-		}
-	}
-}
-
-void Testbed::update_vr_performance_settings() {
-	if (m_hmd) {
-		auto blend_mode = m_hmd->environment_blend_mode();
-
-		// DLSS is instrumental in getting VR to look good. Enable if possible.
-		// If the environment is blended in (such as in XR/AR applications),
-		// DLSS causes jittering at object sillhouettes (doesn't deal well with alpha),
-		// and hence stays disabled.
-		m_dlss = (blend_mode == EEnvironmentBlendMode::Opaque) && m_dlss_provider;
-
-		// Foveated rendering is similarly vital in getting high performance without losing
-		// resolution in the middle of the view.
-		m_foveated_rendering = true;
-
-		// Large minimum transmittance results in another 20-30% performance increase
-		// at the detriment of some transparent edges. Not super noticeable, though.
-		m_nerf.render_min_transmittance = 0.2f;
-
-		// Many VR runtimes perform optical flow for automatic reprojection / motion smoothing.
-		// This breaks down for solid-color background, sometimes leading to artifacts. Hence:
-		// set background color to transparent and, in spherical_checkerboard_kernel(...),
-		// blend a checkerboard. If the user desires a solid background nonetheless, they can
-		// set the background color to have an alpha value of 1.0 manually via the GUI or via Python.
-		m_render_transparency_as_checkerboard = (blend_mode == EEnvironmentBlendMode::Opaque);
-	} else {
-		m_dlss = (m_testbed_mode == ETestbedMode::Nerf) && m_dlss_provider;
-		m_foveated_rendering = false;
-		m_nerf.render_min_transmittance = 0.01f;
-		m_render_transparency_as_checkerboard = false;
-	}
-}
-
 void Testbed::set_n_views(size_t n_views) {
 	while (m_views.size() > n_views) {
 		m_views.pop_back();
@@ -3165,6 +3084,93 @@ void Testbed::destroy_window() {
 
 	m_glfw_window = nullptr;
 	m_render_window = false;
+#endif //NGP_GUI
+}
+
+void Testbed::init_vr() {
+#ifndef NGP_GUI
+	throw std::runtime_error{"init_vr failed: NGP was built without GUI support"};
+#else
+	try {
+		if (!m_glfw_window) {
+			throw std::runtime_error{"`init_window` must be called before `init_vr`"};
+		}
+
+#if defined(XR_USE_PLATFORM_WIN32)
+		m_hmd = std::make_unique<OpenXRHMD>(wglGetCurrentDC(), glfwGetWGLContext(m_glfw_window));
+#elif defined(XR_USE_PLATFORM_XLIB)
+		Display* xDisplay = glfwGetX11Display();
+		GLXContext glxContext = glfwGetGLXContext(m_glfw_window);
+
+		int glxFBConfigXID = 0;
+		glXQueryContext(xDisplay, glxContext, GLX_FBCONFIG_ID, &glxFBConfigXID);
+		int attributes[3] = { GLX_FBCONFIG_ID, glxFBConfigXID, 0 };
+		int nelements = 1;
+		GLXFBConfig* pglxFBConfig = glXChooseFBConfig(xDisplay, 0, attributes, &nelements);
+		if (nelements != 1 || !pglxFBConfig) {
+			throw std::runtime_error{"init_vr(): Couldn't obtain GLXFBConfig"};
+		}
+
+		GLXFBConfig glxFBConfig = *pglxFBConfig;
+
+		XVisualInfo* visualInfo = glXGetVisualFromFBConfig(xDisplay, glxFBConfig);
+		if (!visualInfo) {
+			throw std::runtime_error{"init_vr(): Couldn't obtain XVisualInfo"};
+		}
+
+		m_hmd = std::make_unique<OpenXRHMD>(xDisplay, visualInfo->visualid, glxFBConfig, glXGetCurrentDrawable(), glxContext);
+#elif defined(XR_USE_PLATFORM_WAYLAND)
+		m_hmd = std::make_unique<OpenXRHMD>(glfwGetWaylandDisplay());
+#endif
+
+		// Enable aggressive optimizations to make the VR experience smooth.
+		update_vr_performance_settings();
+
+		// If multiple GPUs are available, shoot for 60 fps in VR.
+		// Otherwise, it wouldn't be realistic to expect more than 30.
+		m_dynamic_res_target_fps = m_devices.size() > 1 ? 60 : 30;
+		m_background_color = {0.0f, 0.0f, 0.0f, 0.0f};
+	} catch (const std::runtime_error& e) {
+		if (std::string{e.what()}.find("XR_ERROR_FORM_FACTOR_UNAVAILABLE") != std::string::npos) {
+			throw std::runtime_error{"Could not initialize VR. Ensure that SteamVR, OculusVR, or any other OpenXR-compatible runtime is running. Also set it as the active OpenXR runtime."};
+		} else {
+			throw std::runtime_error{fmt::format("Could not initialize VR: {}", e.what())};
+		}
+	}
+#endif //NGP_GUI
+}
+
+void Testbed::update_vr_performance_settings() {
+#ifdef NGP_GUI
+	if (m_hmd) {
+		auto blend_mode = m_hmd->environment_blend_mode();
+
+		// DLSS is instrumental in getting VR to look good. Enable if possible.
+		// If the environment is blended in (such as in XR/AR applications),
+		// DLSS causes jittering at object sillhouettes (doesn't deal well with alpha),
+		// and hence stays disabled.
+		m_dlss = (blend_mode == EEnvironmentBlendMode::Opaque) && m_dlss_provider;
+
+		// Foveated rendering is similarly vital in getting high performance without losing
+		// resolution in the middle of the view.
+		m_foveated_rendering = true;
+
+		// Large minimum transmittance results in another 20-30% performance increase
+		// at the detriment of some transparent edges. Not super noticeable, though.
+		m_nerf.render_min_transmittance = 0.2f;
+
+		// Many VR runtimes perform optical flow for automatic reprojection / motion smoothing.
+		// This breaks down for solid-color background, sometimes leading to artifacts. Hence:
+		// set background color to transparent and, in spherical_checkerboard_kernel(...),
+		// blend a checkerboard. If the user desires a solid background nonetheless, they can
+		// set the background color to have an alpha value of 1.0 manually via the GUI or via Python.
+		m_render_transparency_as_checkerboard = (blend_mode == EEnvironmentBlendMode::Opaque);
+	} else {
+		m_dlss = (m_testbed_mode == ETestbedMode::Nerf) && m_dlss_provider;
+		m_foveated_rendering = false;
+		m_nerf.render_min_transmittance = 0.01f;
+		m_render_transparency_as_checkerboard = false;
+	}
 #endif //NGP_GUI
 }
 

@@ -362,14 +362,15 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("load_training_data", &Testbed::load_training_data, py::call_guard<py::gil_scoped_release>(), "Load training data from a given path.")
 		.def("clear_training_data", &Testbed::clear_training_data, "Clears training data to free up GPU memory.")
 		// General control
-#ifdef NGP_GUI
 		.def("init_window", &Testbed::init_window, "Init a GLFW window that shows real-time progress and a GUI. 'second_window' creates a second copy of the output in its own window.",
 			py::arg("width"),
 			py::arg("height"),
 			py::arg("hidden") = false,
 			py::arg("second_window") = false
 		)
-		.def("init_vr", &Testbed::init_vr, "Init rendering to a connected and active VR headset. Requires a GUI window to have been previously created via `init_window`.")
+		.def("destroy_window", &Testbed::destroy_window, "Destroy the window again.")
+		.def("init_vr", &Testbed::init_vr, "Init rendering to a connected and active VR headset. Requires a window to have been previously created via `init_window`.")
+#ifdef NGP_GUI
 		.def_readwrite("keyboard_event_callback", &Testbed::m_keyboard_event_callback)
 		.def("is_key_pressed", [](py::object& obj, int key) { return ImGui::IsKeyPressed(key); })
 		.def("is_key_down", [](py::object& obj, int key) { return ImGui::IsKeyDown(key); })
@@ -391,7 +392,6 @@ PYBIND11_MODULE(pyngp, m) {
 			py::arg("fps") = 30.f,
 			py::arg("shutter_fraction") = 1.0f
 		)
-		.def("destroy_window", &Testbed::destroy_window, "Destroy the window again.")
 		.def("train", &Testbed::train, py::call_guard<py::gil_scoped_release>(), "Perform a single training step with a specified batch size.")
 		.def("reset", &Testbed::reset_network, py::arg("reset_density_grid") = true, "Reset training.")
 		.def("reset_accumulation", &Testbed::reset_accumulation, "Reset rendering accumulation.",

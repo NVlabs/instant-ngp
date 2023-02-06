@@ -462,6 +462,8 @@ public:
 	fs::path training_data_path() const;
 	void init_window(int resw, int resh, bool hidden = false, bool second_window = false);
 	void destroy_window();
+	void init_vr();
+	void update_vr_performance_settings();
 	void apply_camera_smoothing(float elapsed_ms);
 	int find_best_training_view(int default_view);
 	bool begin_frame();
@@ -582,6 +584,7 @@ public:
 	EMeshRenderMode m_mesh_render_mode = EMeshRenderMode::VertexNormals;
 
 	uint32_t m_seed = 1337;
+
 #ifdef NGP_GUI
 	GLFWwindow* m_glfw_window = nullptr;
 	struct SecondWindow {
@@ -606,8 +609,6 @@ public:
 	OpenXRHMD::FrameInfoPtr m_vr_frame_info;
 	bool m_vr_depth_reproject = false;
 
-	void init_vr();
-	void update_vr_performance_settings();
 	void set_n_views(size_t n_views);
 
 	std::function<bool()> m_keyboard_event_callback;
