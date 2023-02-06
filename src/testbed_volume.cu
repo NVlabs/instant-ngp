@@ -618,6 +618,8 @@ void Testbed::load_volume(const fs::path& data_path) {
 		Vector3f{0.5f - xsize * scale * 0.5f, 0.5f - ysize * scale * 0.5f, 0.5f - zsize * scale * 0.5f},
 		Vector3f{0.5f + xsize * scale * 0.5f, 0.5f + ysize * scale * 0.5f, 0.5f + zsize * scale * 0.5f},
 	};
+	m_render_aabb_to_local = Matrix3f::Identity();
+
 	m_volume.world2index_scale = maxsize;
 	m_volume.world2index_offset = Vector3f{
 		(metadata.indexBBox[0][0] + metadata.indexBBox[1][0]) * 0.5f - 0.5f * maxsize,

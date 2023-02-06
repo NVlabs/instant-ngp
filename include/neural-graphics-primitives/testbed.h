@@ -944,6 +944,7 @@ public:
 
 	bool m_visualize_unit_cube = false;
 	bool m_edit_render_aabb = false;
+	bool m_edit_world_transform = true;
 
 	bool m_snap_to_pixel_centers = false;
 

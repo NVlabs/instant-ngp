@@ -479,7 +479,6 @@ void Testbed::reset_camera() {
 	m_camera.col(3) -= m_scale * view_dir();
 
 	m_smoothed_camera = m_camera;
-	m_up_dir = {0.0f, 1.0f, 0.0f};
 	m_sun_dir = Vector3f::Ones().normalized();
 
 	reset_accumulation();
@@ -1011,59 +1010,88 @@ void Testbed::imgui() {
 		float max_diam = (m_aabb.max-m_aabb.min).maxCoeff();
 		float render_diam = (m_render_aabb.max-m_render_aabb.min).maxCoeff();
 		float old_render_diam = render_diam;
-		if (ImGui::SliderFloat("Crop size", &render_diam, 0.1f, max_diam, "%.3f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat)) {
-			accum_reset = true;
-			if (old_render_diam > 0.f && render_diam > 0.f) {
-				const Vector3f center = (m_render_aabb.max + m_render_aabb.min) * 0.5f;
-				float scale = render_diam / old_render_diam;
-				m_render_aabb.max = ((m_render_aabb.max-center) * scale + center).cwiseMin(m_aabb.max);
-				m_render_aabb.min = ((m_render_aabb.min-center) * scale + center).cwiseMax(m_aabb.min);
+
+		if (m_testbed_mode == ETestbedMode::Nerf || m_testbed_mode == ETestbedMode::Volume) {
+			if (ImGui::SliderFloat("Crop size", &render_diam, 0.1f, max_diam, "%.3f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat)) {
+				accum_reset = true;
+				if (old_render_diam > 0.f && render_diam > 0.f) {
+					const Vector3f center = (m_render_aabb.max + m_render_aabb.min) * 0.5f;
+					float scale = render_diam / old_render_diam;
+					m_render_aabb.max = ((m_render_aabb.max-center) * scale + center).cwiseMin(m_aabb.max);
+					m_render_aabb.min = ((m_render_aabb.min-center) * scale + center).cwiseMax(m_aabb.min);
+				}
 			}
 		}
 
-		if (ImGui::TreeNode("Crop aabb")) {
+		std::string transform_section_name = "World transform";
+		if (m_testbed_mode == ETestbedMode::Nerf) {
+			transform_section_name += " & Crop box";
+		}
+
+		if (ImGui::TreeNode(transform_section_name.c_str())) {
 			m_edit_render_aabb = true;
-			accum_reset |= ImGui::SliderFloat("Min x", ((float*)&m_render_aabb.min)+0, m_aabb.min.x(), m_render_aabb.max.x(), "%.3f");
-			accum_reset |= ImGui::SliderFloat("Min y", ((float*)&m_render_aabb.min)+1, m_aabb.min.y(), m_render_aabb.max.y(), "%.3f");
-			accum_reset |= ImGui::SliderFloat("Min z", ((float*)&m_render_aabb.min)+2, m_aabb.min.z(), m_render_aabb.max.z(), "%.3f");
-			ImGui::Separator();
-			accum_reset |= ImGui::SliderFloat("Max x", ((float*)&m_render_aabb.max)+0, m_render_aabb.min.x(), m_aabb.max.x(), "%.3f");
-			accum_reset |= ImGui::SliderFloat("Max y", ((float*)&m_render_aabb.max)+1, m_render_aabb.min.y(), m_aabb.max.y(), "%.3f");
-			accum_reset |= ImGui::SliderFloat("Max z", ((float*)&m_render_aabb.max)+2, m_render_aabb.min.z(), m_aabb.max.z(), "%.3f");
-			ImGui::Separator();
-			Vector3f diag = m_render_aabb.diag();
-			bool edit_diag = false;
-			float max_diag = m_aabb.diag().maxCoeff();
-			edit_diag |= ImGui::SliderFloat("Size x", ((float*)&diag)+0, 0.001f, max_diag, "%.3f");
-			edit_diag |= ImGui::SliderFloat("Size y", ((float*)&diag)+1, 0.001f, max_diag, "%.3f");
-			edit_diag |= ImGui::SliderFloat("Size z", ((float*)&diag)+2, 0.001f, max_diag, "%.3f");
-			if (edit_diag) {
-				accum_reset = true;
-				Vector3f cen = m_render_aabb.center();
-				m_render_aabb = BoundingBox(cen - diag * 0.5f, cen + diag * 0.5f);
+
+			if (ImGui::RadioButton("Translate world", m_camera_path.m_gizmo_op == ImGuizmo::TRANSLATE && m_edit_world_transform)) {
+				m_camera_path.m_gizmo_op = ImGuizmo::TRANSLATE;
+				m_edit_world_transform = true;
 			}
-			if (ImGui::Button("Reset")) {
-				accum_reset = true;
-				m_render_aabb = m_aabb;
-				m_render_aabb_to_local = Matrix3f::Identity();
-			}
+
 			ImGui::SameLine();
-			if (ImGui::Button("Reset Rotation Only")) {
-				accum_reset = true;
-				Eigen::Vector3f world_cen = m_render_aabb_to_local.transpose() * m_render_aabb.center();
-				m_render_aabb_to_local = Matrix3f::Identity();
-				Eigen::Vector3f new_cen = m_render_aabb_to_local * world_cen;
-				Eigen::Vector3f old_cen = m_render_aabb.center();
-				m_render_aabb.min += new_cen - old_cen;
-				m_render_aabb.max += new_cen - old_cen;
+			if (ImGui::RadioButton("Rotate world", m_camera_path.m_gizmo_op == ImGuizmo::ROTATE && m_edit_world_transform)) {
+				m_camera_path.m_gizmo_op = ImGuizmo::ROTATE;
+				m_edit_world_transform = true;
 			}
-			if (/*m_visualize_unit_cube*/ 1) {
-				if (ImGui::RadioButton("Translate", m_camera_path.m_gizmo_op == ImGuizmo::TRANSLATE))
+
+			if (m_testbed_mode == ETestbedMode::Nerf) {
+				if (ImGui::RadioButton("Translate crop box", m_camera_path.m_gizmo_op == ImGuizmo::TRANSLATE && !m_edit_world_transform)) {
 					m_camera_path.m_gizmo_op = ImGuizmo::TRANSLATE;
+					m_edit_world_transform = false;
+				}
+
 				ImGui::SameLine();
-				if (ImGui::RadioButton("Rotate", m_camera_path.m_gizmo_op == ImGuizmo::ROTATE))
+				if (ImGui::RadioButton("Rotate crop box", m_camera_path.m_gizmo_op == ImGuizmo::ROTATE && !m_edit_world_transform)) {
 					m_camera_path.m_gizmo_op = ImGuizmo::ROTATE;
+					m_edit_world_transform = false;
+				}
+
+				accum_reset |= ImGui::SliderFloat("Min x", ((float*)&m_render_aabb.min)+0, m_aabb.min.x(), m_render_aabb.max.x(), "%.3f");
+				accum_reset |= ImGui::SliderFloat("Min y", ((float*)&m_render_aabb.min)+1, m_aabb.min.y(), m_render_aabb.max.y(), "%.3f");
+				accum_reset |= ImGui::SliderFloat("Min z", ((float*)&m_render_aabb.min)+2, m_aabb.min.z(), m_render_aabb.max.z(), "%.3f");
+				ImGui::Separator();
+				accum_reset |= ImGui::SliderFloat("Max x", ((float*)&m_render_aabb.max)+0, m_render_aabb.min.x(), m_aabb.max.x(), "%.3f");
+				accum_reset |= ImGui::SliderFloat("Max y", ((float*)&m_render_aabb.max)+1, m_render_aabb.min.y(), m_aabb.max.y(), "%.3f");
+				accum_reset |= ImGui::SliderFloat("Max z", ((float*)&m_render_aabb.max)+2, m_render_aabb.min.z(), m_aabb.max.z(), "%.3f");
+				ImGui::Separator();
+				Vector3f diag = m_render_aabb.diag();
+				bool edit_diag = false;
+				float max_diag = m_aabb.diag().maxCoeff();
+				edit_diag |= ImGui::SliderFloat("Size x", ((float*)&diag)+0, 0.001f, max_diag, "%.3f");
+				edit_diag |= ImGui::SliderFloat("Size y", ((float*)&diag)+1, 0.001f, max_diag, "%.3f");
+				edit_diag |= ImGui::SliderFloat("Size z", ((float*)&diag)+2, 0.001f, max_diag, "%.3f");
+				if (edit_diag) {
+					accum_reset = true;
+					Vector3f cen = m_render_aabb.center();
+					m_render_aabb = BoundingBox(cen - diag * 0.5f, cen + diag * 0.5f);
+				}
+
+				if (ImGui::Button("Reset crop box")) {
+					accum_reset = true;
+					m_render_aabb = m_aabb;
+					m_render_aabb_to_local = Matrix3f::Identity();
+				}
+
+				ImGui::SameLine();
+				if (ImGui::Button("rotation only")) {
+					accum_reset = true;
+					Eigen::Vector3f world_cen = m_render_aabb_to_local.transpose() * m_render_aabb.center();
+					m_render_aabb_to_local = Matrix3f::Identity();
+					Eigen::Vector3f new_cen = m_render_aabb_to_local * world_cen;
+					Eigen::Vector3f old_cen = m_render_aabb.center();
+					m_render_aabb.min += new_cen - old_cen;
+					m_render_aabb.max += new_cen - old_cen;
+				}
 			}
+
 			ImGui::TreePop();
 		} else {
 			m_edit_render_aabb = false;
@@ -1574,71 +1602,98 @@ void Testbed::visualize_nerf_cameras(ImDrawList* list, const Matrix<float, 4, 4>
 }
 
 void Testbed::draw_visualizations(ImDrawList* list, const Matrix<float, 3, 4>& camera_matrix) {
-	// Visualize 3D cameras for SDF or NeRF use cases
-	if (m_testbed_mode != ETestbedMode::Image) {
-		Matrix<float, 4, 4> world2view, view2world, view2proj, world2proj;
-		view2world.setIdentity();
-		view2world.block<3,4>(0,0) = camera_matrix;
+	Matrix<float, 4, 4> world2view, view2world, view2proj, world2proj;
+	view2world.setIdentity();
+	view2world.block<3, 4>(0, 0) = camera_matrix;
 
-		auto focal = calc_focal_length(Vector2i::Ones(), m_relative_focal_length, m_fov_axis, m_zoom);
-		float zscale = 1.0f / focal[m_fov_axis];
+	auto focal = calc_focal_length(Vector2i::Ones(), m_relative_focal_length, m_fov_axis, m_zoom);
+	float zscale = 1.0f / focal[m_fov_axis];
 
-		float xyscale = (float)m_window_res[m_fov_axis];
-		Vector2f screen_center = render_screen_center(m_screen_center);
-		view2proj <<
-			xyscale, 0,       (float)m_window_res.x()*screen_center.x()*zscale, 0,
-			0,       xyscale, (float)m_window_res.y()*screen_center.y()*zscale, 0,
-			0,       0,       1,                                                0,
-			0,       0,       zscale,                                           0;
+	float xyscale = (float)m_window_res[m_fov_axis];
+	Vector2f screen_center = render_screen_center(m_screen_center);
+	view2proj <<
+		xyscale, 0,       (float)m_window_res.x()*screen_center.x()*zscale, 0,
+		0,       xyscale, (float)m_window_res.y()*screen_center.y()*zscale, 0,
+		0,       0,       1,                                                0,
+		0,       0,       zscale,                                           0;
 
-		world2view = view2world.inverse();
-		world2proj = view2proj * world2view;
-		float aspect = (float)m_window_res.x() / (float)m_window_res.y();
+	world2view = view2world.inverse();
+	world2proj = view2proj * world2view;
+	float aspect = (float)m_window_res.x() / (float)m_window_res.y();
 
-		// Visualize NeRF training poses
-		if (m_testbed_mode == ETestbedMode::Nerf) {
-			if (m_nerf.visualize_cameras) {
-				visualize_nerf_cameras(list, world2proj);
+	// Visualize NeRF training poses
+	if (m_testbed_mode == ETestbedMode::Nerf) {
+		if (m_nerf.visualize_cameras) {
+			visualize_nerf_cameras(list, world2proj);
+		}
+	}
+
+	if (m_visualize_unit_cube) {
+		visualize_cube(list, world2proj, Eigen::Vector3f::Constant(0.f), Eigen::Vector3f::Constant(1.f), Eigen::Matrix3f::Identity());
+	}
+
+	if (m_edit_render_aabb) {
+		if (m_testbed_mode == ETestbedMode::Nerf || m_testbed_mode == ETestbedMode::Volume) {
+			visualize_cube(list, world2proj, m_render_aabb.min, m_render_aabb.max, m_render_aabb_to_local);
+		}
+
+		ImGuiIO& io = ImGui::GetIO();
+		float flx = focal.x();
+		float fly = focal.y();
+		Matrix<float, 4, 4> view2proj_guizmo;
+		float zfar = m_ndc_zfar;
+		float znear = m_ndc_znear;
+		view2proj_guizmo <<
+			fly * 2.f / aspect, 0, 0, 0,
+			0, -fly * 2.f, 0, 0,
+			0, 0, (zfar + znear) / (zfar - znear), -(2.f * zfar * znear) / (zfar - znear),
+			0, 0, 1, 0;
+
+		ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
+
+		static bool manipulating = false;
+		static Eigen::Matrix4f matrix = Eigen::Matrix4f::Identity();
+		static Eigen::Matrix4f world2view_guizmo = Eigen::Matrix4f::Identity();
+
+		if (!ImGuizmo::IsUsing()) {
+			// The the guizmo is being used, it handles updating its matrix on its own.
+			// Outside interference can only lead to trouble.
+			matrix.block<3, 3>(0, 0) = m_render_aabb_to_local.transpose();
+			Eigen::Vector3f cen = m_render_aabb_to_local.transpose() * m_render_aabb.center();
+			matrix.block<3, 4>(0, 0).col(3) = cen;
+
+			// Additionally, the world2view transform must stay fixed, else the guizmo will incorrectly
+			// interpret the state from past frames. Special handling is necessary here, because below
+			// we emulate world translation and rotation through (inverse) camera movement.
+			world2view_guizmo = world2view;
+		}
+
+		Eigen::Vector3f cen = m_render_aabb_to_local.transpose() * m_render_aabb.center();
+		auto prev_matrix = matrix;
+
+		if (ImGuizmo::Manipulate((const float*)&world2view_guizmo, (const float*)&view2proj_guizmo, m_camera_path.m_gizmo_op, ImGuizmo::LOCAL, (float*)&matrix, NULL, NULL)) {
+			auto crop_transform = matrix;
+			if (m_edit_world_transform) {
+				// We transform the world by transforming the camera in the opposite direction.
+				auto rel = prev_matrix * matrix.inverse();
+				m_camera = rel.block<3, 3>(0, 0) * m_camera;
+				m_camera.col(3) += rel.block<3, 1>(0, 3);
+
+				m_up_dir = rel.block<3, 3>(0, 0) * m_up_dir;
+			} else {
+				m_render_aabb_to_local = matrix.block<3, 3>(0, 0).transpose();
+				Eigen::Vector3f new_cen = m_render_aabb_to_local * matrix.block<3, 4>(0, 0).col(3);
+				Eigen::Vector3f old_cen = m_render_aabb.center();
+				m_render_aabb.min += new_cen - old_cen;
+				m_render_aabb.max += new_cen - old_cen;
 			}
-		}
 
-		if (m_visualize_unit_cube) {
-			visualize_unit_cube(list, world2proj, Eigen::Vector3f::Constant(0.f), Eigen::Vector3f::Constant(1.f), Eigen::Matrix3f::Identity());
+			reset_accumulation();
 		}
-		if (m_edit_render_aabb) {
-			if (m_testbed_mode == ETestbedMode::Nerf) {
-				visualize_unit_cube(list, world2proj, m_render_aabb.min, m_render_aabb.max, m_render_aabb_to_local);
-				ImGuiIO& io = ImGui::GetIO();
-				float flx = focal.x();
-				float fly = focal.y();
-				Matrix<float, 4, 4> view2proj_guizmo;
-				float zfar = m_ndc_zfar;
-				float znear = m_ndc_znear;
-				view2proj_guizmo <<
-					fly * 2.f / aspect, 0, 0, 0,
-					0, -fly * 2.f, 0, 0,
-					0, 0, (zfar + znear) / (zfar - znear), -(2.f * zfar * znear) / (zfar - znear),
-					0, 0, 1, 0;
-				ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
+	}
 
-				Eigen::Matrix4f matrix=Eigen::Matrix4f::Identity();
-				matrix.block<3,3>(0,0) = m_render_aabb_to_local.transpose();
-				Eigen::Vector3f cen = m_render_aabb_to_local.transpose() * m_render_aabb.center();
-				matrix.block<3,4>(0,0).col(3) = cen;
-				if (ImGuizmo::Manipulate((const float*)&world2view, (const float*)&view2proj_guizmo, m_camera_path.m_gizmo_op, ImGuizmo::LOCAL, (float*)&matrix, NULL, NULL)) {
-					m_render_aabb_to_local = matrix.block<3,3>(0,0).transpose();
-					Eigen::Vector3f new_cen = m_render_aabb_to_local * matrix.block<3,4>(0,0).col(3);
-					Eigen::Vector3f old_cen = m_render_aabb.center();
-					m_render_aabb.min += new_cen - old_cen;
-					m_render_aabb.max += new_cen - old_cen;
-					reset_accumulation();
-				}
-			}
-		}
-
-		if (m_camera_path.imgui_viz(list, view2proj, world2proj, world2view, focal, aspect, m_ndc_znear, m_ndc_zfar)) {
-			m_pip_render_buffer->reset_accumulation();
-		}
+	if (m_camera_path.imgui_viz(list, view2proj, world2proj, world2view, focal, aspect, m_ndc_znear, m_ndc_zfar)) {
+		m_pip_render_buffer->reset_accumulation();
 	}
 }
 
@@ -1951,7 +2006,7 @@ void Testbed::handle_user_input() {
 	}
 
 	// Only respond to mouse inputs when not interacting with ImGui
-	if (!ImGui::IsAnyItemActive() && !ImGuizmo::IsUsing() && !ImGuizmo::IsOver() && !ImGui::GetIO().WantCaptureMouse) {
+	if (!ImGui::IsAnyItemActive() && !ImGuizmo::IsUsing() && !ImGui::GetIO().WantCaptureMouse) {
 		mouse_wheel();
 		mouse_drag();
 	}
@@ -3795,9 +3850,9 @@ void Testbed::train(uint32_t batch_size) {
 		}};
 
 		switch (m_testbed_mode) {
-			case ETestbedMode::Nerf:   train_nerf(batch_size, get_loss_scalar, m_stream.get()); break;
-			case ETestbedMode::Sdf:    train_sdf(batch_size, get_loss_scalar, m_stream.get()); break;
-			case ETestbedMode::Image:  train_image(batch_size, get_loss_scalar, m_stream.get()); break;
+			case ETestbedMode::Nerf: train_nerf(batch_size, get_loss_scalar, m_stream.get()); break;
+			case ETestbedMode::Sdf: train_sdf(batch_size, get_loss_scalar, m_stream.get()); break;
+			case ETestbedMode::Image: train_image(batch_size, get_loss_scalar, m_stream.get()); break;
 			case ETestbedMode::Volume: train_volume(batch_size, get_loss_scalar, m_stream.get()); break;
 			default: throw std::runtime_error{"Invalid training mode."};
 		}
@@ -4458,6 +4513,7 @@ void Testbed::save_snapshot(const fs::path& path, bool include_optimizer_state, 
 	snapshot["bounding_radius"] = m_bounding_radius;
 	to_json(snapshot["render_aabb_to_local"], m_render_aabb_to_local);
 	snapshot["render_aabb"] = m_render_aabb;
+	to_json(snapshot["up_dir"], m_up_dir);
 
 	if (m_testbed_mode == ETestbedMode::Nerf) {
 		snapshot["nerf"]["rgb"]["rays_per_batch"] = m_nerf.training.counters_rgb.rays_per_batch;
@@ -4542,6 +4598,7 @@ void Testbed::load_snapshot(const fs::path& path) {
 	// Needs to happen after `load_nerf_post()`
 	if (snapshot.contains("render_aabb_to_local")) from_json(snapshot.at("render_aabb_to_local"), m_render_aabb_to_local);
 	m_render_aabb = snapshot.value("render_aabb", m_render_aabb);
+	if (snapshot.contains("up_dir")) from_json(snapshot.at("up_dir"), m_up_dir);
 
 	m_network_config_path = path;
 	m_network_config = std::move(config);
