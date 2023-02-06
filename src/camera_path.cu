@@ -276,7 +276,7 @@ void add_debug_line(ImDrawList* list, const Matrix<float, 4, 4>& proj, Vector3f 
 	}
 }
 
-void visualize_unit_cube(ImDrawList* list, const Matrix<float, 4, 4>& world2proj, const Vector3f& a, const Vector3f& b, const Matrix3f& render_aabb_to_local) {
+void visualize_cube(ImDrawList* list, const Matrix<float, 4, 4>& world2proj, const Vector3f& a, const Vector3f& b, const Matrix3f& render_aabb_to_local) {
 	Eigen::Matrix3f m = render_aabb_to_local.transpose();
 	add_debug_line(list, world2proj, m * Vector3f{a.x(), a.y(), a.z()}, m * Vector3f{a.x(), a.y(), b.z()}, 0xffff4040); // Z
 	add_debug_line(list, world2proj, m * Vector3f{b.x(), a.y(), a.z()}, m * Vector3f{b.x(), a.y(), b.z()}, 0xffffffff);

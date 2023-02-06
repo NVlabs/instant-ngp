@@ -2667,10 +2667,6 @@ void Testbed::load_nerf(const fs::path& data_path) {
 					json_paths.emplace_back(path);
 				}
 			}
-		} else if (equals_case_insensitive(data_path.extension(), "msgpack")) {
-			load_snapshot(data_path.str());
-			set_train(false);
-			return;
 		} else if (equals_case_insensitive(data_path.extension(), "json")) {
 			json_paths.emplace_back(data_path);
 		} else {

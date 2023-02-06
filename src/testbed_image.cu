@@ -379,6 +379,9 @@ void Testbed::load_image(const fs::path& data_path) {
 		load_stbi_image(data_path);
 	}
 
+	m_aabb = m_render_aabb = BoundingBox{Vector3f::Zero(), Vector3f::Ones()};
+	m_render_aabb_to_local = Matrix3f::Identity();
+
 	tlog::success()
 		<< "Loaded a " << (m_image.type == EDataType::Half ? "half" : "full") << "-precision image with "
 		<< m_image.resolution.x() << "x" << m_image.resolution.y() << " pixels.";
