@@ -48,7 +48,7 @@ public:
 		{
 			std::lock_guard<std::mutex> lock{m_task_queue_mutex};
 
-			if (high_priority) {
+			if (high_priority || m_ready_to_exit) {
 				m_task_queue.emplace_front([task]() { (*task)(); });
 			} else {
 				m_task_queue.emplace_back([task]() { (*task)(); });
@@ -99,6 +99,7 @@ private:
 	size_t m_num_threads = 0;
 	std::vector<std::thread> m_threads;
 
+	bool m_ready_to_exit = false;
 	std::deque<std::function<void()>> m_task_queue;
 	std::mutex m_task_queue_mutex;
 	std::condition_variable m_worker_condition;

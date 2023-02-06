@@ -31,6 +31,18 @@ ThreadPool::ThreadPool(size_t max_num_threads, bool force) {
 }
 
 ThreadPool::~ThreadPool() {
+	m_ready_to_exit= true;
+
+    std::condition_variable condition;
+    {
+        std::lock_guard<std::mutex> lock{m_task_queue_mutex};
+        m_task_queue.emplace_back([&condition]{condition.notify_one();});
+    }
+    m_worker_condition.notify_one();
+
+    std::mutex tmp;
+    std::unique_lock<std::mutex> lock{tmp};
+    condition.wait(lock,[this]{return m_task_queue.empty();});
 	shutdown_threads(m_threads.size());
 }
 
@@ -47,7 +59,7 @@ void ThreadPool::start_threads(size_t num) {
 					m_worker_condition.wait(lock);
 				}
 
-				if (i >= m_num_threads && m_task_queue.empty()) {
+				if (i >= m_num_threads) {
 					break;
 				}
 
