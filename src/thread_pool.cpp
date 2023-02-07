@@ -31,6 +31,7 @@ ThreadPool::ThreadPool(size_t max_num_threads, bool force) {
 }
 
 ThreadPool::~ThreadPool() {
+	wait_until_queue_completed();
 	shutdown_threads(m_threads.size());
 }
 
@@ -43,7 +44,9 @@ void ThreadPool::start_threads(size_t num) {
 
 				// look for a work item
 				while (i < m_num_threads && m_task_queue.empty()) {
-					// if there are none wait for notification
+					// if there are none, signal that the queue is completed
+					// and wait for notification of new work items.
+					m_task_queue_completed_condition.notify_all();
 					m_worker_condition.wait(lock);
 				}
 
@@ -85,6 +88,11 @@ void ThreadPool::set_n_threads(size_t num) {
 	} else if (m_num_threads < num) {
 		start_threads(num - m_num_threads);
 	}
+}
+
+void ThreadPool::wait_until_queue_completed() {
+	unique_lock<mutex> lock{m_task_queue_mutex};
+	m_task_queue_completed_condition.wait(lock, [this]() { return m_task_queue.empty(); });
 }
 
 void ThreadPool::flush_queue() {

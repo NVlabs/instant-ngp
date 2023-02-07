@@ -63,6 +63,7 @@ public:
 	void shutdown_threads(size_t num);
 	void set_n_threads(size_t num);
 
+	void wait_until_queue_completed();
 	void flush_queue();
 
 	template <typename Int, typename F>
@@ -102,6 +103,7 @@ private:
 	std::deque<std::function<void()>> m_task_queue;
 	std::mutex m_task_queue_mutex;
 	std::condition_variable m_worker_condition;
+	std::condition_variable m_task_queue_completed_condition;
 };
 
 NGP_NAMESPACE_END
