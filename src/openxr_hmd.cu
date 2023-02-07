@@ -167,7 +167,7 @@ OpenXRHMD::OpenXRHMD(wl_display* display) {
 	// tlog::success() << " "
 	// 	<< " depth=" << (m_supports_composition_layer_depth ? "true" : "false")
 	// 	<< " mask=" << (m_supports_hidden_area_mask ? "true" : "false")
-	// 	<< " eye=" << (m_supports_hidden_area_mask ? "true" : "false")
+	// 	<< " eye=" << (m_supports_eye_tracking ? "true" : "false")
 	// 	;
 }
 

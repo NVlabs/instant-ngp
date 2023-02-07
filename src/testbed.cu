@@ -931,7 +931,6 @@ void Testbed::imgui() {
 		} else {
 			if (ImGui::Button("Disconnect from VR/AR headset")) {
 				m_hmd.reset();
-				m_vr_frame_info = nullptr;
 				update_vr_performance_settings();
 			} else if (ImGui::TreeNodeEx("VR/AR settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 				static int blend_mode_idx = 0;
@@ -948,7 +947,11 @@ void Testbed::imgui() {
 					ImGui::Checkbox("Multi-GPU rendering (one per eye)", &m_use_aux_devices);
 				}
 
-				accum_reset |= ImGui::Checkbox("Depth-based reprojection", &m_vr_depth_reproject);
+				accum_reset |= ImGui::Checkbox("Depth-based reprojection", &m_vr_use_depth_reproject);
+				if (ImGui::Checkbox("Mask hidden display areas", &m_vr_use_hidden_area_mask)) {
+					accum_reset = true;
+					set_all_devices_dirty();
+				}
 				accum_reset |= ImGui::Checkbox("Foveated rendering", &m_foveated_rendering) && !m_dlss;
 				if (m_foveated_rendering) {
 					accum_reset |= ImGui::SliderFloat("Maximum foveation", &m_foveated_rendering_max_scaling, 1.0f, 16.0f, "%.01f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat) && !m_dlss;
@@ -1654,7 +1657,6 @@ void Testbed::draw_visualizations(ImDrawList* list, const Matrix<float, 3, 4>& c
 
 		ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
 
-		static bool manipulating = false;
 		static Eigen::Matrix4f matrix = Eigen::Matrix4f::Identity();
 		static Eigen::Matrix4f world2view_guizmo = Eigen::Matrix4f::Identity();
 
@@ -2085,7 +2087,7 @@ void Testbed::begin_vr_frame_and_handle_vr_input() {
 
 			// Fix up weirdness in the rendering pipeline
 			m_views[i].relative_focal_length[(m_fov_axis+1)%2] *= (float)view_resolution[(m_fov_axis+1)%2] / (float)view_resolution[m_fov_axis];
-			m_views[i].render_buffer->set_hidden_area_mask(views[i].hidden_area_mask);
+			m_views[i].render_buffer->set_hidden_area_mask(m_vr_use_hidden_area_mask ? views[i].hidden_area_mask : nullptr);
 
 			// Render each view on a different GPU (if available)
 			m_views[i].device = m_use_aux_devices ? &m_devices.at(i % m_devices.size()) : &primary_device();
@@ -3181,8 +3183,8 @@ bool Testbed::frame() {
 			return false;
 		}
 
-		begin_vr_frame_and_handle_vr_input();
 		handle_user_input();
+		begin_vr_frame_and_handle_vr_input();
 	}
 #endif
 
@@ -3268,7 +3270,7 @@ bool Testbed::frame() {
 		// Far and near planes are intentionally reversed, because we map depth inversely
 		// to z. I.e. a window-space depth of 1 refers to the near plane and a depth of 0
 		// to the far plane. This results in much better numeric precision.
-		m_hmd->end_frame(m_vr_frame_info, m_ndc_zfar / m_scale, m_ndc_znear / m_scale, m_vr_depth_reproject);
+		m_hmd->end_frame(m_vr_frame_info, m_ndc_zfar / m_scale, m_ndc_znear / m_scale, m_vr_use_depth_reproject);
 	}
 #endif
 

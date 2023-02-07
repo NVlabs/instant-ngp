@@ -607,7 +607,8 @@ public:
 
 	std::unique_ptr<OpenXRHMD> m_hmd;
 	OpenXRHMD::FrameInfoPtr m_vr_frame_info;
-	bool m_vr_depth_reproject = false;
+	bool m_vr_use_depth_reproject = false;
+	bool m_vr_use_hidden_area_mask = true;
 
 	void set_n_views(size_t n_views);
 
