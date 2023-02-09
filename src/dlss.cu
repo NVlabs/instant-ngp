@@ -102,6 +102,34 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
 	return VK_FALSE;
 }
 
+std::set<std::string> vk_supported_instance_extensions() {
+	uint32_t count = 0;
+	VK_CHECK_THROW(vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr));
+	std::vector<VkExtensionProperties> extension_properties(count);
+	VK_CHECK_THROW(vkEnumerateInstanceExtensionProperties(nullptr, &count, extension_properties.data()));
+
+	std::set<std::string> extensions;
+	for (auto& e : extension_properties) {
+		extensions.insert(e.extensionName);
+	}
+
+	return extensions;
+}
+
+std::set<std::string> vk_supported_device_extensions(VkPhysicalDevice device) {
+	uint32_t count = 0;
+	VK_CHECK_THROW(vkEnumerateDeviceExtensionProperties(device, nullptr, &count, nullptr));
+	std::vector<VkExtensionProperties> extension_properties(count);
+	VK_CHECK_THROW(vkEnumerateDeviceExtensionProperties(device, nullptr, &count, extension_properties.data()));
+
+	std::set<std::string> extensions;
+	for (auto& e : extension_properties) {
+		extensions.insert(e.extensionName);
+	}
+
+	return extensions;
+}
+
 class VulkanAndNgx : public IDlssProvider, public std::enable_shared_from_this<VulkanAndNgx> {
 public:
 	VulkanAndNgx() {
@@ -127,10 +155,10 @@ public:
 		instance_create_info.pApplicationInfo = &app_info;
 
 		uint32_t available_layer_count;
-		vkEnumerateInstanceLayerProperties(&available_layer_count, nullptr);
+		VK_CHECK_THROW(vkEnumerateInstanceLayerProperties(&available_layer_count, nullptr));
 
 		std::vector<VkLayerProperties> available_layers(available_layer_count);
-		vkEnumerateInstanceLayerProperties(&available_layer_count, available_layers.data());
+		VK_CHECK_THROW(vkEnumerateInstanceLayerProperties(&available_layer_count, available_layers.data()));
 
 		std::vector<const char*> layers;
 		auto try_add_layer = [&](const char* layer) {
@@ -176,16 +204,23 @@ public:
 			instance_extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 		}
 
+		auto supported_instance_extensions = vk_supported_instance_extensions();
+		for (const auto& e : instance_extensions) {
+			if (supported_instance_extensions.count(e) == 0) {
+				throw std::runtime_error{fmt::format("Required instance extension '{}' is not supported.", e)};
+			}
+		}
+
 		for (uint32_t i = 0; i < n_ngx_device_extensions; ++i) {
 			device_extensions.emplace_back(ngx_device_extensions[i]);
 		}
 
 		device_extensions.emplace_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
-	#ifdef _WIN32
+#ifdef _WIN32
 		device_extensions.emplace_back(VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME);
-	#else
+#else
 		device_extensions.emplace_back(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
-	#endif
+#endif
 		device_extensions.emplace_back(VK_KHR_DEVICE_GROUP_EXTENSION_NAME);
 
 		instance_create_info.enabledExtensionCount = (uint32_t)instance_extensions.size();
@@ -302,6 +337,13 @@ public:
 			throw std::runtime_error{"Failed to find Vulkan device corresponding to CUDA device."};
 		}
 
+		auto supported_device_extensions = vk_supported_device_extensions(m_vk_physical_device);
+		for (const auto& e : device_extensions) {
+			if (supported_device_extensions.count(e) == 0) {
+				throw std::runtime_error{fmt::format("Required device extension '{}' is not supported.", e)};
+			}
+		}
+
 		// -------------------------------
 		// Vulkan Logical Device
 		// -------------------------------
@@ -331,14 +373,14 @@ public:
 		device_create_info.enabledLayerCount = static_cast<uint32_t>(layers.size());
 		device_create_info.ppEnabledLayerNames = layers.data();
 
-	#ifdef VK_EXT_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME
+#ifdef VK_EXT_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME
 		VkPhysicalDeviceBufferDeviceAddressFeaturesEXT buffer_device_address_feature = {};
 		buffer_device_address_feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT;
 		buffer_device_address_feature.bufferDeviceAddress = VK_TRUE;
 		device_create_info.pNext = &buffer_device_address_feature;
-	#else
+#else
 		throw std::runtime_error{"Buffer device address extension not available."};
-	#endif
+#endif
 
 		VK_CHECK_THROW(vkCreateDevice(m_vk_physical_device, &device_create_info, nullptr, &m_vk_device));
 
