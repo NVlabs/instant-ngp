@@ -421,29 +421,27 @@ void Testbed::set_view_dir(const Vector3f& dir) {
 void Testbed::first_training_view() {
 	m_nerf.training.view = 0;
 	set_camera_to_training_view(m_nerf.training.view);
-	reset_accumulation();
 }
 
 void Testbed::last_training_view() {
 	m_nerf.training.view = m_nerf.training.dataset.n_images-1;
 	set_camera_to_training_view(m_nerf.training.view);
-	reset_accumulation();
 }
 
 void Testbed::previous_training_view() {
 	if (m_nerf.training.view != 0) {
 		m_nerf.training.view -= 1;
 	}
+
 	set_camera_to_training_view(m_nerf.training.view);
-	reset_accumulation();
 }
 
 void Testbed::next_training_view() {
 	if (m_nerf.training.view != m_nerf.training.dataset.n_images-1) {
 		m_nerf.training.view += 1;
 	}
+
 	set_camera_to_training_view(m_nerf.training.view);
-	reset_accumulation();
 }
 
 void Testbed::set_camera_to_training_view(int trainview) {
@@ -459,6 +457,8 @@ void Testbed::set_camera_to_training_view(int trainview) {
 
 	m_screen_center = Vector2f::Constant(1.0f) - m_nerf.training.dataset.metadata[trainview].principal_point;
 	m_nerf.training.view = trainview;
+
+	reset_accumulation(true);
 }
 
 void Testbed::reset_camera() {
