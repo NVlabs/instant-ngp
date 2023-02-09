@@ -588,6 +588,8 @@ std::shared_ptr<IDlssProvider> init_vulkan_and_ngx() {
 class VulkanTexture {
 public:
 	VulkanTexture(std::shared_ptr<VulkanAndNgx> vk, const Vector2i& size, uint32_t n_channels) : m_vk{vk}, m_size{size}, m_n_channels{n_channels} {
+		ScopeGuard cleanup_guard{[&]() { clear(); }};
+
 		VkImageCreateInfo image_info{};
 		image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 		image_info.imageType = VK_IMAGE_TYPE_2D;
@@ -773,37 +775,50 @@ public:
 
 		m_n_bytes = mem_requirements.size;
 		g_total_n_bytes_allocated += m_n_bytes;
+
+		cleanup_guard.disarm();
 	}
 
 	virtual ~VulkanTexture() {
+		clear();
+	}
+
+	void clear() {
 		g_total_n_bytes_allocated -= m_n_bytes;
 
 		if (m_cuda_data) {
 			cudaFree(m_cuda_data);
+			m_cuda_data = nullptr;
 		}
 
 		if (m_cuda_surface_object) {
 			cudaDestroySurfaceObject(m_cuda_surface_object);
+			m_cuda_surface_object = {};
 		}
 
 		if (m_cuda_mipmapped_array) {
 			cudaFreeMipmappedArray(m_cuda_mipmapped_array);
+			m_cuda_mipmapped_array = {};
 		}
 
 		if (m_cuda_external_memory) {
 			cudaDestroyExternalMemory(m_cuda_external_memory);
+			m_cuda_external_memory = {};
 		}
 
 		if (m_vk_image_view) {
 			vkDestroyImageView(m_vk->vk_device(), m_vk_image_view, nullptr);
+			m_vk_image_view = {};
 		}
 
 		if (m_vk_image) {
 			vkDestroyImage(m_vk->vk_device(), m_vk_image, nullptr);
+			m_vk_image = {};
 		}
 
 		if (m_vk_device_memory) {
 			vkFreeMemory(m_vk->vk_device(), m_vk_device_memory, nullptr);
+			m_vk_device_memory = {};
 		}
 	}
 
@@ -842,7 +857,7 @@ private:
 	cudaExternalMemory_t m_cuda_external_memory = {};
 	cudaMipmappedArray_t m_cuda_mipmapped_array = {};
 	cudaSurfaceObject_t m_cuda_surface_object = {};
-	float* m_cuda_data;
+	float* m_cuda_data = nullptr;
 
 	NVSDK_NGX_Resource_VK m_ngx_resource = {};
 };
