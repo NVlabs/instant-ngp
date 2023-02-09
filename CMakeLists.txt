@@ -200,6 +200,7 @@ list(APPEND NGP_INCLUDE_DIRECTORIES
 	"dependencies/eigen"
 	"dependencies/filesystem"
 	"dependencies/nanovdb"
+	"dependencies/NaturalSort"
 	"dependencies/tinylogger"
 )
 

@@ -19,9 +19,11 @@
 #include <neural-graphics-primitives/thread_pool.h>
 #include <neural-graphics-primitives/tinyexr_wrapper.h>
 
+#include <filesystem/path.h>
+
 #include <json/json.hpp>
 
-#include <filesystem/path.h>
+#include <natural_sort.hpp>
 
 #include <stb_image/stb_image.h>
 
@@ -346,7 +348,7 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 		float sharpness_discard_threshold = json.value("sharpness_discard_threshold", 0.0f); // Keep all by default
 
 		std::sort(frames.begin(), frames.end(), [](const auto& frame1, const auto& frame2) {
-			return frame1["file_path"] < frame2["file_path"];
+			return SI::natural::compare<std::string>(frame1["file_path"], frame2["file_path"]);
 		});
 
 		for (auto&& frame : frames) {
