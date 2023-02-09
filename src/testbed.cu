@@ -543,6 +543,10 @@ inline float linear_to_db(float x) {
 
 template <typename T>
 void Testbed::dump_parameters_as_images(const T* params, const std::string& filename_base) {
+	if (!m_network) {
+		return;
+	}
+
 	size_t non_layer_params_width = 2048;
 
 	size_t layer_params = 0;
@@ -1251,11 +1255,13 @@ void Testbed::imgui() {
 			if (ImGui::SliderInt("Visualized dimension", &m_visualized_dimension, -1, (int)network_width(m_visualized_layer)-1)) {
 				set_visualized_dim(m_visualized_dimension);
 			}
+
 			if (!m_single_view) { ImGui::EndDisabled(); }
 
-			if (ImGui::SliderInt("Visualized layer", &m_visualized_layer, 0, (int)network_num_forward_activations()-1)) {
+			if (ImGui::SliderInt("Visualized layer", &m_visualized_layer, 0, std::max(0, (int)network_num_forward_activations()-1))) {
 				set_visualized_layer(m_visualized_layer);
 			}
+
 			if (ImGui::Checkbox("Single view", &m_single_view)) {
 				set_visualized_dim(-1);
 				accum_reset = true;
@@ -1791,27 +1797,27 @@ bool Testbed::keyboard_event() {
 
 	if (ImGui::IsKeyPressed('.')) {
 		if (m_single_view) {
-			if (m_visualized_dimension == m_network->width(m_visualized_layer)-1 && m_visualized_layer < m_network->num_forward_activations()-1) {
-				set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer+1)));
+			if (m_visualized_dimension == network_width(m_visualized_layer)-1 && m_visualized_layer < network_num_forward_activations()-1) {
+				set_visualized_layer(std::max(0, std::min((int)network_num_forward_activations()-1, m_visualized_layer+1)));
 				set_visualized_dim(0);
 			} else {
-				set_visualized_dim(std::max(-1, std::min((int)m_network->width(m_visualized_layer)-1, m_visualized_dimension+1)));
+				set_visualized_dim(std::max(-1, std::min((int)network_width(m_visualized_layer)-1, m_visualized_dimension+1)));
 			}
 		} else {
-			set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer+1)));
+			set_visualized_layer(std::max(0, std::min((int)network_num_forward_activations()-1, m_visualized_layer+1)));
 		}
 	}
 
 	if (ImGui::IsKeyPressed(',')) {
 		if (m_single_view) {
 			if (m_visualized_dimension == 0 && m_visualized_layer > 0) {
-				set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer-1)));
-				set_visualized_dim(m_network->width(m_visualized_layer)-1);
+				set_visualized_layer(std::max(0, std::min((int)network_num_forward_activations()-1, m_visualized_layer-1)));
+				set_visualized_dim(network_width(m_visualized_layer)-1);
 			} else {
-				set_visualized_dim(std::max(-1, std::min((int)m_network->width(m_visualized_layer)-1, m_visualized_dimension-1)));
+				set_visualized_dim(std::max(-1, std::min((int)network_width(m_visualized_layer)-1, m_visualized_dimension-1)));
 			}
 		} else {
-			set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer-1)));
+			set_visualized_layer(std::max(0, std::min((int)network_num_forward_activations()-1, m_visualized_layer-1)));
 		}
 	}
 
@@ -3343,7 +3349,7 @@ void Testbed::update_loss_graph() {
 }
 
 uint32_t Testbed::n_dimensions_to_visualize() const {
-	return m_network->width(m_visualized_layer);
+	return m_network ? m_network->width(m_visualized_layer) : 0;
 }
 
 float Testbed::fov() const {
@@ -3363,28 +3369,33 @@ void Testbed::set_fov_xy(const Vector2f& val) {
 }
 
 size_t Testbed::n_params() {
-	return m_network->n_params();
+	return m_network ? m_network->n_params() : 0;
 }
 
 size_t Testbed::n_encoding_params() {
-	return m_network->n_params() - first_encoder_param();
+	return n_params() - first_encoder_param();
 }
 
 size_t Testbed::first_encoder_param() {
+	if (!m_network) {
+		return 0;
+	}
+
 	auto layer_sizes = m_network->layer_sizes();
 	size_t first_encoder = 0;
 	for (auto size : layer_sizes) {
 		first_encoder += size.first * size.second;
 	}
+
 	return first_encoder;
 }
 
 uint32_t Testbed::network_width(uint32_t layer) const {
-	return m_network->width(layer);
+	return m_network ? m_network->width(layer) : 0;
 }
 
 uint32_t Testbed::network_num_forward_activations() const {
-	return m_network->num_forward_activations();
+	return m_network ? m_network->num_forward_activations() : 0;
 }
 
 void Testbed::set_max_level(float maxlevel) {
@@ -3393,6 +3404,7 @@ void Testbed::set_max_level(float maxlevel) {
 	if (hg_enc) {
 		hg_enc->set_max_level(maxlevel);
 	}
+
 	reset_accumulation();
 }
 
@@ -3402,12 +3414,13 @@ void Testbed::set_min_level(float minlevel) {
 	if (hg_enc) {
 		hg_enc->set_quantize_threshold(powf(minlevel, 4.f) * 0.2f);
 	}
+
 	reset_accumulation();
 }
 
 void Testbed::set_visualized_layer(int layer) {
 	m_visualized_layer = layer;
-	m_visualized_dimension = std::max(-1, std::min(m_visualized_dimension, (int)m_network->width(layer)-1));
+	m_visualized_dimension = std::max(-1, std::min(m_visualized_dimension, (int)network_width(layer) - 1));
 	reset_accumulation();
 }
 
@@ -4474,6 +4487,10 @@ Testbed::LevelStats compute_level_stats(const float* params, size_t n_params) {
 }
 
 void Testbed::gather_histograms() {
+	if (!m_network) {
+		return;
+	}
+
 	int n_params = (int)m_network->n_params();
 	int first_encoder = first_encoder_param();
 	int n_encoding_params = n_params - first_encoder;
