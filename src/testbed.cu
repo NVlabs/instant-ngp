@@ -954,7 +954,22 @@ void Testbed::imgui() {
 				}
 				accum_reset |= ImGui::Checkbox("Foveated rendering", &m_foveated_rendering) && !m_dlss;
 				if (m_foveated_rendering) {
-					accum_reset |= ImGui::SliderFloat("Maximum foveation", &m_foveated_rendering_max_scaling, 1.0f, 16.0f, "%.01f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat) && !m_dlss;
+					ImGui::SameLine();
+					ImGui::Text(": %.01fx", m_foveated_rendering_scaling);
+
+					if (ImGui::TreeNodeEx("Foveated rendering settings")) {
+						accum_reset |= ImGui::Checkbox("Dynamic", &m_dynamic_foveated_rendering) && !m_dlss;
+						ImGui::SameLine();
+						accum_reset |= ImGui::Checkbox("Visualize", &m_foveated_rendering_visualize) && !m_dlss;
+
+						if (m_dynamic_foveated_rendering) {
+							accum_reset |= ImGui::SliderFloat("Maximum scaling", &m_foveated_rendering_max_scaling, 1.0f, 16.0f, "%.01f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat) && !m_dlss;
+						} else {
+							accum_reset |= ImGui::SliderFloat("Scaling", &m_foveated_rendering_scaling, 1.0f, 16.0f, "%.01f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat) && !m_dlss;
+						}
+
+						accum_reset |= ImGui::SliderFloat("Fovea diameter", &m_foveated_rendering_full_res_diameter, 0.1f, 0.9f) && !m_dlss;
+					}
 				}
 
 				ImGui::TreePop();
@@ -2373,7 +2388,7 @@ void Testbed::draw_gui() {
 
 			auto& view = m_views[i];
 			Vector2i top_left{x * extent.x(), display_h - (y + 1) * extent.y()};
-			blit_texture(view.foveation, m_rgba_render_textures.at(i)->texture(), m_foveated_rendering ? GL_LINEAR : GL_NEAREST, m_depth_render_textures.at(i)->texture(), 0, top_left, extent);
+			blit_texture(m_foveated_rendering_visualize ? Foveation{} : view.foveation, m_rgba_render_textures.at(i)->texture(), m_foveated_rendering ? GL_LINEAR : GL_NEAREST, m_depth_render_textures.at(i)->texture(), 0, top_left, extent);
 
 			++i;
 		}
@@ -2730,17 +2745,22 @@ void Testbed::train_and_render(bool skip_rendering) {
 			view.render_buffer->resize(render_res);
 
 			if (m_foveated_rendering) {
-				float foveation_warped_full_res_diameter = 0.55f;
-				Vector2f resolution_scale = render_res.cast<float>().cwiseQuotient(view.full_resolution.cast<float>());
+				if (m_dynamic_foveated_rendering) {
+					Vector2f resolution_scale = render_res.cast<float>().cwiseQuotient(view.full_resolution.cast<float>());
 
-				// Only start foveation when DLSS if off or if DLSS is asked to do more than 1.5x upscaling.
-				// The reason for the 1.5x threshold is that DLSS can do up to 3x upscaling, at which point a foveation
-				// factor of 2x = 3.0x/1.5x corresponds exactly to bilinear super sampling, which is helpful in
-				// suppressing DLSS's artifacts.
-				float foveation_begin_factor = m_dlss ? 1.5f : 1.0f;
+					// Only start foveation when DLSS if off or if DLSS is asked to do more than 1.5x upscaling.
+					// The reason for the 1.5x threshold is that DLSS can do up to 3x upscaling, at which point a foveation
+					// factor of 2x = 3.0x/1.5x corresponds exactly to bilinear super sampling, which is helpful in
+					// suppressing DLSS's artifacts.
+					float foveation_begin_factor = m_dlss ? 1.5f : 1.0f;
 
-				resolution_scale = (resolution_scale * foveation_begin_factor).cwiseMin(1.0f).cwiseMax(1.0f / m_foveated_rendering_max_scaling);
-				view.foveation = {resolution_scale, Vector2f::Ones() - view.screen_center, Vector2f::Constant(foveation_warped_full_res_diameter * 0.5f)};
+					resolution_scale = (resolution_scale * foveation_begin_factor).cwiseMin(1.0f).cwiseMax(1.0f / m_foveated_rendering_max_scaling);
+					view.foveation = {resolution_scale, Vector2f::Ones() - view.screen_center, Vector2f::Constant(m_foveated_rendering_full_res_diameter * 0.5f)};
+
+					m_foveated_rendering_scaling = 1.0f / resolution_scale.mean();
+				} else {
+					view.foveation = {Vector2f::Constant(1.0f / m_foveated_rendering_scaling), Vector2f::Ones() - view.screen_center, Vector2f::Constant(m_foveated_rendering_full_res_diameter * 0.5f)};
+				}
 			} else {
 				view.foveation = {};
 			}

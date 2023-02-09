@@ -1139,7 +1139,11 @@ public:
 
 	bool m_use_aux_devices = false;
 	bool m_foveated_rendering = false;
+	bool m_dynamic_foveated_rendering = true;
+	float m_foveated_rendering_full_res_diameter = 0.55f;
+	float m_foveated_rendering_scaling = 1.0f;
 	float m_foveated_rendering_max_scaling = 2.0f;
+	bool m_foveated_rendering_visualize = false;
 
 	fs::path m_data_path;
 	fs::path m_network_config_path = "base.json";
