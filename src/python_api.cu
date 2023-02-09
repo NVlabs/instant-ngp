@@ -208,6 +208,7 @@ py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool l
 #ifdef NGP_GUI
 py::array_t<float> Testbed::screenshot(bool linear) const {
 	std::vector<float> tmp(m_window_res.prod() * 4);
+	glReadBuffer(GL_FRONT);
 	glReadPixels(0, 0, m_window_res.x(), m_window_res.y(), GL_RGBA, GL_FLOAT, tmp.data());
 
 	py::array_t<float> result({m_window_res.y(), m_window_res.x(), 4});
