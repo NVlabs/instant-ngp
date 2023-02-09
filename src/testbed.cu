@@ -4317,7 +4317,7 @@ void Testbed::render_frame_epilogue(
 	}
 
 	render_buffer.accumulate(m_exposure, stream);
-	render_buffer.tonemap(m_exposure, m_background_color, output_color_space, m_ndc_znear, m_ndc_zfar, stream);
+	render_buffer.tonemap(m_exposure, m_background_color, output_color_space, m_ndc_znear, m_ndc_zfar, m_snap_to_pixel_centers, stream);
 
 	if (m_testbed_mode == ETestbedMode::Nerf) {
 		// Overlay the ground truth image if requested

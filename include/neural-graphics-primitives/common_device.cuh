@@ -613,15 +613,15 @@ inline NGP_HOST_DEVICE Eigen::Vector2f motion_vector(
 	const Foveation& prev_foveation = {},
 	const Lens& lens = {}
 ) {
-	Ray ray = pixel_to_ray(
+	Eigen::Vector2f pxf = pixel.cast<float>() + ld_random_pixel_offset(snap_to_pixel_centers ? 0 : sample_index);
+	Ray ray = uv_to_ray(
 		sample_index,
-		pixel,
+		pxf.cwiseQuotient(resolution.cast<float>()),
 		resolution,
 		focal_length,
 		camera,
 		screen_center,
 		parallax_shift,
-		snap_to_pixel_centers,
 		0.0f,
 		1.0f,
 		0.0f,
@@ -630,7 +630,7 @@ inline NGP_HOST_DEVICE Eigen::Vector2f motion_vector(
 		lens
 	);
 
-	Eigen::Vector2f prev_pixel = pos_to_pixel(
+	Eigen::Vector2f prev_pxf = pos_to_pixel(
 		ray(depth),
 		resolution,
 		focal_length,
@@ -641,7 +641,7 @@ inline NGP_HOST_DEVICE Eigen::Vector2f motion_vector(
 		lens
 	);
 
-	return prev_pixel - (pixel.cast<float>() + ld_random_pixel_offset(sample_index));
+	return prev_pxf - pxf;
 }
 
 // Maps view-space depth (physical units) in the range [znear, zfar] hyperbolically to

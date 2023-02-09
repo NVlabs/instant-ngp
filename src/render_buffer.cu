@@ -659,7 +659,7 @@ void CudaRenderBuffer::accumulate(float exposure, cudaStream_t stream) {
 	++m_spp;
 }
 
-void CudaRenderBuffer::tonemap(float exposure, const Array4f& background_color, EColorSpace output_color_space, float znear, float zfar, cudaStream_t stream) {
+void CudaRenderBuffer::tonemap(float exposure, const Array4f& background_color, EColorSpace output_color_space, float znear, float zfar, bool snap_to_pixel_centers, cudaStream_t stream) {
 	assert(m_dlss || out_resolution() == in_resolution());
 
 	auto res = in_resolution();
@@ -688,7 +688,7 @@ void CudaRenderBuffer::tonemap(float exposure, const Array4f& background_color, 
 			res,
 			output_color_space == EColorSpace::Linear, /* HDR mode */
 			m_dlss_sharpening,
-			Vector2f::Constant(0.5f) - ld_random_pixel_offset(sample_index), /* jitter offset in [-0.5, 0.5] */
+			Vector2f::Constant(0.5f) - ld_random_pixel_offset(snap_to_pixel_centers ? 0 : sample_index), /* jitter offset in [-0.5, 0.5] */
 			sample_index == 0 /* reset history */
 		);
 
