@@ -102,11 +102,39 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
 	return VK_FALSE;
 }
 
-std::set<std::string> vk_supported_instance_extensions() {
+std::set<std::string> vk_supported_instance_layers() {
 	uint32_t count = 0;
-	VK_CHECK_THROW(vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr));
+	VK_CHECK_THROW(vkEnumerateInstanceLayerProperties(&count, nullptr));
+	std::vector<VkLayerProperties> layer_properties(count);
+	VK_CHECK_THROW(vkEnumerateInstanceLayerProperties(&count, layer_properties.data()));
+
+	std::set<std::string> layers;
+	for (auto& l : layer_properties) {
+		layers.insert(l.layerName);
+	}
+
+	return layers;
+}
+
+std::set<std::string> vk_supported_device_layers(VkPhysicalDevice device) {
+	uint32_t count = 0;
+	VK_CHECK_THROW(vkEnumerateDeviceLayerProperties(device, &count, nullptr));
+	std::vector<VkLayerProperties> layer_properties(count);
+	VK_CHECK_THROW(vkEnumerateDeviceLayerProperties(device, &count, layer_properties.data()));
+
+	std::set<std::string> layers;
+	for (auto& l : layer_properties) {
+		layers.insert(l.layerName);
+	}
+
+	return layers;
+}
+
+std::set<std::string> vk_supported_instance_extensions(const char* layer_name) {
+	uint32_t count = 0;
+	VK_CHECK_THROW(vkEnumerateInstanceExtensionProperties(layer_name, &count, nullptr));
 	std::vector<VkExtensionProperties> extension_properties(count);
-	VK_CHECK_THROW(vkEnumerateInstanceExtensionProperties(nullptr, &count, extension_properties.data()));
+	VK_CHECK_THROW(vkEnumerateInstanceExtensionProperties(layer_name, &count, extension_properties.data()));
 
 	std::set<std::string> extensions;
 	for (auto& e : extension_properties) {
@@ -116,11 +144,11 @@ std::set<std::string> vk_supported_instance_extensions() {
 	return extensions;
 }
 
-std::set<std::string> vk_supported_device_extensions(VkPhysicalDevice device) {
+std::set<std::string> vk_supported_device_extensions(VkPhysicalDevice device, const char* layer_name) {
 	uint32_t count = 0;
-	VK_CHECK_THROW(vkEnumerateDeviceExtensionProperties(device, nullptr, &count, nullptr));
+	VK_CHECK_THROW(vkEnumerateDeviceExtensionProperties(device, layer_name, &count, nullptr));
 	std::vector<VkExtensionProperties> extension_properties(count);
-	VK_CHECK_THROW(vkEnumerateDeviceExtensionProperties(device, nullptr, &count, extension_properties.data()));
+	VK_CHECK_THROW(vkEnumerateDeviceExtensionProperties(device, layer_name, &count, extension_properties.data()));
 
 	std::set<std::string> extensions;
 	for (auto& e : extension_properties) {
@@ -154,32 +182,6 @@ public:
 		instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		instance_create_info.pApplicationInfo = &app_info;
 
-		uint32_t available_layer_count;
-		VK_CHECK_THROW(vkEnumerateInstanceLayerProperties(&available_layer_count, nullptr));
-
-		std::vector<VkLayerProperties> available_layers(available_layer_count);
-		VK_CHECK_THROW(vkEnumerateInstanceLayerProperties(&available_layer_count, available_layers.data()));
-
-		std::vector<const char*> layers;
-		auto try_add_layer = [&](const char* layer) {
-			for (const auto& props : available_layers) {
-				if (strcmp(layer, props.layerName) == 0) {
-					layers.emplace_back(layer);
-					return true;
-				}
-			}
-
-			return false;
-		};
-
-		bool validation_layer_enabled = try_add_layer("VK_LAYER_KHRONOS_validation");
-		if (!validation_layer_enabled) {
-			tlog::warning() << "Vulkan validation layer is not available. Vulkan errors will be difficult to diagnose.";
-		}
-
-		instance_create_info.enabledLayerCount = static_cast<uint32_t>(layers.size());
-		instance_create_info.ppEnabledLayerNames = layers.empty() ? nullptr : layers.data();
-
 		std::vector<const char*> instance_extensions;
 		std::vector<const char*> device_extensions;
 
@@ -200,28 +202,32 @@ public:
 		instance_extensions.emplace_back(VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME);
 		instance_extensions.emplace_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
-		if (validation_layer_enabled) {
+		auto supported_instance_layers = vk_supported_instance_layers();
+
+		const char* validation_layer_name = "VK_LAYER_KHRONOS_validation";
+		bool instance_validation_layer_enabled = supported_instance_layers.count(validation_layer_name) > 0;
+		if (!instance_validation_layer_enabled) {
+			tlog::warning() << "Vulkan instance validation layer is not available. Vulkan errors will be difficult to diagnose.";
+		}
+
+		std::vector<const char*> instance_layers;
+		if (instance_validation_layer_enabled) {
+			instance_layers.emplace_back(validation_layer_name);
+		}
+
+		instance_create_info.enabledLayerCount = static_cast<uint32_t>(instance_layers.size());
+		instance_create_info.ppEnabledLayerNames = instance_layers.empty() ? nullptr : instance_layers.data();
+
+		if (instance_validation_layer_enabled) {
 			instance_extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 		}
 
-		auto supported_instance_extensions = vk_supported_instance_extensions();
+		auto supported_instance_extensions = vk_supported_instance_extensions(nullptr);
 		for (const auto& e : instance_extensions) {
 			if (supported_instance_extensions.count(e) == 0) {
 				throw std::runtime_error{fmt::format("Required instance extension '{}' is not supported.", e)};
 			}
 		}
-
-		for (uint32_t i = 0; i < n_ngx_device_extensions; ++i) {
-			device_extensions.emplace_back(ngx_device_extensions[i]);
-		}
-
-		device_extensions.emplace_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
-#ifdef _WIN32
-		device_extensions.emplace_back(VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME);
-#else
-		device_extensions.emplace_back(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
-#endif
-		device_extensions.emplace_back(VK_KHR_DEVICE_GROUP_EXTENSION_NAME);
 
 		instance_create_info.enabledExtensionCount = (uint32_t)instance_extensions.size();
 		instance_create_info.ppEnabledExtensionNames = instance_extensions.data();
@@ -233,13 +239,13 @@ public:
 		debug_messenger_create_info.pfnUserCallback = vk_debug_callback;
 		debug_messenger_create_info.pUserData = nullptr;
 
-		if (validation_layer_enabled) {
+		if (instance_validation_layer_enabled) {
 			instance_create_info.pNext = &debug_messenger_create_info;
 		}
 
 		VK_CHECK_THROW(vkCreateInstance(&instance_create_info, nullptr, &m_vk_instance));
 
-		if (validation_layer_enabled) {
+		if (instance_validation_layer_enabled) {
 			auto CreateDebugUtilsMessengerEXT = [](VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
 				auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
 				if (func != nullptr) {
@@ -337,7 +343,19 @@ public:
 			throw std::runtime_error{"Failed to find Vulkan device corresponding to CUDA device."};
 		}
 
-		auto supported_device_extensions = vk_supported_device_extensions(m_vk_physical_device);
+		for (uint32_t i = 0; i < n_ngx_device_extensions; ++i) {
+			device_extensions.emplace_back(ngx_device_extensions[i]);
+		}
+
+		device_extensions.emplace_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
+#ifdef _WIN32
+		device_extensions.emplace_back(VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME);
+#else
+		device_extensions.emplace_back(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+#endif
+		device_extensions.emplace_back(VK_KHR_DEVICE_GROUP_EXTENSION_NAME);
+
+		auto supported_device_extensions = vk_supported_device_extensions(m_vk_physical_device, nullptr);
 		for (const auto& e : device_extensions) {
 			if (supported_device_extensions.count(e) == 0) {
 				throw std::runtime_error{fmt::format("Required device extension '{}' is not supported.", e)};
@@ -370,8 +388,6 @@ public:
 		device_create_info.pEnabledFeatures = &device_features;
 		device_create_info.enabledExtensionCount = (uint32_t)device_extensions.size();
 		device_create_info.ppEnabledExtensionNames = device_extensions.data();
-		device_create_info.enabledLayerCount = static_cast<uint32_t>(layers.size());
-		device_create_info.ppEnabledLayerNames = layers.data();
 
 #ifdef VK_EXT_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME
 		VkPhysicalDeviceBufferDeviceAddressFeaturesEXT buffer_device_address_feature = {};
