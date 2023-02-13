@@ -4567,6 +4567,20 @@ void Testbed::save_snapshot(const fs::path& path, bool include_optimizer_state, 
 	to_json(snapshot["render_aabb_to_local"], m_render_aabb_to_local);
 	snapshot["render_aabb"] = m_render_aabb;
 	to_json(snapshot["up_dir"], m_up_dir);
+	to_json(snapshot["sun_dir"], m_sun_dir);
+	snapshot["exposure"] = m_exposure;
+
+	to_json(snapshot["camera"]["matrix"], m_camera);
+	snapshot["camera"]["fov_axis"] = m_fov_axis;
+	to_json(snapshot["camera"]["relative_focal_length"], m_relative_focal_length);
+	to_json(snapshot["camera"]["screen_center"], m_screen_center);
+	snapshot["camera"]["zoom"] = m_zoom;
+	snapshot["camera"]["scale"] = m_scale;
+
+	snapshot["camera"]["aperture_size"] = m_aperture_size;
+	snapshot["camera"]["autofocus"] = m_autofocus;
+	to_json(snapshot["camera"]["autofocus_target"], m_autofocus_target);
+	snapshot["camera"]["autofocus_depth"] = m_slice_plane_z;
 
 	if (m_testbed_mode == ETestbedMode::Nerf) {
 		snapshot["nerf"]["rgb"]["rays_per_batch"] = m_nerf.training.counters_rgb.rays_per_batch;
