@@ -4569,6 +4569,7 @@ void Testbed::save_snapshot(const fs::path& path, bool include_optimizer_state, 
 	to_json(snapshot["up_dir"], m_up_dir);
 	to_json(snapshot["sun_dir"], m_sun_dir);
 	snapshot["exposure"] = m_exposure;
+	to_json(snapshot["background_color"], m_background_color);
 
 	to_json(snapshot["camera"]["matrix"], m_camera);
 	snapshot["camera"]["fov_axis"] = m_fov_axis;

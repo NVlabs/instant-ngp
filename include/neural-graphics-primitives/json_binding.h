@@ -54,6 +54,36 @@ void from_json(const nlohmann::json& j, Eigen::MatrixBase<Derived>& mat) {
 }
 
 template <typename Derived>
+void to_json(nlohmann::json& j, const Eigen::ArrayBase<Derived>& mat) {
+	for (int row = 0; row < mat.rows(); ++row) {
+		if (mat.cols() == 1) {
+			j.push_back(mat(row));
+		} else {
+			nlohmann::json column = nlohmann::json::array();
+			for (int col = 0; col < mat.cols(); ++col) {
+				column.push_back(mat(row, col));
+			}
+			j.push_back(column);
+		}
+	}
+}
+
+template <typename Derived>
+void from_json(const nlohmann::json& j, Eigen::ArrayBase<Derived>& mat) {
+	for (std::size_t row = 0; row < j.size(); ++row) {
+		const auto& jrow = j.at(row);
+		if (jrow.is_array()) {
+			for (std::size_t col = 0; col < jrow.size(); ++col) {
+				const auto& value = jrow.at(col);
+				mat(row, col) = value.get<typename Eigen::ArrayBase<Derived>::Scalar>();
+			}
+		} else {
+			mat(row) = jrow.get<typename Eigen::ArrayBase<Derived>::Scalar>();
+		}
+	}
+}
+
+template <typename Derived>
 void to_json(nlohmann::json& j, const Eigen::QuaternionBase<Derived>& q) {
 	j.push_back(q.w());
 	j.push_back(q.x());
