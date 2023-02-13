@@ -202,7 +202,7 @@ void Testbed::set_mode(ETestbedMode mode) {
 			m_use_aux_devices = true;
 		}
 
-		if (m_dlss_provider) {
+		if (m_dlss_provider && m_aperture_size == 0.0f) {
 			m_dlss = true;
 		}
 	} else {
@@ -2943,7 +2943,7 @@ void Testbed::init_window(int resw, int resh, bool hidden, bool second_window) {
 	if (primary_device().compute_capability() >= 70) {
 		try {
 			m_dlss_provider = init_vulkan_and_ngx();
-			if (m_testbed_mode == ETestbedMode::Nerf) {
+			if (m_testbed_mode == ETestbedMode::Nerf && m_aperture_size == 0.0f) {
 				m_dlss = true;
 			}
 		} catch (const std::runtime_error& e) {
@@ -4664,6 +4664,28 @@ void Testbed::load_snapshot(const fs::path& path) {
 	}
 
 	// Needs to happen after `load_nerf_post()`
+	if (snapshot.contains("sun_dir")) from_json(snapshot.at("sun_dir"), m_sun_dir);
+	m_exposure = snapshot.value("exposure", m_exposure);
+	if (snapshot.contains("background_color")) from_json(snapshot.at("background_color"), m_background_color);
+
+	if (snapshot.contains("camera")) {
+		if (snapshot["camera"].contains("matrix")) from_json(snapshot["camera"]["matrix"], m_camera);
+		m_fov_axis = snapshot["camera"].value("fov_axis", m_fov_axis);
+		if (snapshot["camera"].contains("relative_focal_length")) from_json(snapshot["camera"]["relative_focal_length"], m_relative_focal_length);
+		if (snapshot["camera"].contains("screen_center")) from_json(snapshot["camera"]["screen_center"], m_screen_center);
+		m_zoom = snapshot["camera"].value("zoom", m_zoom);
+		m_scale = snapshot["camera"].value("scale", m_scale);
+
+		m_aperture_size = snapshot["camera"].value("aperture_size", m_aperture_size);
+		if (m_aperture_size != 0) {
+			m_dlss = false;
+		}
+
+		m_autofocus = snapshot["camera"].value("autofocus", m_autofocus);
+		if (snapshot["camera"].contains("autofocus_target")) from_json(snapshot["camera"]["autofocus_target"], m_autofocus_target);
+		m_slice_plane_z = snapshot["camera"].value("autofocus_depth", m_slice_plane_z);
+	}
+
 	if (snapshot.contains("render_aabb_to_local")) from_json(snapshot.at("render_aabb_to_local"), m_render_aabb_to_local);
 	m_render_aabb = snapshot.value("render_aabb", m_render_aabb);
 	if (snapshot.contains("up_dir")) from_json(snapshot.at("up_dir"), m_up_dir);
