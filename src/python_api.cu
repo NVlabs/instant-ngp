@@ -207,6 +207,37 @@ py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool l
 
 #ifdef NGP_GUI
 py::array_t<float> Testbed::screenshot(bool linear) const {
+py::array_t<float> Testbed::view(bool linear, size_t view_idx) const {
+	if (m_views.size() <= view_idx) {
+		throw std::runtime_error{fmt::format("View #{} does not exist.", view_idx)};
+	}
+
+	auto& view = m_views.at(view_idx);
+	auto& render_buffer = *view.render_buffer;
+
+	auto res = render_buffer.out_resolution();
+
+	py::array_t<float> result({res.y(), res.x(), 4});
+	py::buffer_info buf = result.request();
+	float* data = (float*)buf.ptr;
+
+	CUDA_CHECK_THROW(cudaMemcpy2DFromArray(data, res.x() * sizeof(float) * 4, render_buffer.surface_provider().array(), 0, 0, res.x() * sizeof(float) * 4, res.y(), cudaMemcpyDeviceToHost));
+
+	if (linear) {
+		ThreadPool{}.parallel_for<size_t>(0, res.y(), [&](size_t y) {
+			size_t base = y * res.x();
+			size_t base_reverse = (res.y() - y - 1) * res.x();
+			for (uint32_t x = 0; x < res.x(); ++x) {
+				size_t px = base + x;
+				data[px*4+0] = srgb_to_linear(data[px*4+0]);
+				data[px*4+1] = srgb_to_linear(data[px*4+1]);
+				data[px*4+2] = srgb_to_linear(data[px*4+2]);
+			}
+		});
+	}
+
+	return result;
+}
 	std::vector<float> tmp(m_window_res.prod() * 4);
 	glReadBuffer(GL_FRONT);
 	glReadPixels(0, 0, m_window_res.x(), m_window_res.y(), GL_RGBA, GL_FLOAT, tmp.data());
@@ -380,6 +411,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("is_shift_down", [](py::object& obj) { return ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Shift; })
 		.def("is_super_down", [](py::object& obj) { return ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Super; })
 		.def("screenshot", &Testbed::screenshot, "Takes a screenshot of the current window contents.", py::arg("linear")=true)
+		.def("view", &Testbed::view, "Outputs the currently displayed image by a given view (0 by default).", py::arg("linear")=true, py::arg("view")=0)
 		.def_readwrite("vr_use_hidden_area_mask", &Testbed::m_vr_use_hidden_area_mask)
 		.def_readwrite("vr_use_depth_reproject", &Testbed::m_vr_use_depth_reproject)
 #endif
