@@ -20,8 +20,9 @@ if (NOT NGP_DEPLOY)
 endif()
 
 option(NGP_BUILD_WITH_GUI "Build with GUI support (requires GLFW and GLEW)?" ON)
-option(NGP_BUILD_WITH_VULKAN "Build with Vulkan to enable DLSS support?" ON)
 option(NGP_BUILD_WITH_OPTIX "Build with OptiX to enable hardware ray tracing?" ON)
+option(NGP_BUILD_WITH_PYTHON_BINDINGS "Build bindings that allow instrumenting instant-ngp with Python?" ON)
+option(NGP_BUILD_WITH_VULKAN "Build with Vulkan to enable DLSS support?" ON)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
@@ -216,9 +217,11 @@ if (NGP_BUILD_WITH_OPTIX)
 	list(APPEND NGP_DEFINITIONS -DNGP_OPTIX)
 endif()
 
-find_package(Python 3.7 COMPONENTS Interpreter Development)
-if (Python_FOUND)
-	add_subdirectory("dependencies/pybind11")
+if (NGP_BUILD_WITH_PYTHON_BINDINGS)
+	find_package(Python 3.7 COMPONENTS Interpreter Development)
+	if (Python_FOUND)
+		add_subdirectory("dependencies/pybind11")
+	endif()
 endif()
 
 # Compile zlib (only on Windows)
