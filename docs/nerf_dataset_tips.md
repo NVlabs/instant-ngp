@@ -49,7 +49,7 @@ You can set any of the following parameters, where the listed values are the def
 	...	
 }
 ```
-See [nerf_loader.cu](src/nerf_loader.cu) for implementation details and additional options.
+See [nerf_loader.cu](/src/nerf_loader.cu) for implementation details and additional options.
 
 ## Preparing new NeRF datasets
 
