@@ -51,6 +51,21 @@ You can set any of the following parameters, where the listed values are the def
 ```
 See [nerf_loader.cu](/src/nerf_loader.cu) for implementation details and additional options.
 
+## Accommodating variable exposure / white-balance / lighting
+
+Many datasets have inconsistent exposure, white-balance, or lighting across the images.
+This can lead to problems in the reconstruction, usually "floaters".
+While the best way to avoid this problem is to re-record the dataset, this is not always an option.
+In this case, __instant-ngp__ supports learning of a per-image "latent" appearance code, by adding the following line
+to `transforms.json`:
+```json
+{
+	"n_extra_learnable_dims": 16,
+}
+```
+where `16` is a well-performing default number, but others can be also experimented with.
+
+
 ## Preparing new NeRF datasets
 
 To train on self-captured data, one has to process the data into an existing format supported by __instant-ngp__. We provide scripts to support three approaches:

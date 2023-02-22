@@ -3013,7 +3013,7 @@ void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaS
 			//float l2_reg = 1e-4f;
 			//gradient += m_nerf.training.extra_dims_opt[i].variable() * l2_reg;
 
-			m_nerf.training.extra_dims_opt[i].set_learning_rate(std::max(1e-3f * std::pow(0.33f, (float)(m_nerf.training.extra_dims_opt[i].step() / 128)), m_optimizer->learning_rate()/1000.0f));
+			m_nerf.training.extra_dims_opt[i].set_learning_rate(m_optimizer->learning_rate());
 			m_nerf.training.extra_dims_opt[i].step(gradient);
 
 			const ArrayXf &value = m_nerf.training.extra_dims_opt[i].variable();
@@ -3022,7 +3022,6 @@ void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaS
 			}
 		}
 
-		//m_nerf.training.extra_dims_gpu.copy_from_host(extra_dims_new_values);
 		CUDA_CHECK_THROW(cudaMemcpyAsync(m_nerf.training.extra_dims_gpu.data(), extra_dims_new_values.data(), m_nerf.training.n_images_for_training * n_extra_dims * sizeof(float) , cudaMemcpyHostToDevice, stream));
 	}
 
