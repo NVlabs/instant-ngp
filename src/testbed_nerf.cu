@@ -2592,6 +2592,7 @@ void Testbed::load_nerf_post() { // moved the second half of load_nerf here
 	m_nerf.training.cam_focal_length_gradient_gpu.resize_and_copy_from_host(&m_nerf.training.cam_focal_length_gradient, 1);
 
 	m_nerf.training.reset_extra_dims(m_rng);
+	m_nerf.training.optimize_extra_dims = m_nerf.training.dataset.n_extra_learnable_dims;
 
 	if (m_nerf.training.dataset.has_rays) {
 		m_nerf.training.near_distance = 0.0f;
