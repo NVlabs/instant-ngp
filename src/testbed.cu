@@ -768,6 +768,60 @@ void Testbed::imgui() {
 	ImGui::End();
 
 
+	bool train_extra_dims = m_nerf.training.dataset.n_extra_learnable_dims > 0;
+	if (train_extra_dims && m_nerf.training.n_images_for_training > 0) {
+		if (ImGui::Begin("Latent space 2D embedding")) {
+			ImVec2 size = ImGui::GetContentRegionAvail();
+			if (size.x<100.f) size.x = 100.f;
+			if (size.y<100.f) size.y = 100.f;
+			ImGui::InvisibleButton("##empty", size);
+			static Eigen::VectorXf X;
+			static Eigen::VectorXf Y;
+			uint32_t n_extra_dims = m_nerf.training.dataset.n_extra_dims();
+			Eigen::VectorXf mean(n_extra_dims);
+			mean.setZero();
+			uint32_t n = m_nerf.training.n_images_for_training;
+			for (uint32_t i = 0; i < n; ++i) {
+				mean += m_nerf.training.extra_dims_opt[i].variable().matrix();
+			}
+			mean *= 1.f/n;
+			Eigen::MatrixXf cov(n_extra_dims, n_extra_dims);
+			cov.setZero();
+			float scale=0.001f;	// compute scale
+			for (uint32_t i = 0; i < n; ++i) {
+				auto v = m_nerf.training.extra_dims_opt[i].variable().matrix() - mean;
+				scale = max(scale, v.norm() );
+				cov += v.transpose() * v;
+			}
+			scale = 3.f; // fixed scale
+			if (X.size() != mean.size()) { X = Eigen::VectorXf(mean.size()); X.setZero(); }
+			if (Y.size() != mean.size()) { Y = Eigen::VectorXf(mean.size()); Y.setZero(); }
+			// power iteration to get X and Y. TODO: modified gauss siedel to orthonormalize X and Y jointly?
+			X = (X * cov); if (X.norm() == 0.f) { X.setZero(); X.x()=1.f; } else X.normalize();
+			Y = (Y * cov); Y -= Y.dot(X) * X; if (Y.norm() == 0.f) { Y.setZero(); Y.y()=1.f; } else Y.normalize();
+			const ImVec2 p0 = ImGui::GetItemRectMin();
+			const ImVec2 p1 = ImGui::GetItemRectMax();
+			ImDrawList* draw_list = ImGui::GetWindowDrawList();
+			draw_list->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, 255));
+			draw_list->AddRect(p0, p1, IM_COL32(255, 255, 255, 128));
+			ImGui::PushClipRect(p0, p1, true);
+			Vector2f mouse={ImGui::GetIO().MousePos.x,ImGui::GetIO().MousePos.y};
+			for (uint32_t i = 0; i < n; ++i) {
+				auto v = m_nerf.training.extra_dims_opt[i].variable().matrix() - mean;
+				Vector2f p=Vector2f{v.dot(X) / scale,v.dot(Y) / scale};
+				p=(p.cwiseProduct(Vector2f{p1.x-p0.x-20.f,p1.y-p0.y-20.f}) + Vector2f{p0.x+p1.x,p0.y+p1.y})*0.5f;
+				if ((p-mouse).norm()<10.f)
+					ImGui::SetTooltip("%d", i);
+				float theta = i*PI()*2.f/n;
+				ImColor col(sinf(theta)*0.4f+0.5f,sinf(theta+PI()*2.f/3.f)*0.4f+0.5f,sinf(theta+PI()*4.f/3.f)*0.4f+0.5f);
+				draw_list->AddCircleFilled(ImVec2{p.x(), p.y()}, 10.f, col);
+				draw_list->AddCircle(ImVec2{p.x(), p.y()}, 10.f, IM_COL32(255, 255, 255, 64));
+			}
+			ImGui::PopClipRect();
+		}
+		ImGui::End();
+	}
+
 	ImGui::Begin("instant-ngp v" NGP_VERSION);
 
 	size_t n_bytes = tcnn::total_n_bytes_allocated() + g_total_n_bytes_allocated;
