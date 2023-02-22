@@ -802,15 +802,9 @@ void Testbed::imgui() {
 			ImGui::SameLine();
 			ImGui::Checkbox("extrinsics", &m_nerf.training.optimize_extrinsics);
 			ImGui::SameLine();
-			ImGui::Checkbox("exposure", &m_nerf.training.optimize_exposure);
-			ImGui::SameLine();
 			ImGui::Checkbox("distortion", &m_nerf.training.optimize_distortion);
-
-			if (m_nerf.training.dataset.n_extra_learnable_dims) {
-				ImGui::SameLine();
-				ImGui::Checkbox("latents", &m_nerf.training.optimize_extra_dims);
-			}
-
+			ImGui::SameLine();
+			ImGui::Checkbox("per-image latents", &m_nerf.training.optimize_extra_dims);
 
 			static bool export_extrinsics_in_quat_format = true;
 			static bool extrinsics_have_been_optimized = false;
@@ -3855,6 +3849,15 @@ void Testbed::train(uint32_t batch_size) {
 		reload_network_from_file();
 		if (!m_trainer) {
 			throw std::runtime_error{"Unable to create a neural network trainer."};
+		}
+	}
+
+	if (m_testbed_mode == ETestbedMode::Nerf) {
+		if (m_nerf.training.optimize_extra_dims) {
+			if (m_nerf.training.dataset.n_extra_learnable_dims == 0) {
+				m_nerf.training.dataset.n_extra_learnable_dims = 16;
+				reset_network();
+			}
 		}
 	}
 

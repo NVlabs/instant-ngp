@@ -2217,13 +2217,13 @@ void Testbed::NerfTracer::enlarge(size_t n_elements, uint32_t padded_output_widt
 	m_alive_counter = std::get<12>(scratch);
 }
 
-void Testbed::Nerf::Training::reset_extra_dims(default_rng_t &rng) {
+void Testbed::Nerf::Training::reset_extra_dims(default_rng_t& rng) {
 	uint32_t n_extra_dims = dataset.n_extra_dims();
 	std::vector<float> extra_dims_cpu(n_extra_dims * (dataset.n_images + 1)); // n_images + 1 since we use an extra 'slot' for the inference latent code
 	float *dst = extra_dims_cpu.data();
 	ArrayXf zero(n_extra_dims);
 	zero.setZero();
-	extra_dims_opt.resize(dataset.n_images, AdamOptimizer<ArrayXf>(1e-4f, zero));
+	extra_dims_opt = std::vector<AdamOptimizer<ArrayXf>>(dataset.n_images, AdamOptimizer<ArrayXf>(1e-4f, zero));
 	for (uint32_t i = 0; i < dataset.n_images; ++i) {
 		Eigen::Vector3f light_dir = warp_direction(dataset.metadata[i].light_dir.normalized());
 		extra_dims_opt[i].reset_state(zero);
