@@ -18,8 +18,10 @@
 
 #include <tiny-cuda-nn/common.h>
 
+#ifdef NGP_GUI
 #include <imgui/imgui.h>
 #include <imguizmo/ImGuizmo.h>
+#endif
 
 #include <chrono>
 #include <vector>
