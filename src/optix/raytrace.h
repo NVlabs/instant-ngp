@@ -24,8 +24,8 @@ NGP_NAMESPACE_BEGIN
 
 struct Raytrace {
 	struct Params {
-		Eigen::Vector3f* ray_origins;
-		Eigen::Vector3f* ray_directions;
+		vec3* ray_origins;
+		vec3* ray_directions;
 		const Triangle* triangles;
 		OptixTraversableHandle handle;
 	};

@@ -26,7 +26,6 @@
 
 #include <fstream>
 
-using namespace Eigen;
 using namespace tcnn;
 
 NGP_NAMESPACE_BEGIN
@@ -39,28 +38,28 @@ Testbed::NetworkDims Testbed::network_dims_image() const {
 	return dims;
 }
 
-__global__ void halton23_kernel(uint32_t n_elements, size_t base_idx, Vector2f* __restrict__ output) {
+__global__ void halton23_kernel(uint32_t n_elements, size_t base_idx, vec2* __restrict__ output) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i >= n_elements) return;
 
 	output[i] = {halton<2>(base_idx+i), halton<3>(base_idx+i)};
 }
 
-__global__ void sobol2_kernel(uint32_t n_elements, size_t base_idx, uint32_t seed, Vector2f* __restrict__ output) {
+__global__ void sobol2_kernel(uint32_t n_elements, size_t base_idx, uint32_t seed, vec2* __restrict__ output) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i >= n_elements) return;
 
 	output[i] = ld_random_val_2d(base_idx + i, seed);
 }
 
-__global__ void zip_kernel(uint32_t n_elements, const float* __restrict__ in, Vector2f* __restrict__ output) {
+__global__ void zip_kernel(uint32_t n_elements, const float* __restrict__ in, vec2* __restrict__ output) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i >= n_elements) return;
 
 	output[i] = {in[i], in[i+n_elements]};
 }
 
-__global__ void stratify2_kernel(uint32_t n_elements, uint32_t log2_batch_size, Vector2f* __restrict__ inout) {
+__global__ void stratify2_kernel(uint32_t n_elements, uint32_t log2_batch_size, vec2* __restrict__ inout) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i >= n_elements) return;
 
@@ -72,20 +71,20 @@ __global__ void stratify2_kernel(uint32_t n_elements, uint32_t log2_batch_size, 
 	uint32_t x = in_batch_index & ((1 << log2Size)-1);
 	uint32_t y = in_batch_index >> log2Size;
 
-	Vector2f val = inout[i];
-	inout[i] = {val.x() / size + ((float)x/size), val.y() / size + ((float)y/size)};
+	vec2 val = inout[i];
+	inout[i] = {val.x / size + ((float)x/size), val.y / size + ((float)y/size)};
 }
 
 __global__ void init_image_coords(
 	uint32_t sample_index,
-	Vector2f* __restrict__ positions,
+	vec2* __restrict__ positions,
 	float* __restrict__ depth_buffer,
-	Vector2i resolution,
+	ivec2 resolution,
 	float aspect,
-	Vector2f focal_length,
-	Matrix<float, 3, 4> camera_matrix,
-	Vector2f screen_center,
-	Vector3f parallax_shift,
+	vec2 focal_length,
+	mat4x3 camera_matrix,
+	vec2 screen_center,
+	vec3 parallax_shift,
 	bool snap_to_pixel_centers,
 	float plane_z,
 	float aperture_size,
@@ -95,7 +94,7 @@ __global__ void init_image_coords(
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
 
-	if (x >= resolution.x() || y >= resolution.y()) {
+	if (x >= resolution.x || y >= resolution.y) {
 		return;
 	}
 
@@ -120,92 +119,92 @@ __global__ void init_image_coords(
 	);
 
 	// Intersect the Z=0.5 plane
-	float t = ray.is_valid() ? (0.5f - ray.o.z()) / ray.d.z() : -1.0f;
+	float t = ray.is_valid() ? (0.5f - ray.o.z) / ray.d.z : -1.0f;
 
-	uint32_t idx = x + resolution.x() * y;
+	uint32_t idx = x + resolution.x * y;
 	if (t <= 0.0f) {
 		depth_buffer[idx] = MAX_DEPTH();
-		positions[idx] = -Vector2f::Ones();
+		positions[idx] = -vec2(1.0f);
 		return;
 	}
 
-	Vector2f uv = ray(t).head<2>();
+	vec2 uv = ray(t).xy;
 
 	// Flip from world coordinates where Y goes up to image coordinates where Y goes down.
 	// Also, multiply the x-axis by the image's aspect ratio to make it have the right proportions.
-	uv = (uv - Vector2f::Constant(0.5f)).cwiseProduct(Vector2f{aspect, -1.0f}) + Vector2f::Constant(0.5f);
+	uv = (uv - vec2(0.5f)) * vec2(aspect, -1.0f) + vec2(0.5f);
 
 	depth_buffer[idx] = t;
 	positions[idx] = uv;
 }
 
-__global__ void shade_kernel_image(Vector2i resolution, const Vector2f* __restrict__ positions, const Array3f* __restrict__ colors, Array4f* __restrict__ frame_buffer, bool linear_colors) {
+__global__ void shade_kernel_image(ivec2 resolution, const vec2* __restrict__ positions, const vec3* __restrict__ colors, vec4* __restrict__ frame_buffer, bool linear_colors) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
 
-	if (x >= resolution.x() || y >= resolution.y()) {
+	if (x >= resolution.x || y >= resolution.y) {
 		return;
 	}
 
-	uint32_t idx = x + resolution.x() * y;
+	uint32_t idx = x + resolution.x * y;
 
-	const Vector2f uv = positions[idx];
-	if (uv.x() < 0.0f || uv.x() > 1.0f || uv.y() < 0.0f || uv.y() > 1.0f) {
-		frame_buffer[idx] = Array4f::Zero();
+	const vec2 uv = positions[idx];
+	if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f) {
+		frame_buffer[idx] = vec4(0.0f);
 		return;
 	}
 
-	Array3f color = colors[idx];
+	vec3 color = colors[idx];
 
 	if (!linear_colors) {
 		color = srgb_to_linear(color);
 	}
 
-	frame_buffer[idx] = {color.x(), color.y(), color.z(), 1.0f};
+	frame_buffer[idx] = {color.x, color.y, color.z, 1.0f};
 }
 
 template <typename T, uint32_t stride>
-__global__ void eval_image_kernel_and_snap(uint32_t n_elements, const T* __restrict__ texture, Vector2f* __restrict__ positions, Vector2i resolution, float* __restrict__ result, bool snap_to_pixel_centers, bool linear_colors) {
+__global__ void eval_image_kernel_and_snap(uint32_t n_elements, const T* __restrict__ texture, vec2* __restrict__ positions, ivec2 resolution, float* __restrict__ result, bool snap_to_pixel_centers, bool linear_colors) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i >= n_elements) return;
 
 	uint32_t output_idx = i * stride;
 
-	Vector2f pos = positions[i];
+	vec2 pos = positions[i];
 
 	auto read_val = [&](int x, int y) {
-		auto val = ((tcnn::vector_t<T, 4>*)texture)[y * resolution.x() + x];
-		Array4f result{val[0], val[1], val[2], val[3]};
+		auto val = ((tcnn::vector_t<T, 4>*)texture)[y * resolution.x + x];
+		vec4 result{val[0], val[1], val[2], val[3]};
 		if (!linear_colors) {
-			result.head<3>() = linear_to_srgb(result.head<3>());
+			result.rgb = linear_to_srgb(result.rgb);
 		}
 		return result;
 	};
 
-	Array4f val;
+	vec4 val;
 	if (snap_to_pixel_centers) {
-		Vector2i pos_int = pos.cwiseProduct(resolution.cast<float>()).array().floor().matrix().cast<int>();
-		positions[i] = (pos_int.cast<float>() + Vector2f::Constant(0.5f)).cwiseQuotient(resolution.cast<float>());
-		pos_int = pos_int.cwiseMax(0).cwiseMin(resolution - Vector2i::Ones());
-		val = read_val(pos_int.x(), pos_int.y());
+		ivec2 pos_int = floor(pos * vec2(resolution));
+		positions[i] = (vec2(pos_int) + vec2(0.5f)) / vec2(resolution);
+		pos_int = clamp(pos_int, ivec2(0), resolution - ivec2(1));
+		val = read_val(pos_int.x, pos_int.y);
 	} else {
-		pos = (pos.cwiseProduct(resolution.cast<float>()) - Vector2f::Constant(0.5f)).cwiseMax(0.0f).cwiseMin(resolution.cast<float>() - Vector2f::Constant(1.0f + 1e-4f));
+		pos = clamp(pos * vec2(resolution) - vec2(0.5f), vec2(0.0f), vec2(resolution) - vec2(1.0f + 1e-4f));
 
-		const Vector2i pos_int = pos.cast<int>();
-		const Vector2f weight = pos - pos_int.cast<float>();
+		const ivec2 pos_int = pos;
+		const vec2 weight = pos - vec2(pos_int);
 
-		const Vector2i idx = pos_int.cwiseMin(resolution - Vector2i::Constant(2)).cwiseMax(0);
+		const ivec2 idx = clamp(pos_int, ivec2(0), resolution - ivec2(2));
 
 		val =
-			(1 - weight.x()) * (1 - weight.y()) * read_val(idx.x(), idx.y()) +
-			(weight.x()) * (1 - weight.y()) * read_val(idx.x()+1, idx.y()) +
-			(1 - weight.x()) * (weight.y()) * read_val(idx.x(), idx.y()+1) +
-			(weight.x()) * (weight.y()) * read_val(idx.x()+1, idx.y()+1);
+			(1 - weight.x) * (1 - weight.y) * read_val(idx.x, idx.y) +
+			(weight.x) * (1 - weight.y) * read_val(idx.x+1, idx.y) +
+			(1 - weight.x) * (weight.y) * read_val(idx.x, idx.y+1) +
+			(weight.x) * (weight.y) * read_val(idx.x+1, idx.y+1);
 	}
 
-	result[output_idx + 0] = val.x();
-	result[output_idx + 1] = val.y();
-	result[output_idx + 2] = val.z();
+	result[output_idx + 0] = val.x;
+	result[output_idx + 1] = val.y;
+	result[output_idx + 2] = val.z;
 
 	for (uint32_t i = 3; i < stride; ++i) {
 		result[output_idx + i] = 1;
@@ -288,26 +287,26 @@ void Testbed::train_image(size_t target_batch_size, bool get_loss_scalar, cudaSt
 void Testbed::render_image(
 	cudaStream_t stream,
 	const CudaRenderBufferView& render_buffer,
-	const Vector2f& focal_length,
-	const Matrix<float, 3, 4>& camera_matrix,
-	const Vector2f& screen_center,
+	const vec2& focal_length,
+	const mat4x3& camera_matrix,
+	const vec2& screen_center,
 	const Foveation& foveation,
 	int visualized_dimension
 ) {
 	auto res = render_buffer.resolution;
 
 	// Make sure we have enough memory reserved to render at the requested resolution
-	size_t n_pixels = (size_t)res.x() * res.y();
+	size_t n_pixels = (size_t)res.x * res.y;
 	uint32_t n_elements = next_multiple((uint32_t)n_pixels, tcnn::batch_size_granularity);
 	m_image.render_coords.enlarge(n_elements);
 	m_image.render_out.enlarge(n_elements);
 
 	float plane_z = m_slice_plane_z + m_scale;
-	float aspect = (float)m_image.resolution.y() / (float)m_image.resolution.x();
+	float aspect = (float)m_image.resolution.y / (float)m_image.resolution.x;
 
 	// Generate 2D coords at which to query the network
 	const dim3 threads = { 16, 8, 1 };
-	const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
+	const dim3 blocks = { div_round_up((uint32_t)res.x, threads.x), div_round_up((uint32_t)res.y, threads.y), 1 };
 	init_image_coords<<<blocks, threads, 0, stream>>>(
 		render_buffer.spp,
 		m_image.render_coords.data(),
@@ -379,12 +378,12 @@ void Testbed::load_image(const fs::path& data_path) {
 		load_stbi_image(data_path);
 	}
 
-	m_aabb = m_render_aabb = BoundingBox{Vector3f::Zero(), Vector3f::Ones()};
-	m_render_aabb_to_local = Matrix3f::Identity();
+	m_aabb = m_render_aabb = BoundingBox{vec3(0.0f), vec3(1.0f)};
+	m_render_aabb_to_local = mat3(1.0f);
 
 	tlog::success()
 		<< "Loaded a " << (m_image.type == EDataType::Half ? "half" : "full") << "-precision image with "
-		<< m_image.resolution.x() << "x" << m_image.resolution.y() << " pixels.";
+		<< m_image.resolution.x << "x" << m_image.resolution.y << " pixels.";
 }
 
 void Testbed::load_exr_image(const fs::path& data_path) {
@@ -395,7 +394,7 @@ void Testbed::load_exr_image(const fs::path& data_path) {
 	tlog::info() << "Loading EXR image from " << data_path;
 
 	// First step: load an image that we'd like to learn
-	GPUMemory<float> image = load_exr_gpu(data_path, &m_image.resolution.x(), &m_image.resolution.y());
+	GPUMemory<float> image = load_exr_gpu(data_path, &m_image.resolution.x, &m_image.resolution.y);
 	m_image.data.resize(image.size() * sizeof(float));
 	CUDA_CHECK_THROW(cudaMemcpy(m_image.data.data(), image.data(), image.size() * sizeof(float), cudaMemcpyDeviceToDevice));
 
@@ -410,7 +409,7 @@ void Testbed::load_stbi_image(const fs::path& data_path) {
 	tlog::info() << "Loading STBI image from " << data_path;
 
 	// First step: load an image that we'd like to learn
-	GPUMemory<float> image = load_stbi_gpu(data_path, &m_image.resolution.x(), &m_image.resolution.y());
+	GPUMemory<float> image = load_stbi_gpu(data_path, &m_image.resolution.x, &m_image.resolution.y);
 	m_image.data.resize(image.size() * sizeof(float));
 	CUDA_CHECK_THROW(cudaMemcpy(m_image.data.data(), image.data(), image.size() * sizeof(float), cudaMemcpyDeviceToDevice));
 
@@ -426,10 +425,10 @@ void Testbed::load_binary_image(const fs::path& data_path) {
 	tlog::info() << "Loading binary image from " << data_path;
 
 	std::ifstream f{native_string(data_path), std::ios::in | std::ios::binary};
-	f.read(reinterpret_cast<char*>(&m_image.resolution.y()), sizeof(int));
-	f.read(reinterpret_cast<char*>(&m_image.resolution.x()), sizeof(int));
+	f.read(reinterpret_cast<char*>(&m_image.resolution.y), sizeof(int));
+	f.read(reinterpret_cast<char*>(&m_image.resolution.x), sizeof(int));
 
-	size_t n_pixels = (size_t)m_image.resolution.x() * m_image.resolution.y();
+	size_t n_pixels = (size_t)m_image.resolution.x * m_image.resolution.y;
 	m_image.data.resize(n_pixels * 4 * sizeof(__half));
 
 	std::vector<__half> image(n_pixels * 4);
@@ -438,29 +437,29 @@ void Testbed::load_binary_image(const fs::path& data_path) {
 	m_image.type = EDataType::Half;
 }
 
-__global__ void image_coords_from_idx(const uint32_t n_elements, uint32_t offset, Vector2f* __restrict__ pos, Vector2i resolution) {
+__global__ void image_coords_from_idx(const uint32_t n_elements, uint32_t offset, vec2* __restrict__ pos, ivec2 resolution) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i >= n_elements) return;
 
 	const uint32_t idx = i + offset;
 
-	int x = idx % resolution.x();
-	int y = idx / resolution.x();
+	int x = idx % resolution.x;
+	int y = idx / resolution.x;
 
-	pos[i] = (Vector2i{x, y}.cwiseMax(0).cwiseMin(resolution - Vector2i::Ones()).cast<float>() + Vector2f::Constant(0.5f)).cwiseQuotient(resolution.cast<float>());
+	pos[i] = (vec2(clamp(ivec2{x, y}, ivec2(0), resolution - ivec2(1))) + vec2(0.5f)) / vec2(resolution);
 }
 
-__global__ void image_mse_kernel(const uint32_t n_elements, const Array3f* __restrict__ target, const Array3f* __restrict__ prediction, float* __restrict__ result, bool quantize_to_byte) {
+__global__ void image_mse_kernel(const uint32_t n_elements, const vec3* __restrict__ target, const vec3* __restrict__ prediction, float* __restrict__ result, bool quantize_to_byte) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i >= n_elements) return;
 
-	Array3f pred = prediction[i];
+	vec3 pred = prediction[i];
 	if (quantize_to_byte) {
-		pred = (pred * 255.0f + Array3f::Constant(0.5f)).cast<int>().cwiseMax(0).cwiseMin(255).cast<float>() / 255.0f;
+		pred = vec3(clamp(ivec3(pred * 255.0f + vec3(0.5f)), ivec3(0), ivec3(255))) / 255.0f;
 	}
 
-	const Array3f diff = target[i] - pred;
-	result[i] = (diff * diff).mean();
+	const vec3 diff = target[i] - pred;
+	result[i] = dot(diff, diff) / 3.0f;
 }
 
 float Testbed::compute_image_mse(bool quantize_to_byte) {
@@ -468,13 +467,13 @@ float Testbed::compute_image_mse(bool quantize_to_byte) {
 	const uint32_t n_input_dims = 2;
 
 	// Auxiliary matrices for training
-	const uint32_t n_elements = m_image.resolution.prod();
+	const uint32_t n_elements = compMul(m_image.resolution);
 	const uint32_t max_batch_size = 1u<<20;
 
 	GPUMemory<float> se(n_elements);
-	GPUMemory<Vector2f> pos(max_batch_size);
-	GPUMemory<Array3f> targets(max_batch_size);
-	GPUMemory<Array3f> predictions(max_batch_size);
+	GPUMemory<vec2> pos(max_batch_size);
+	GPUMemory<vec3> targets(max_batch_size);
+	GPUMemory<vec3> predictions(max_batch_size);
 	const uint32_t n_batches = div_round_up(n_elements, max_batch_size);
 	for (uint32_t i = 0; i < n_batches; ++i) {
 		uint32_t offset = i * max_batch_size;

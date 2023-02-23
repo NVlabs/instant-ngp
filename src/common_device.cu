@@ -15,25 +15,23 @@
 #include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/tinyexr_wrapper.h>
 
-#include <unsupported/Eigen/MatrixFunctions>
+// #include <unsupported/Eigen/MatrixFunctions>
 
 #include <stb_image/stb_image.h>
 
-using namespace Eigen;
 using namespace tcnn;
 
 NGP_NAMESPACE_BEGIN
 
 
-Matrix<float, 3, 4> log_space_lerp(const Matrix<float, 3, 4>& begin, const Matrix<float, 3, 4>& end, float t) {
-	Matrix4f A = Matrix4f::Identity();
-	A.block<3,4>(0,0) = begin;
-	Matrix4f B = Matrix4f::Identity();
-	B.block<3,4>(0,0) = end;
+mat4x3 camera_lerp(const mat4x3& a, const mat4x3& b, float t) {
+	// mat4 A = a;
+	// mat4 B = b;
+	// mat4 log_space_a_to_b = log(B * inverse(A));
+	// return exp(log_space_a_to_b * t) * A;
 
-	Matrix4f log_space_a_to_b = (B * A.inverse()).log();
-
-	return ((log_space_a_to_b * t).exp() * A).block<3,4>(0,0);
+	mat3 rot = slerp(a, b, t);
+	return {rot[0], rot[1], rot[2], mix(a[3], b[3], t)};
 }
 
 GPUMemory<float> load_exr_gpu(const fs::path& path, int* width, int* height) {

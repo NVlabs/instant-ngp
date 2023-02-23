@@ -29,39 +29,37 @@ struct ImDrawList;
 NGP_NAMESPACE_BEGIN
 
 struct CameraKeyframe {
-	Eigen::Vector4f R;
-	Eigen::Vector3f T;
+	vec4 R;
+	vec3 T;
 	float slice;
 	float scale; // not a scale factor as in scaling the world, but the value of m_scale (setting the focal plane along with slice)
 	float fov;
 	float aperture_size;
 	int glow_mode;
 	float glow_y_cutoff;
-	Eigen::Matrix<float, 3, 4> m() const {
-		Eigen::Matrix<float, 3, 4> rv;
-		rv.col(3) = T;
-		rv.block<3,3>(0,0) = Eigen::Quaternionf(R).normalized().toRotationMatrix();
-		return rv;
+	mat4x3 m() const {
+		auto rot = toMat3(normalize(quat(R)));
+		return mat4x3(rot[0], rot[1], rot[2], T);
 	}
 
-	void from_m(const Eigen::Matrix<float, 3, 4>& rv) {
-		T = rv.col(3);
-		// auto q = Eigen::Quaternionf(rv.block<3,3>(0,0));
-		auto q = Eigen::Quaternionf(rv.block<3,3>(0,0));
-		R = Eigen::Vector4f(q.x(), q.y(), q.z(), q.w());
+	void from_m(const mat4x3& rv) {
+		T = rv[3];
+		quat q = mat3(rv);
+		R = vec4(q.x, q.y, q.z, q.w);
 	}
 
 	CameraKeyframe() = default;
-	CameraKeyframe(const Eigen::Vector4f &r, const Eigen::Vector3f &t, float sl, float sc, float fv, float df, int gm, float gyc) : R(r), T(t), slice(sl), scale(sc), fov(fv), aperture_size(df), glow_mode(gm), glow_y_cutoff(gyc) {}
-	CameraKeyframe(Eigen::Matrix<float, 3, 4> m, float sl, float sc, float fv, float df, int gm, float gyc) : slice(sl), scale(sc), fov(fv), aperture_size(df), glow_mode(gm), glow_y_cutoff(gyc) { T=m.col(3); R=Eigen::Quaternionf(m.block<3,3>(0,0)).coeffs();  }
+	CameraKeyframe(const vec4 &r, const vec3 &t, float sl, float sc, float fv, float df, int gm, float gyc) : R(r), T(t), slice(sl), scale(sc), fov(fv), aperture_size(df), glow_mode(gm), glow_y_cutoff(gyc) {}
+	CameraKeyframe(mat4x3 m, float sl, float sc, float fv, float df, int gm, float gyc) : slice(sl), scale(sc), fov(fv), aperture_size(df), glow_mode(gm), glow_y_cutoff(gyc) { from_m(m); }
 	CameraKeyframe operator*(float f) const { return {R*f, T*f, slice*f, scale*f, fov*f, aperture_size*f, glow_mode, glow_y_cutoff*f}; }
 	CameraKeyframe operator+(const CameraKeyframe &rhs) const {
-		Eigen::Vector4f Rr=rhs.R;
-		if (Rr.dot(R)<0.f) Rr=-Rr;
+		vec4 Rr = rhs.R;
+		if (dot(Rr, R) < 0.0f) Rr = -Rr;
 		return {R+Rr, T+rhs.T, slice+rhs.slice, scale+rhs.scale, fov+rhs.fov, aperture_size+rhs.aperture_size, glow_mode, glow_y_cutoff+rhs.glow_y_cutoff};
 	}
-	bool SamePosAs(const CameraKeyframe &rhs) const {
-		return (T-rhs.T).norm()<0.0001f && fabsf(R.dot(rhs.R))>=0.999f;
+
+	bool same_pos_as(const CameraKeyframe &rhs) const {
+		return distance(T, rhs.T) < 0.0001f && fabsf(dot(R, rhs.R)) >= 0.999f;
 	}
 };
 
@@ -79,7 +77,7 @@ struct CameraPath {
 	bool loop = false;
 
 	struct RenderSettings {
-		Eigen::Vector2i resolution = {1920, 1080};
+		ivec2 resolution = {1920, 1080};
 		int spp = 8;
 		float fps = 60.0f;
 		float duration_seconds = 5.0f;
@@ -106,7 +104,7 @@ struct CameraPath {
 	uint32_t render_frame_idx = 0;
 	std::chrono::time_point<std::chrono::steady_clock> render_start_time;
 
-	Eigen::Matrix<float, 3, 4> render_frame_end_camera;
+	mat4x3 render_frame_end_camera;
 
 	const CameraKeyframe& get_keyframe(int i) {
 		if (loop) {
@@ -127,20 +125,20 @@ struct CameraPath {
 	}
 
 	void save(const fs::path& path);
-	void load(const fs::path& path, const Eigen::Matrix<float, 3, 4> &first_xform);
+	void load(const fs::path& path, const mat4x3 &first_xform);
 
 #ifdef NGP_GUI
 	ImGuizmo::MODE m_gizmo_mode = ImGuizmo::LOCAL;
 	ImGuizmo::OPERATION m_gizmo_op = ImGuizmo::TRANSLATE;
-	int imgui(char path_filename_buf[1024], float frame_milliseconds, Eigen::Matrix<float, 3, 4>& camera, float slice_plane_z, float scale, float fov, float aperture_size, float bounding_radius, const Eigen::Matrix<float, 3, 4>& first_xform, int glow_mode, float glow_y_cutoff);
-	bool imgui_viz(ImDrawList* list, Eigen::Matrix<float, 4, 4>& view2proj, Eigen::Matrix<float, 4, 4>& world2proj, Eigen::Matrix<float, 4, 4>& world2view, Eigen::Vector2f focal, float aspect, float znear, float zfar);
+	int imgui(char path_filename_buf[1024], float frame_milliseconds, mat4x3& camera, float slice_plane_z, float scale, float fov, float aperture_size, float bounding_radius, const mat4x3& first_xform, int glow_mode, float glow_y_cutoff);
+	bool imgui_viz(ImDrawList* list, mat4& view2proj, mat4& world2proj, mat4& world2view, vec2 focal, float aspect, float znear, float zfar);
 #endif
 };
 
 #ifdef NGP_GUI
-void add_debug_line(ImDrawList* list, const Eigen::Matrix<float, 4, 4>&proj, Eigen::Vector3f a, Eigen::Vector3f b, uint32_t col = 0xffffffff, float thickness = 1.0f);
-void visualize_cube(ImDrawList* list, const Eigen::Matrix<float, 4, 4>& world2proj, const Eigen::Vector3f& a, const Eigen::Vector3f& b, const Eigen::Matrix3f& render_aabb_to_local);
-void visualize_nerf_camera(ImDrawList* list, const Eigen::Matrix<float, 4, 4>& world2proj, const Eigen::Matrix<float, 3, 4>& xform, float aspect, uint32_t col = 0x80ffffff, float thickness = 1.0f);
+void add_debug_line(ImDrawList* list, const mat4&proj, vec3 a, vec3 b, uint32_t col = 0xffffffff, float thickness = 1.0f);
+void visualize_cube(ImDrawList* list, const mat4& world2proj, const vec3& a, const vec3& b, const mat3& render_aabb_to_local);
+void visualize_nerf_camera(ImDrawList* list, const mat4& world2proj, const mat4x3& xform, float aspect, uint32_t col = 0x80ffffff, float thickness = 1.0f);
 #endif
 
 NGP_NAMESPACE_END

@@ -21,8 +21,6 @@
 
 #include <tiny-cuda-nn/random.h>
 
-#include <Eigen/Dense>
-
 NGP_NAMESPACE_BEGIN
 
 using default_rng_t = tcnn::default_rng_t;
@@ -40,13 +38,13 @@ inline __host__ __device__ uint32_t random_uint(RNG& rng) {
 }
 
 template <typename RNG>
-inline __host__ __device__ Eigen::Vector2f random_val_2d(RNG& rng) {
+inline __host__ __device__ vec2 random_val_2d(RNG& rng) {
 	return {rng.next_float(), rng.next_float()};
 }
 
-inline __host__ __device__ Eigen::Vector3f cylindrical_to_dir(const Eigen::Vector2f& p) {
-	const float cos_theta = -2.0f * p.x() + 1.0f;
-	const float phi = 2.0f * PI() * (p.y() - 0.5f);
+inline __host__ __device__ vec3 cylindrical_to_dir(const vec2& p) {
+	const float cos_theta = -2.0f * p.x + 1.0f;
+	const float phi = 2.0f * PI() * (p.y - 0.5f);
 
 	const float sin_theta = sqrtf(fmaxf(1.0f - cos_theta * cos_theta, 0.0f));
 	float sin_phi, cos_phi;
@@ -55,26 +53,26 @@ inline __host__ __device__ Eigen::Vector3f cylindrical_to_dir(const Eigen::Vecto
 	return {sin_theta * cos_phi, sin_theta * sin_phi, cos_theta};
 }
 
-inline __host__ __device__ Eigen::Vector2f dir_to_cylindrical(const Eigen::Vector3f& d) {
-	const float cos_theta = fminf(fmaxf(-d.z(), -1.0f), 1.0f);
-	float phi = std::atan2(d.y(), d.x());
+inline __host__ __device__ vec2 dir_to_cylindrical(const vec3& d) {
+	const float cos_theta = fminf(fmaxf(-d.z, -1.0f), 1.0f);
+	float phi = std::atan2(d.y, d.x);
 	return {(cos_theta + 1.0f) / 2.0f, (phi / (2.0f * PI())) + 0.5f};
 }
 
-inline __host__ __device__ Eigen::Vector2f dir_to_spherical(const Eigen::Vector3f& d) {
-	const float cos_theta = fminf(fmaxf(d.z(), -1.0f), 1.0f);
+inline __host__ __device__ vec2 dir_to_spherical(const vec3& d) {
+	const float cos_theta = fminf(fmaxf(d.z, -1.0f), 1.0f);
 	const float theta = acosf(cos_theta);
-	float phi = std::atan2(d.y(), d.x());
+	float phi = std::atan2(d.y, d.x);
 	return {theta, phi};
 }
 
-inline __host__ __device__ Eigen::Vector2f dir_to_spherical_unorm(const Eigen::Vector3f& d) {
-	Eigen::Vector2f spherical = dir_to_spherical(d);
-	return {spherical.x() / PI(), (spherical.y() / (2.0f * PI()) + 0.5f)};
+inline __host__ __device__ vec2 dir_to_spherical_unorm(const vec3& d) {
+	vec2 spherical = dir_to_spherical(d);
+	return {spherical.x / PI(), (spherical.y / (2.0f * PI()) + 0.5f)};
 }
 
 template <typename RNG>
-inline __host__ __device__ Eigen::Vector3f random_dir(RNG& rng) {
+inline __host__ __device__ vec3 random_dir(RNG& rng) {
 	return cylindrical_to_dir(random_val_2d(rng));
 }
 
@@ -83,7 +81,7 @@ inline __host__ __device__ float fractf(float x) {
 }
 
 template <uint32_t N_DIRS>
-__device__ __host__ Eigen::Vector3f fibonacci_dir(uint32_t i, const Eigen::Vector2f& offset) {
+__device__ __host__ vec3 fibonacci_dir(uint32_t i, const vec2& offset) {
 	// Fibonacci lattice with offset
 	float epsilon;
 	if (N_DIRS >= 11000) {
@@ -99,22 +97,22 @@ __device__ __host__ Eigen::Vector3f fibonacci_dir(uint32_t i, const Eigen::Vecto
 	}
 
 	static constexpr float GOLDEN_RATIO = 1.6180339887498948482045868343656f;
-	return cylindrical_to_dir(Eigen::Vector2f{fractf((i+epsilon) / (N_DIRS-1+2*epsilon) + offset.x()), fractf(i / GOLDEN_RATIO + offset.y())});
+	return cylindrical_to_dir(vec2{fractf((i+epsilon) / (N_DIRS-1+2*epsilon) + offset.x), fractf(i / GOLDEN_RATIO + offset.y)});
 }
 
 template <typename RNG>
-inline __host__ __device__ Eigen::Vector2f random_uniform_disc(RNG& rng) {
-	Eigen::Vector2f sample = random_val_2d(rng);
-	float r = sqrtf(sample.x());
+inline __host__ __device__ vec2 random_uniform_disc(RNG& rng) {
+	vec2 sample = random_val_2d(rng);
+	float r = sqrtf(sample.x);
 	float sin_phi, cos_phi;
-	sincosf(2.0f * PI() * sample.y(), &sin_phi, &cos_phi);
-	return Eigen::Vector2f{ r * sin_phi, r * cos_phi };
+	sincosf(2.0f * PI() * sample.y, &sin_phi, &cos_phi);
+	return vec2{ r * sin_phi, r * cos_phi };
 }
 
-inline __host__ __device__ Eigen::Vector2f square2disk_shirley(const Eigen::Vector2f& square) {
+inline __host__ __device__ vec2 square2disk_shirley(const vec2& square) {
 	float phi, r;
-	float a = square.x();
-	float b = square.y();
+	float a = square.x;
+	float b = square.y;
 	if (a*a > b*b) { // use squares instead of absolute values
 		r = a;
 		phi = (PI()/4.0f) * (b/a);
@@ -129,33 +127,33 @@ inline __host__ __device__ Eigen::Vector2f square2disk_shirley(const Eigen::Vect
 	return {r*cos_phi, r*sin_phi};
 }
 
-inline __host__ __device__ __device__ Eigen::Vector3f cosine_hemisphere(const Eigen::Vector2f& u) {
+inline __host__ __device__ __device__ vec3 cosine_hemisphere(const vec2& u) {
 	// Uniformly sample disk
-	const float r   = sqrtf(u.x());
-	const float phi = 2.0f * PI() * u.y();
+	const float r   = sqrtf(u.x);
+	const float phi = 2.0f * PI() * u.y;
 
-	Eigen::Vector3f p;
-	p.x() = r * cosf(phi);
-	p.y() = r * sinf(phi);
+	vec3 p;
+	p.x = r * cosf(phi);
+	p.y = r * sinf(phi);
 
 	// Project up to hemisphere
-	p.z() = sqrtf(fmaxf(0.0f, 1.0f - p.x()*p.x() - p.y()*p.y()));
+	p.z = sqrtf(fmaxf(0.0f, 1.0f - p.x*p.x - p.y*p.y));
 
 	return p;
 }
 
 template <typename RNG>
-inline __host__ __device__ Eigen::Vector3f random_dir_cosine(RNG& rng) {
+inline __host__ __device__ vec3 random_dir_cosine(RNG& rng) {
 	return cosine_hemisphere(random_val_2d(rng));
 }
 
 template <typename RNG>
-inline __host__ __device__ Eigen::Vector3f random_val_3d(RNG& rng) {
+inline __host__ __device__ vec3 random_val_3d(RNG& rng) {
 	return {rng.next_float(), rng.next_float(), rng.next_float()};
 }
 
 template <typename RNG>
-inline __host__ __device__ Eigen::Vector4f random_val_4d(RNG& rng) {
+inline __host__ __device__ vec4 random_val_4d(RNG& rng) {
 	return {rng.next_float(), rng.next_float(), rng.next_float(), rng.next_float()};
 }
 
@@ -220,11 +218,11 @@ inline __host__ __device__ uint32_t sobol(uint32_t index, uint32_t dim) {
 	return X;
 }
 
-inline __host__ __device__ Vector2i32 sobol2d(uint32_t index) {
+inline __host__ __device__ uvec2 sobol2d(uint32_t index) {
 	return {sobol(index, 0), sobol(index, 1)};
 }
 
-inline __host__ __device__ Vector4i32 sobol4d(uint32_t index) {
+inline __host__ __device__ uvec4 sobol4d(uint32_t index) {
 	return {sobol(index, 0), sobol(index, 1), sobol(index, 2), sobol(index, 3)};
 }
 
@@ -256,7 +254,7 @@ inline __host__ __device__ uint32_t nested_uniform_scramble_base2(uint32_t x, ui
 	return x;
 }
 
-inline __host__ __device__ Vector4i32 shuffled_scrambled_sobol4d(uint32_t index, uint32_t seed) {
+inline __host__ __device__ uvec4 shuffled_scrambled_sobol4d(uint32_t index, uint32_t seed) {
 	index = nested_uniform_scramble_base2(index, seed);
 	auto X = sobol4d(index);
 	for (uint32_t i = 0; i < 4; i++) {
@@ -265,7 +263,7 @@ inline __host__ __device__ Vector4i32 shuffled_scrambled_sobol4d(uint32_t index,
 	return X;
 }
 
-inline __host__ __device__ Vector2i32 shuffled_scrambled_sobol2d(uint32_t index, uint32_t seed) {
+inline __host__ __device__ uvec2 shuffled_scrambled_sobol2d(uint32_t index, uint32_t seed) {
 	index = nested_uniform_scramble_base2(index, seed);
 	auto X = sobol2d(index);
 	for (uint32_t i = 0; i < 2; ++i) {
@@ -274,16 +272,16 @@ inline __host__ __device__ Vector2i32 shuffled_scrambled_sobol2d(uint32_t index,
 	return X;
 }
 
-inline __host__ __device__ Eigen::Vector4f ld_random_val_4d(uint32_t index, uint32_t seed) {
+inline __host__ __device__ vec4 ld_random_val_4d(uint32_t index, uint32_t seed) {
 	constexpr float S = float(1.0/(1ull<<32));
-	Vector4i32 x = shuffled_scrambled_sobol4d(index, seed);
-	return {(float)x.x() * S, (float)x.y() * S, (float)x.z() * S, (float)x.w() * S};
+	uvec4 x = shuffled_scrambled_sobol4d(index, seed);
+	return {(float)x.x * S, (float)x.y * S, (float)x.z * S, (float)x.w * S};
 }
 
-inline __host__ __device__ Eigen::Vector2f ld_random_val_2d(uint32_t index, uint32_t seed) {
+inline __host__ __device__ vec2 ld_random_val_2d(uint32_t index, uint32_t seed) {
 	constexpr float S = float(1.0/(1ull<<32));
-	Vector2i32 x = shuffled_scrambled_sobol2d(index, seed);
-	return {(float)x.x() * S, (float)x.y() * S};
+	uvec2 x = shuffled_scrambled_sobol2d(index, seed);
+	return {(float)x.x * S, (float)x.y * S};
 }
 
 inline __host__ __device__ float ld_random_val(uint32_t index, uint32_t seed, uint32_t dim = 0) {
@@ -306,23 +304,23 @@ __host__ __device__ float halton(size_t idx) {
 	return result;
 }
 
-inline __host__ __device__ Eigen::Vector2f halton23(size_t idx) {
+inline __host__ __device__ vec2 halton23(size_t idx) {
 	return {halton<2>(idx), halton<3>(idx)};
 }
 
 // Halton
-// inline __host__ __device__ Eigen::Vector2f ld_random_pixel_offset(const uint32_t spp) {
-// 	Eigen::Vector2f offset = Eigen::Vector2f::Constant(0.5f) - halton23(0) + halton23(spp);
-// 	offset.x() = fractf(offset.x());
-// 	offset.y() = fractf(offset.y());
+// inline __host__ __device__ vec2 ld_random_pixel_offset(const uint32_t spp) {
+// 	vec2 offset = vec2(0.5f) - halton23(0) + halton23(spp);
+// 	offset.x = fractf(offset.x);
+// 	offset.y = fractf(offset.y);
 // 	return offset;
 // }
 
 // Scrambled Sobol
-inline __host__ __device__ Eigen::Vector2f ld_random_pixel_offset(const uint32_t spp) {
-	Eigen::Vector2f offset = Eigen::Vector2f::Constant(0.5f) - ld_random_val_2d(0, 0xdeadbeef) + ld_random_val_2d(spp, 0xdeadbeef);
-	offset.x() = fractf(offset.x());
-	offset.y() = fractf(offset.y());
+inline __host__ __device__ vec2 ld_random_pixel_offset(const uint32_t spp) {
+	vec2 offset = vec2(0.5f) - ld_random_val_2d(0, 0xdeadbeef) + ld_random_val_2d(spp, 0xdeadbeef);
+	offset.x = fractf(offset.x);
+	offset.y = fractf(offset.y);
 	return offset;
 }
 

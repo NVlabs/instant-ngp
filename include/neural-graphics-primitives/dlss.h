@@ -16,8 +16,6 @@
 
 #include <neural-graphics-primitives/common.h>
 
-#include <Eigen/Dense>
-
 #include <memory>
 
 NGP_NAMESPACE_BEGIN
@@ -27,15 +25,15 @@ public:
 	virtual ~IDlss() {}
 
 	virtual void update_feature(
-		const Eigen::Vector2i& in_resolution,
+		const ivec2& in_resolution,
 		bool is_hdr,
 		bool sharpen
 	) = 0;
 	virtual void run(
-		const Eigen::Vector2i& in_resolution,
+		const ivec2& in_resolution,
 		bool is_hdr,
 		float sharpening,
-		const Eigen::Vector2f& jitter_offset,
+		const vec2& jitter_offset,
 		bool shall_reset
 	) = 0;
 
@@ -45,9 +43,9 @@ public:
 	virtual cudaSurfaceObject_t exposure() = 0;
 	virtual cudaSurfaceObject_t output() = 0;
 
-	virtual Eigen::Vector2i clamp_resolution(const Eigen::Vector2i& resolution) const = 0;
-	virtual Eigen::Vector2i out_resolution() const = 0;
-	virtual Eigen::Vector2i max_out_resolution() const = 0;
+	virtual ivec2 clamp_resolution(const ivec2& resolution) const = 0;
+	virtual ivec2 out_resolution() const = 0;
+	virtual ivec2 max_out_resolution() const = 0;
 
 	virtual bool is_hdr() const = 0;
 	virtual bool sharpen() const = 0;
@@ -59,7 +57,7 @@ public:
 	virtual ~IDlssProvider() {}
 
 	virtual size_t allocated_bytes() const = 0;
-	virtual std::unique_ptr<IDlss> init_dlss(const Eigen::Vector2i& out_resolution) = 0;
+	virtual std::unique_ptr<IDlss> init_dlss(const ivec2& out_resolution) = 0;
 };
 
 #ifdef NGP_VULKAN

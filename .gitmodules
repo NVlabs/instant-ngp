@@ -1,9 +1,6 @@
 [submodule "dependencies/pybind11"]
 	path = dependencies/pybind11
 	url = https://github.com/Tom94/pybind11
-[submodule "dependencies/eigen"]
-	path = dependencies/eigen
-	url = https://github.com/Tom94/eigen
 [submodule "dependencies/glfw"]
 	path = dependencies/glfw
 	url = https://github.com/Tom94/glfw
@@ -31,3 +28,6 @@
 [submodule "dependencies/OpenXR-SDK"]
 	path = dependencies/OpenXR-SDK
 	url = https://github.com/KhronosGroup/OpenXR-SDK.git
+[submodule "dependencies/glm"]
+	path = dependencies/glm
+	url = https://github.com/g-truc/glm

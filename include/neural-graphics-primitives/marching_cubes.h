@@ -20,48 +20,48 @@
 
 NGP_NAMESPACE_BEGIN
 
-Eigen::Vector3i get_marching_cubes_res(uint32_t res_1d, const BoundingBox& render_aabb);
+ivec3 get_marching_cubes_res(uint32_t res_1d, const BoundingBox& render_aabb);
 
-void marching_cubes_gpu(cudaStream_t stream, BoundingBox render_aabb, Eigen::Matrix3f render_aabb_to_local, Eigen::Vector3i res_3d, float thresh, const tcnn::GPUMemory<float>& density, tcnn::GPUMemory<Eigen::Vector3f>& vert_out, tcnn::GPUMemory<uint32_t>& indices_out);
+void marching_cubes_gpu(cudaStream_t stream, BoundingBox render_aabb, mat3 render_aabb_to_local, ivec3 res_3d, float thresh, const tcnn::GPUMemory<float>& density, tcnn::GPUMemory<vec3>& vert_out, tcnn::GPUMemory<uint32_t>& indices_out);
 
 // computes the average of the 1ring of all verts, as homogenous coordinates
-void compute_mesh_1ring(const tcnn::GPUMemory<Eigen::Vector3f>& verts, const tcnn::GPUMemory<uint32_t>& indices, tcnn::GPUMemory<Eigen::Vector4f>& output_pos, tcnn::GPUMemory<Eigen::Vector3f>& output_normals);
+void compute_mesh_1ring(const tcnn::GPUMemory<vec3>& verts, const tcnn::GPUMemory<uint32_t>& indices, tcnn::GPUMemory<vec4>& output_pos, tcnn::GPUMemory<vec3>& output_normals);
 
 void compute_mesh_opt_gradients(
 	float thresh,
-	const tcnn::GPUMemory<Eigen::Vector3f>& verts,
-	const tcnn::GPUMemory<Eigen::Vector3f>& vert_normals,
-	const tcnn::GPUMemory<Eigen::Vector4f>& verts_smoothed,
+	const tcnn::GPUMemory<vec3>& verts,
+	const tcnn::GPUMemory<vec3>& vert_normals,
+	const tcnn::GPUMemory<vec4>& verts_smoothed,
 	const tcnn::network_precision_t* densities,
 	uint32_t input_gradient_width,
 	const float* input_gradients,
-	tcnn::GPUMemory<Eigen::Vector3f>& verts_gradient_out,
+	tcnn::GPUMemory<vec3>& verts_gradient_out,
 	float k_smooth_amount,
 	float k_density_amount,
 	float k_inflate_amount
 );
 
 void save_mesh(
-	tcnn::GPUMemory<Eigen::Vector3f>& verts,
-	tcnn::GPUMemory<Eigen::Vector3f>& normals,
-	tcnn::GPUMemory<Eigen::Vector3f>& colors,
+	tcnn::GPUMemory<vec3>& verts,
+	tcnn::GPUMemory<vec3>& normals,
+	tcnn::GPUMemory<vec3>& colors,
 	tcnn::GPUMemory<uint32_t>& indices,
 	const fs::path& path,
 	bool unwrap_it,
 	float nerf_scale,
-	Eigen::Vector3f nerf_offset
+	vec3 nerf_offset
 );
 
 #ifdef NGP_GUI
 void draw_mesh_gl(
-	const tcnn::GPUMemory<Eigen::Vector3f>& verts,
-	const tcnn::GPUMemory<Eigen::Vector3f>& normals,
-	const tcnn::GPUMemory<Eigen::Vector3f>& cols,
+	const tcnn::GPUMemory<vec3>& verts,
+	const tcnn::GPUMemory<vec3>& normals,
+	const tcnn::GPUMemory<vec3>& cols,
 	const tcnn::GPUMemory<uint32_t>& indices,
-	const Eigen::Vector2i& resolution,
-	const Eigen::Vector2f& focal_length,
-	const Eigen::Matrix<float, 3, 4>& camera_matrix,
-	const Eigen::Vector2f& screen_center,
+	const ivec2& resolution,
+	const vec2& focal_length,
+	const mat4x3& camera_matrix,
+	const vec2& screen_center,
 	int mesh_render_mode
 );
 
@@ -70,10 +70,10 @@ uint32_t compile_shader(bool pixel, const char* code);
 bool check_shader(uint32_t handle, const char* desc, bool program);
 #endif
 
-void save_density_grid_to_png(const tcnn::GPUMemory<float>& density, const fs::path& path, Eigen::Vector3i res3d, float thresh, bool swap_y_z = true, float density_range = 4.f);
+void save_density_grid_to_png(const tcnn::GPUMemory<float>& density, const fs::path& path, ivec3 res3d, float thresh, bool swap_y_z = true, float density_range = 4.f);
 
-void save_rgba_grid_to_png_sequence(const tcnn::GPUMemory<Eigen::Array4f>& rgba, const fs::path& path, Eigen::Vector3i res3d, bool swap_y_z = true);
+void save_rgba_grid_to_png_sequence(const tcnn::GPUMemory<vec4>& rgba, const fs::path& path, ivec3 res3d, bool swap_y_z = true);
 
-void save_rgba_grid_to_raw_file(const tcnn::GPUMemory<Eigen::Array4f>& rgba, const fs::path& path, Eigen::Vector3i res3d, bool swap_y_z, int cascade);
+void save_rgba_grid_to_raw_file(const tcnn::GPUMemory<vec4>& rgba, const fs::path& path, ivec3 res3d, bool swap_y_z, int cascade);
 
 NGP_NAMESPACE_END

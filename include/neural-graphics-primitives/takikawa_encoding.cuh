@@ -53,13 +53,13 @@ __global__ void kernel_takikawa(
 			data_in(1, i),
 			data_in(2, i),
 		},
-		[&](const TriangleOctreeDualNode& node, uint32_t level, Eigen::Vector3f pos) {
+		[&](const TriangleOctreeDualNode& node, uint32_t level, vec3 pos) {
 			if (level < starting_level) {
 				return;
 			}
 			level -= starting_level;
 
-			Eigen::Vector3f pos_derivative;
+			vec3 pos_derivative;
 
 			if (interpolation_type == tcnn::InterpolationType::Linear) {
 				NGP_PRAGMA_UNROLL
@@ -76,7 +76,7 @@ __global__ void kernel_takikawa(
 
 			if (data_out) {
 				// Tri-linear interpolation
-				tcnn::vector_t<T, N_FEATURES_PER_LEVEL> result = {0};
+				tcnn::vector_t<T, N_FEATURES_PER_LEVEL, true> result = {(T)0.0f};
 
 				NGP_PRAGMA_UNROLL
 				for (uint32_t idx = 0; idx < 8; ++idx) {
@@ -92,13 +92,7 @@ __global__ void kernel_takikawa(
 					}
 
 					int param_idx = node.vertices[idx] * N_FEATURES_PER_LEVEL;
-					auto val = *(tcnn::vector_t<T, N_FEATURES_PER_LEVEL>*)&grid[param_idx];
-
-					// Read params
-					NGP_PRAGMA_UNROLL
-					for (uint32_t feature = 0; feature < N_FEATURES_PER_LEVEL; ++feature) {
-						result[feature] += (T)(weight * (float)val[feature]);
-					}
+					result = fma((T)weight, *(tcnn::vector_t<T, N_FEATURES_PER_LEVEL, true>*)&grid[param_idx], result);
 				}
 
 				NGP_PRAGMA_UNROLL
@@ -113,7 +107,7 @@ __global__ void kernel_takikawa(
 
 				NGP_PRAGMA_UNROLL
 				for (uint32_t grad_dim = 0; grad_dim < 3; ++grad_dim) {
-					tcnn::vector_fullp_t<N_FEATURES_PER_LEVEL> grad = {0};
+					tcnn::vector_fullp_t<N_FEATURES_PER_LEVEL> grad = {0.0f};
 
 					NGP_PRAGMA_UNROLL
 					for (uint32_t idx = 0; idx < 4; ++idx) {
@@ -212,7 +206,7 @@ __global__ void kernel_takikawa_backward(
 			data_in(1, i),
 			data_in(2, i),
 		},
-		[&](const TriangleOctreeDualNode& node, uint32_t level, Eigen::Vector3f pos) {
+		[&](const TriangleOctreeDualNode& node, uint32_t level, vec3 pos) {
 			if (level < starting_level) {
 				return;
 			}

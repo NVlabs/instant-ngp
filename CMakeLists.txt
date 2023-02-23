@@ -54,6 +54,7 @@ if (MSVC)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /D_CRT_SECURE_NO_WARNINGS")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP24")
 else()
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fms-extensions")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
 endif()
 
@@ -75,10 +76,12 @@ if (MSVC)
 else()
 	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-Wno-float-conversion")
 	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-fno-strict-aliasing")
+	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-fms-extensions")
 	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-fPIC")
 endif()
 list(APPEND CUDA_NVCC_FLAGS "--extended-lambda")
 list(APPEND CUDA_NVCC_FLAGS "--expt-relaxed-constexpr")
+list(APPEND CUDA_NVCC_FLAGS "--use_fast_math")
 
 ###############################################################################
 # Dependencies
@@ -199,8 +202,8 @@ endif(NGP_BUILD_WITH_GUI)
 
 list(APPEND NGP_INCLUDE_DIRECTORIES
 	"dependencies"
-	"dependencies/eigen"
 	"dependencies/filesystem"
+	"dependencies/glm"
 	"dependencies/nanovdb"
 	"dependencies/NaturalSort"
 	"dependencies/tinylogger"

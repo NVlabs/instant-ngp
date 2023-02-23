@@ -65,7 +65,6 @@ to `transforms.json`:
 ```
 where `16` is a well-performing default number, but others can be also experimented with.
 
-
 ## Preparing new NeRF datasets
 
 To train on self-captured data, one has to process the data into an existing format supported by __instant-ngp__. We provide scripts to support three approaches:

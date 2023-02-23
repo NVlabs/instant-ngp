@@ -67,7 +67,6 @@
 #undef far
 
 
-using namespace Eigen;
 using namespace std::literals::chrono_literals;
 using namespace tcnn;
 
@@ -382,39 +381,39 @@ void Testbed::set_visualized_dim(int dim) {
 	reset_accumulation();
 }
 
-void Testbed::translate_camera(const Vector3f& rel, const Matrix3f& rot, bool allow_up_down) {
-	Vector3f movement = rot * rel;
+void Testbed::translate_camera(const vec3& rel, const mat3& rot, bool allow_up_down) {
+	vec3 movement = rot * rel;
 	if (!allow_up_down) {
-		movement -= movement.dot(m_up_dir) * m_up_dir;
+		movement -= dot(movement, m_up_dir) * m_up_dir;
 	}
 
-	m_camera.col(3) += movement;
+	m_camera[3] += movement;
 	reset_accumulation(true);
 }
 
-void Testbed::set_nerf_camera_matrix(const Matrix<float, 3, 4>& cam) {
+void Testbed::set_nerf_camera_matrix(const mat4x3& cam) {
 	m_camera = m_nerf.training.dataset.nerf_matrix_to_ngp(cam);
 }
 
-Vector3f Testbed::look_at() const {
+vec3 Testbed::look_at() const {
 	return view_pos() + view_dir() * m_scale;
 }
 
-void Testbed::set_look_at(const Vector3f& pos) {
-	m_camera.col(3) += pos - look_at();
+void Testbed::set_look_at(const vec3& pos) {
+	m_camera[3] += pos - look_at();
 }
 
 void Testbed::set_scale(float scale) {
 	auto prev_look_at = look_at();
-	m_camera.col(3) = (view_pos() - prev_look_at) * (scale / m_scale) + prev_look_at;
+	m_camera[3] = (view_pos() - prev_look_at) * (scale / m_scale) + prev_look_at;
 	m_scale = scale;
 }
 
-void Testbed::set_view_dir(const Vector3f& dir) {
+void Testbed::set_view_dir(const vec3& dir) {
 	auto old_look_at = look_at();
-	m_camera.col(0) = dir.cross(m_up_dir).normalized();
-	m_camera.col(1) = dir.cross(m_camera.col(0)).normalized();
-	m_camera.col(2) = dir.normalized();
+	m_camera[0] = normalize(cross(dir, m_up_dir));
+	m_camera[1] = normalize(cross(dir, m_camera[0]));
+	m_camera[2] = normalize(dir);
 	set_look_at(old_look_at);
 }
 
@@ -446,16 +445,16 @@ void Testbed::next_training_view() {
 
 void Testbed::set_camera_to_training_view(int trainview) {
 	auto old_look_at = look_at();
-	m_camera = m_smoothed_camera = get_xform_given_rolling_shutter(m_nerf.training.transforms[trainview], m_nerf.training.dataset.metadata[trainview].rolling_shutter, Vector2f{0.5f, 0.5f}, 0.0f);
+	m_camera = m_smoothed_camera = get_xform_given_rolling_shutter(m_nerf.training.transforms[trainview], m_nerf.training.dataset.metadata[trainview].rolling_shutter, vec2{0.5f, 0.5f}, 0.0f);
 	m_relative_focal_length = m_nerf.training.dataset.metadata[trainview].focal_length / (float)m_nerf.training.dataset.metadata[trainview].resolution[m_fov_axis];
-	m_scale = std::max((old_look_at - view_pos()).dot(view_dir()), 0.1f);
+	m_scale = std::max(dot(old_look_at - view_pos(), view_dir()), 0.1f);
 	m_nerf.render_with_lens_distortion = true;
 	m_nerf.render_lens = m_nerf.training.dataset.metadata[trainview].lens;
 	if (!supports_dlss(m_nerf.render_lens.mode)) {
 		m_dlss = false;
 	}
 
-	m_screen_center = Vector2f::Constant(1.0f) - m_nerf.training.dataset.metadata[trainview].principal_point;
+	m_screen_center = vec2(1.0f) - m_nerf.training.dataset.metadata[trainview].principal_point;
 	m_nerf.training.view = trainview;
 
 	reset_accumulation(true);
@@ -464,25 +463,27 @@ void Testbed::set_camera_to_training_view(int trainview) {
 void Testbed::reset_camera() {
 	m_fov_axis = 1;
 	m_zoom = 1.0f;
-	m_screen_center = Vector2f::Constant(0.5f);
+	m_screen_center = vec2(0.5f);
 
 	if (m_testbed_mode == ETestbedMode::Image) {
 		// Make image full-screen at the given view distance
-		m_relative_focal_length = Vector2f::Ones();
+		m_relative_focal_length = vec2(1.0f);
 		m_scale = 1.0f;
 	} else {
 		set_fov(50.625f);
 		m_scale = 1.5f;
 	}
 
-	m_camera <<
+	m_camera = transpose(mat3x4(
 		1.0f, 0.0f, 0.0f, 0.5f,
 		0.0f, -1.0f, 0.0f, 0.5f,
-		0.0f, 0.0f, -1.0f, 0.5f;
-	m_camera.col(3) -= m_scale * view_dir();
+		0.0f, 0.0f, -1.0f, 0.5f
+	));
+
+	m_camera[3] -= m_scale * view_dir();
 
 	m_smoothed_camera = m_camera;
-	m_sun_dir = Vector3f::Ones().normalized();
+	m_sun_dir = normalize(vec3(1.0f));
 
 	reset_accumulation();
 }
@@ -494,8 +495,8 @@ void Testbed::set_train(bool mtrain) {
 	m_train = mtrain;
 }
 
-void Testbed::compute_and_save_marching_cubes_mesh(const char* filename, Vector3i res3d , BoundingBox aabb, float thresh, bool unwrap_it) {
-	Matrix3f render_aabb_to_local = Matrix3f::Identity();
+void Testbed::compute_and_save_marching_cubes_mesh(const char* filename, ivec3 res3d , BoundingBox aabb, float thresh, bool unwrap_it) {
+	mat3 render_aabb_to_local = mat3(1.0f);
 	if (aabb.is_empty()) {
 		aabb = m_testbed_mode == ETestbedMode::Nerf ? m_render_aabb : m_aabb;
 		render_aabb_to_local = m_render_aabb_to_local;
@@ -504,8 +505,8 @@ void Testbed::compute_and_save_marching_cubes_mesh(const char* filename, Vector3
 	save_mesh(m_mesh.verts, m_mesh.vert_normals, m_mesh.vert_colors, m_mesh.indices, filename, unwrap_it, m_nerf.training.dataset.scale, m_nerf.training.dataset.offset);
 }
 
-Eigen::Vector3i Testbed::compute_and_save_png_slices(const char* filename, int res, BoundingBox aabb, float thresh, float density_range, bool flip_y_and_z_axes) {
-	Matrix3f render_aabb_to_local = Matrix3f::Identity();
+ivec3 Testbed::compute_and_save_png_slices(const char* filename, int res, BoundingBox aabb, float thresh, float density_range, bool flip_y_and_z_axes) {
+	mat3 render_aabb_to_local = mat3(1.0f);
 	if (aabb.is_empty()) {
 		aabb = m_testbed_mode == ETestbedMode::Nerf ? m_render_aabb : m_aabb;
 		render_aabb_to_local = m_render_aabb_to_local;
@@ -516,14 +517,14 @@ Eigen::Vector3i Testbed::compute_and_save_png_slices(const char* filename, int r
 	float range = density_range;
 	if (m_testbed_mode == ETestbedMode::Sdf) {
 		auto res3d = get_marching_cubes_res(res, aabb);
-		aabb.inflate(range * aabb.diag().x()/res3d.x());
+		aabb.inflate(range * aabb.diag().x/res3d.x);
 	}
 	auto res3d = get_marching_cubes_res(res, aabb);
 	if (m_testbed_mode == ETestbedMode::Sdf)
-		range *= -aabb.diag().x()/res3d.x(); // rescale the range to be in output voxels. ie this scale factor is mapped back to the original world space distances.
+		range *= -aabb.diag().x/res3d.x; // rescale the range to be in output voxels. ie this scale factor is mapped back to the original world space distances.
 			// negated so that black = outside, white = inside
 	char fname[128];
-	snprintf(fname, sizeof(fname), ".density_slices_%dx%dx%d.png", res3d.x(), res3d.y(), res3d.z());
+	snprintf(fname, sizeof(fname), ".density_slices_%dx%dx%d.png", res3d.x, res3d.y, res3d.z);
 	GPUMemory<float> density = (m_render_ground_truth && m_testbed_mode == ETestbedMode::Sdf) ? get_sdf_gt_on_grid(res3d, aabb, render_aabb_to_local) : get_density_on_grid(res3d, aabb, render_aabb_to_local);
 	save_density_grid_to_png(density, (std::string(filename) + fname).c_str(), res3d, thresh, flip_y_and_z_axes, range);
 	return res3d;
@@ -582,58 +583,58 @@ void Testbed::dump_parameters_as_images(const T* params, const std::string& file
 template void Testbed::dump_parameters_as_images<__half>(const __half*, const std::string&);
 template void Testbed::dump_parameters_as_images<float>(const float*, const std::string&);
 
-Eigen::Matrix<float, 3, 4> Testbed::crop_box(bool nerf_space) const {
-	Eigen::Vector3f cen = m_render_aabb_to_local.transpose() * m_render_aabb.center();
-	Eigen::Vector3f radius = m_render_aabb.diag() * 0.5f;
-	Eigen::Vector3f x = m_render_aabb_to_local.row(0) * radius.x();
-	Eigen::Vector3f y = m_render_aabb_to_local.row(1) * radius.y();
-	Eigen::Vector3f z = m_render_aabb_to_local.row(2) * radius.z();
-	Eigen::Matrix<float, 3, 4> rv;
-	rv.col(0) = x;
-	rv.col(1) = y;
-	rv.col(2) = z;
-	rv.col(3) = cen;
+mat4x3 Testbed::crop_box(bool nerf_space) const {
+	vec3 cen = transpose(m_render_aabb_to_local) * m_render_aabb.center();
+	vec3 radius = m_render_aabb.diag() * 0.5f;
+	vec3 x = row(m_render_aabb_to_local, 0) * radius.x;
+	vec3 y = row(m_render_aabb_to_local, 1) * radius.y;
+	vec3 z = row(m_render_aabb_to_local, 2) * radius.z;
+	mat4x3 rv;
+	rv[0] = x;
+	rv[1] = y;
+	rv[2] = z;
+	rv[3] = cen;
 	if (nerf_space) {
 		rv = m_nerf.training.dataset.ngp_matrix_to_nerf(rv, true);
 	}
 	return rv;
 }
 
-void Testbed::set_crop_box(Eigen::Matrix<float, 3, 4> m, bool nerf_space) {
+void Testbed::set_crop_box(mat4x3 m, bool nerf_space) {
 	if (nerf_space) {
 		m = m_nerf.training.dataset.nerf_matrix_to_ngp(m, true);
 	}
-	Eigen::Vector3f radius(m.col(0).norm(), m.col(1).norm(), m.col(2).norm());
-	Eigen::Vector3f cen(m.col(3));
-	m_render_aabb_to_local.row(0) = m.col(0) / radius.x();
-	m_render_aabb_to_local.row(1) = m.col(1) / radius.y();
-	m_render_aabb_to_local.row(2) = m.col(2) / radius.z();
+	vec3 radius(length(m[0]), length(m[1]), length(m[2]));
+	vec3 cen(m[3]);
+	m_render_aabb_to_local = row(m_render_aabb_to_local, 0, m[0] / radius.x);
+	m_render_aabb_to_local = row(m_render_aabb_to_local, 1, m[1] / radius.y);
+	m_render_aabb_to_local = row(m_render_aabb_to_local, 2, m[2] / radius.z);
 	cen = m_render_aabb_to_local * cen;
 	m_render_aabb.min = cen - radius;
 	m_render_aabb.max = cen + radius;
 }
 
-std::vector<Eigen::Vector3f> Testbed::crop_box_corners(bool nerf_space) const {
-	Eigen::Matrix<float, 3, 4> m = crop_box(nerf_space);
-	std::vector<Eigen::Vector3f> rv(8);
+std::vector<vec3> Testbed::crop_box_corners(bool nerf_space) const {
+	mat4x3 m = crop_box(nerf_space);
+	std::vector<vec3> rv(8);
 	for (int i = 0; i < 8; ++i) {
-		rv[i] = m * Eigen::Vector4f((i & 1) ? 1.f : -1.f, (i & 2) ? 1.f : -1.f, (i & 4) ? 1.f : -1.f, 1.f);
+		rv[i] = m * vec4((i & 1) ? 1.f : -1.f, (i & 2) ? 1.f : -1.f, (i & 4) ? 1.f : -1.f, 1.f);
 		/* debug print out corners to check math is all lined up */
 		if (0) {
-			tlog::info() << rv[i].x() << "," << rv[i].y() << "," << rv[i].z() << " [" << i << "]";
-			Eigen::Vector3f mn = m_render_aabb.min;
-			Eigen::Vector3f mx = m_render_aabb.max;
-			Eigen::Matrix3f m = m_render_aabb_to_local.transpose();
-			Eigen::Vector3f a;
+			tlog::info() << rv[i].x << "," << rv[i].y << "," << rv[i].z << " [" << i << "]";
+			vec3 mn = m_render_aabb.min;
+			vec3 mx = m_render_aabb.max;
+			mat3 m = transpose(m_render_aabb_to_local);
+			vec3 a;
 
-			a.x() = (i&1) ? mx.x() : mn.x();
-			a.y() = (i&2) ? mx.y() : mn.y();
-			a.z() = (i&4) ? mx.z() : mn.z();
+			a.x = (i&1) ? mx.x : mn.x;
+			a.y = (i&2) ? mx.y : mn.y;
+			a.z = (i&4) ? mx.z : mn.z;
 			a = m * a;
 			if (nerf_space) {
 				a = m_nerf.training.dataset.ngp_position_to_nerf(a);
 			}
-			tlog::info() << a.x() << "," << a.y() << "," << a.z() << " [" << i << "]";
+			tlog::info() << a.x << "," << a.y << "," << a.z << " [" << i << "]";
 		}
 	}
 	return rv;
@@ -666,7 +667,7 @@ void Testbed::imgui() {
 				fov(),
 				m_aperture_size,
 				m_bounding_radius,
-				!m_nerf.training.dataset.xforms.empty() ? m_nerf.training.dataset.xforms[0].start : Matrix<float, 3, 4>::Identity(),
+				!m_nerf.training.dataset.xforms.empty() ? m_nerf.training.dataset.xforms[0].start : mat4x3(1.0f),
 				m_nerf.glow_mode,
 				m_nerf.glow_y_cutoff
 			)) {
@@ -754,7 +755,7 @@ void Testbed::imgui() {
 			ImGui::InputText("File##Video file path", m_imgui.video_path, sizeof(m_imgui.video_path));
 			m_camera_path.render_settings.filename = m_imgui.video_path;
 
-			ImGui::InputInt2("Resolution", &m_camera_path.render_settings.resolution.x());
+			ImGui::InputInt2("Resolution", &m_camera_path.render_settings.resolution.x);
 			ImGui::InputFloat("Duration (seconds)", &m_camera_path.render_settings.duration_seconds);
 			ImGui::InputFloat("FPS (frames/second)", &m_camera_path.render_settings.fps);
 			ImGui::InputInt("SPP (samples/pixel)", &m_camera_path.render_settings.spp);
@@ -775,50 +776,113 @@ void Testbed::imgui() {
 			if (size.x<100.f) size.x = 100.f;
 			if (size.y<100.f) size.y = 100.f;
 			ImGui::InvisibleButton("##empty", size);
-			static Eigen::VectorXf X;
-			static Eigen::VectorXf Y;
+
+			static std::vector<float> X;
+			static std::vector<float> Y;
 			uint32_t n_extra_dims = m_nerf.training.dataset.n_extra_dims();
-			Eigen::VectorXf mean(n_extra_dims);
-			mean.setZero();
+			std::vector<float> mean(n_extra_dims, 0.0f);
 			uint32_t n = m_nerf.training.n_images_for_training;
+			float norm = 1.0f / n;
 			for (uint32_t i = 0; i < n; ++i) {
-				mean += m_nerf.training.extra_dims_opt[i].variable().matrix();
+				for (uint32_t j = 0; j < n_extra_dims; ++j) {
+					mean[j] += m_nerf.training.extra_dims_opt[i].variable()[j] * norm;
+				}
 			}
-			mean *= 1.f/n;
-			Eigen::MatrixXf cov(n_extra_dims, n_extra_dims);
-			cov.setZero();
-			float scale=0.001f;	// compute scale
+
+			std::vector<float> cov(n_extra_dims * n_extra_dims, 0.0f);
+			float scale = 0.001f;	// compute scale
 			for (uint32_t i = 0; i < n; ++i) {
-				auto v = m_nerf.training.extra_dims_opt[i].variable().matrix() - mean;
-				scale = max(scale, v.norm() );
-				cov += v.transpose() * v;
+				std::vector<float> v = m_nerf.training.extra_dims_opt[i].variable();
+				for (uint32_t j = 0; j < n_extra_dims; ++j) {
+					v[j] -= mean[j];
+				}
+
+				for (uint32_t m = 0; m < n_extra_dims; ++m) {
+					for (uint32_t n = 0; n < n_extra_dims; ++n) {
+						cov[m + n * n_extra_dims] += v[m] * v[n];
+					}
+				}
 			}
-			scale = 3.f; // fixed scale
-			if (X.size() != mean.size()) { X = Eigen::VectorXf(mean.size()); X.setZero(); }
-			if (Y.size() != mean.size()) { Y = Eigen::VectorXf(mean.size()); Y.setZero(); }
+
+			scale = 3.0f; // fixed scale
+			if (X.size() != mean.size()) { X = std::vector<float>(mean.size(), 0.0f); }
+			if (Y.size() != mean.size()) { Y = std::vector<float>(mean.size(), 0.0f); }
+
 			// power iteration to get X and Y. TODO: modified gauss siedel to orthonormalize X and Y jointly?
-			X = (X * cov); if (X.norm() == 0.f) { X.setZero(); X.x()=1.f; } else X.normalize();
-			Y = (Y * cov); Y -= Y.dot(X) * X; if (Y.norm() == 0.f) { Y.setZero(); Y.y()=1.f; } else Y.normalize();
+			// X = (X * cov); if (X.norm() == 0.f) { X.setZero(); X.x() = 1.f; } else X.normalize();
+			// Y = (Y * cov); Y -= Y.dot(X) * X; if (Y.norm() == 0.f) { Y.setZero(); Y.y() = 1.f; } else Y.normalize();
+
+			std::vector<float> tmp(mean.size(), 0.0f);
+			norm = 0.0f;
+			for (uint32_t m = 0; m < n_extra_dims; ++m) {
+				tmp[m] = 0.0f;
+				for (uint32_t n = 0; n < n_extra_dims; ++n) {
+					tmp[m] += X[n] * cov[m + n * n_extra_dims];
+				}
+				norm += tmp[m] * tmp[m];
+			}
+			norm = std::sqrt(norm);
+			for (uint32_t m = 0; m < n_extra_dims; ++m) {
+				if (norm == 0.0f) {
+					X[m] = m == 0 ? 1.0f : 0.0f;
+					continue;
+				}
+				X[m] = tmp[m] / norm;
+			}
+
+			float y_dot_x = 0.0f;
+			for (uint32_t m = 0; m < n_extra_dims; ++m) {
+				tmp[m] = 0.0f;
+				for (uint32_t n = 0; n < n_extra_dims; ++n) {
+					tmp[m] += Y[n] * cov[m + n * n_extra_dims];
+				}
+				y_dot_x += tmp[m] * X[m];
+			}
+
+			norm = 0.0f;
+			for (uint32_t m = 0; m < n_extra_dims; ++m) {
+				Y[m] = tmp[m] - y_dot_x * X[m];
+				norm += Y[m] * Y[m];
+			}
+			norm = std::sqrt(norm);
+			for (uint32_t m = 0; m < n_extra_dims; ++m) {
+				if (norm == 0.0f) {
+					Y[m] = m == 1 ? 1.0f : 0.0f;
+					continue;
+				}
+				Y[m] = Y[m] / norm;
+			}
+
 			const ImVec2 p0 = ImGui::GetItemRectMin();
 			const ImVec2 p1 = ImGui::GetItemRectMax();
 			ImDrawList* draw_list = ImGui::GetWindowDrawList();
 			draw_list->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, 255));
 			draw_list->AddRect(p0, p1, IM_COL32(255, 255, 255, 128));
 			ImGui::PushClipRect(p0, p1, true);
-			Vector2f mouse={ImGui::GetIO().MousePos.x,ImGui::GetIO().MousePos.y};
+			vec2 mouse = {ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y};
 			for (uint32_t i = 0; i < n; ++i) {
-				auto v = m_nerf.training.extra_dims_opt[i].variable().matrix() - mean;
-				Vector2f p=Vector2f{v.dot(X) / scale,v.dot(Y) / scale};
-				p=(p.cwiseProduct(Vector2f{p1.x-p0.x-20.f,p1.y-p0.y-20.f}) + Vector2f{p0.x+p1.x,p0.y+p1.y})*0.5f;
-				if ((p-mouse).norm()<10.f)
+				vec2 p = vec2(0.0f);
+
+				std::vector<float> v = m_nerf.training.extra_dims_opt[i].variable();
+				for (uint32_t j = 0; j < n_extra_dims; ++j) {
+					p.x += (v[j] - mean[j]) * X[j] / scale;
+					p.y += (v[j] - mean[j]) * Y[j] / scale;
+				}
+
+				p = ((p * vec2{p1.x - p0.x - 20.f, p1.y - p0.y - 20.f}) + vec2{p0.x + p1.x, p0.y + p1.y}) * 0.5f;
+				if (distance(p, mouse) < 10.0f) {
 					ImGui::SetTooltip("%d", i);
-				float theta = i*PI()*2.f/n;
-				ImColor col(sinf(theta)*0.4f+0.5f,sinf(theta+PI()*2.f/3.f)*0.4f+0.5f,sinf(theta+PI()*4.f/3.f)*0.4f+0.5f);
-				draw_list->AddCircleFilled(ImVec2{p.x(), p.y()}, 10.f, col);
-				draw_list->AddCircle(ImVec2{p.x(), p.y()}, 10.f, IM_COL32(255, 255, 255, 64));
+				}
+
+				float theta = i * PI() * 2.0f / n;
+				ImColor col(sinf(theta) * 0.4f + 0.5f, sinf(theta + PI() * 2.0f / 3.0f) * 0.4f + 0.5f, sinf(theta + PI() * 4.0f / 3.0f) * 0.4f + 0.5f);
+				draw_list->AddCircleFilled(ImVec2{p.x, p.y}, 10.f, col);
+				draw_list->AddCircle(ImVec2{p.x, p.y}, 10.f, IM_COL32(255, 255, 255, 64));
 			}
+
 			ImGui::PopClipRect();
 		}
+
 		ImGui::End();
 	}
 
@@ -859,6 +923,7 @@ void Testbed::imgui() {
 			ImGui::Checkbox("distortion", &m_nerf.training.optimize_distortion);
 			ImGui::SameLine();
 			ImGui::Checkbox("per-image latents", &m_nerf.training.optimize_extra_dims);
+
 
 			static bool export_extrinsics_in_quat_format = true;
 			static bool extrinsics_have_been_optimized = false;
@@ -926,7 +991,7 @@ void Testbed::imgui() {
 			ImGui::SameLine();
 			ImGui::Checkbox("Sample focal plane ~sharpness", &m_nerf.training.include_sharpness_in_error);
 			ImGui::Checkbox("Sample image ~error", &m_nerf.training.sample_image_proportional_to_error);
-			ImGui::Text("%dx%d error res w/ %d steps between updates", m_nerf.training.error_map.resolution.x(), m_nerf.training.error_map.resolution.y(), m_nerf.training.n_steps_between_error_map_updates);
+			ImGui::Text("%dx%d error res w/ %d steps between updates", m_nerf.training.error_map.resolution.x, m_nerf.training.error_map.resolution.y, m_nerf.training.n_steps_between_error_map_updates);
 			ImGui::Checkbox("Display error overlay", &m_nerf.training.render_error_overlay);
 			if (m_nerf.training.render_error_overlay) {
 				ImGui::SliderFloat("Error overlay brightness", &m_nerf.training.error_overlay_brightness, 0.f, 1.f);
@@ -1033,12 +1098,13 @@ void Testbed::imgui() {
 
 		const auto& render_buffer = m_views.front().render_buffer;
 		std::string spp_string = m_dlss ? std::string{""} : fmt::format("({} spp)", std::max(render_buffer->spp(), 1u));
-		ImGui::Text(": %.01fms for %dx%d %s", m_render_ms.ema_val(), render_buffer->in_resolution().x(), render_buffer->in_resolution().y(), spp_string.c_str());
+		ImGui::Text(": %.01fms for %dx%d %s", m_render_ms.ema_val(), render_buffer->in_resolution().x, render_buffer->in_resolution().y, spp_string.c_str());
 
 		ImGui::SameLine();
 		if (ImGui::Checkbox("VSync", &m_vsync)) {
 			glfwSwapInterval(m_vsync ? 1 : 0);
 		}
+
 
 		if (!m_dlss_provider) { ImGui::BeginDisabled(); }
 		accum_reset |= ImGui::Checkbox("DLSS", &m_dlss);
@@ -1080,18 +1146,18 @@ void Testbed::imgui() {
 			set_exposure(m_exposure);
 		}
 
-		float max_diam = (m_aabb.max-m_aabb.min).maxCoeff();
-		float render_diam = (m_render_aabb.max-m_render_aabb.min).maxCoeff();
+		float max_diam = compMax(m_aabb.max - m_aabb.min);
+		float render_diam = compMax(m_render_aabb.max - m_render_aabb.min);
 		float old_render_diam = render_diam;
 
 		if (m_testbed_mode == ETestbedMode::Nerf || m_testbed_mode == ETestbedMode::Volume) {
 			if (ImGui::SliderFloat("Crop size", &render_diam, 0.1f, max_diam, "%.3f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat)) {
 				accum_reset = true;
 				if (old_render_diam > 0.f && render_diam > 0.f) {
-					const Vector3f center = (m_render_aabb.max + m_render_aabb.min) * 0.5f;
+					const vec3 center = (m_render_aabb.max + m_render_aabb.min) * 0.5f;
 					float scale = render_diam / old_render_diam;
-					m_render_aabb.max = ((m_render_aabb.max-center) * scale + center).cwiseMin(m_aabb.max);
-					m_render_aabb.min = ((m_render_aabb.min-center) * scale + center).cwiseMax(m_aabb.min);
+					m_render_aabb.max = min((m_render_aabb.max - center) * scale + center, m_aabb.max);
+					m_render_aabb.min = max((m_render_aabb.min - center) * scale + center, m_aabb.min);
 				}
 			}
 		}
@@ -1127,39 +1193,39 @@ void Testbed::imgui() {
 					m_edit_world_transform = false;
 				}
 
-				accum_reset |= ImGui::SliderFloat("Min x", ((float*)&m_render_aabb.min)+0, m_aabb.min.x(), m_render_aabb.max.x(), "%.3f");
-				accum_reset |= ImGui::SliderFloat("Min y", ((float*)&m_render_aabb.min)+1, m_aabb.min.y(), m_render_aabb.max.y(), "%.3f");
-				accum_reset |= ImGui::SliderFloat("Min z", ((float*)&m_render_aabb.min)+2, m_aabb.min.z(), m_render_aabb.max.z(), "%.3f");
+				accum_reset |= ImGui::SliderFloat("Min x", ((float*)&m_render_aabb.min)+0, m_aabb.min.x, m_render_aabb.max.x, "%.3f");
+				accum_reset |= ImGui::SliderFloat("Min y", ((float*)&m_render_aabb.min)+1, m_aabb.min.y, m_render_aabb.max.y, "%.3f");
+				accum_reset |= ImGui::SliderFloat("Min z", ((float*)&m_render_aabb.min)+2, m_aabb.min.z, m_render_aabb.max.z, "%.3f");
 				ImGui::Separator();
-				accum_reset |= ImGui::SliderFloat("Max x", ((float*)&m_render_aabb.max)+0, m_render_aabb.min.x(), m_aabb.max.x(), "%.3f");
-				accum_reset |= ImGui::SliderFloat("Max y", ((float*)&m_render_aabb.max)+1, m_render_aabb.min.y(), m_aabb.max.y(), "%.3f");
-				accum_reset |= ImGui::SliderFloat("Max z", ((float*)&m_render_aabb.max)+2, m_render_aabb.min.z(), m_aabb.max.z(), "%.3f");
+				accum_reset |= ImGui::SliderFloat("Max x", ((float*)&m_render_aabb.max)+0, m_render_aabb.min.x, m_aabb.max.x, "%.3f");
+				accum_reset |= ImGui::SliderFloat("Max y", ((float*)&m_render_aabb.max)+1, m_render_aabb.min.y, m_aabb.max.y, "%.3f");
+				accum_reset |= ImGui::SliderFloat("Max z", ((float*)&m_render_aabb.max)+2, m_render_aabb.min.z, m_aabb.max.z, "%.3f");
 				ImGui::Separator();
-				Vector3f diag = m_render_aabb.diag();
+				vec3 diag = m_render_aabb.diag();
 				bool edit_diag = false;
-				float max_diag = m_aabb.diag().maxCoeff();
+				float max_diag = compMax(m_aabb.diag());
 				edit_diag |= ImGui::SliderFloat("Size x", ((float*)&diag)+0, 0.001f, max_diag, "%.3f");
 				edit_diag |= ImGui::SliderFloat("Size y", ((float*)&diag)+1, 0.001f, max_diag, "%.3f");
 				edit_diag |= ImGui::SliderFloat("Size z", ((float*)&diag)+2, 0.001f, max_diag, "%.3f");
 				if (edit_diag) {
 					accum_reset = true;
-					Vector3f cen = m_render_aabb.center();
+					vec3 cen = m_render_aabb.center();
 					m_render_aabb = BoundingBox(cen - diag * 0.5f, cen + diag * 0.5f);
 				}
 
 				if (ImGui::Button("Reset crop box")) {
 					accum_reset = true;
 					m_render_aabb = m_aabb;
-					m_render_aabb_to_local = Matrix3f::Identity();
+					m_render_aabb_to_local = mat3(1.0f);
 				}
 
 				ImGui::SameLine();
 				if (ImGui::Button("rotation only")) {
 					accum_reset = true;
-					Eigen::Vector3f world_cen = m_render_aabb_to_local.transpose() * m_render_aabb.center();
-					m_render_aabb_to_local = Matrix3f::Identity();
-					Eigen::Vector3f new_cen = m_render_aabb_to_local * world_cen;
-					Eigen::Vector3f old_cen = m_render_aabb.center();
+					vec3 world_cen = transpose(m_render_aabb_to_local) * m_render_aabb.center();
+					m_render_aabb_to_local = mat3(1.0f);
+					vec3 new_cen = m_render_aabb_to_local * world_cen;
+					vec3 old_cen = m_render_aabb.center();
 					m_render_aabb.min += new_cen - old_cen;
 					m_render_aabb.max += new_cen - old_cen;
 				}
@@ -1181,10 +1247,10 @@ void Testbed::imgui() {
 
 		if (m_testbed_mode == ETestbedMode::Nerf && ImGui::TreeNode("NeRF rendering options")) {
 			if (m_nerf.training.dataset.has_light_dirs) {
-				Vector3f light_dir = m_nerf.light_dir.normalized();
+				vec3 light_dir = normalize(m_nerf.light_dir);
 				if (ImGui::TreeNodeEx("Light Dir (Polar)", ImGuiTreeNodeFlags_DefaultOpen)) {
-					float phi = atan2f(m_nerf.light_dir.x(), m_nerf.light_dir.z());
-					float theta = asinf(m_nerf.light_dir.y());
+					float phi = atan2f(m_nerf.light_dir.x, m_nerf.light_dir.z);
+					float theta = asinf(m_nerf.light_dir.y);
 					bool spin = ImGui::SliderFloat("Light Dir Theta", &theta, -PI() / 2.0f, PI() / 2.0f);
 					spin |= ImGui::SliderFloat("Light Dir Phi", &phi, -PI(), PI());
 					if (spin) {
@@ -1343,7 +1409,7 @@ void Testbed::imgui() {
 				if (m_nerf.training.optimize_exposure) {
 					std::vector<float> exposures(m_nerf.training.dataset.n_images);
 					for (uint32_t i = 0; i < m_nerf.training.dataset.n_images; ++i) {
-						exposures[i] = m_nerf.training.cam_exposure[i].variable().x();
+						exposures[i] = m_nerf.training.cam_exposure[i].variable().x;
 					}
 
 					ImGui::PlotLines("Training view exposures", exposures.data(), exposures.size(), 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(0, 60.f));
@@ -1388,16 +1454,16 @@ void Testbed::imgui() {
 
 
 		if (ImGui::TreeNode("Advanced camera settings")) {
-			accum_reset |= ImGui::SliderFloat2("Screen center", &m_screen_center.x(), 0.f, 1.f);
-			accum_reset |= ImGui::SliderFloat2("Parallax shift", &m_parallax_shift.x(), -1.f, 1.f);
+			accum_reset |= ImGui::SliderFloat2("Screen center", &m_screen_center.x, 0.f, 1.f);
+			accum_reset |= ImGui::SliderFloat2("Parallax shift", &m_parallax_shift.x, -1.f, 1.f);
 			accum_reset |= ImGui::SliderFloat("Slice / focus depth", &m_slice_plane_z, -m_bounding_radius, m_bounding_radius);
 			accum_reset |= ImGui::SliderFloat("Render near distance", &m_render_near_distance, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
 			char buf[2048];
-			Vector3f v = view_dir();
-			Vector3f p = look_at();
-			Vector3f s = m_sun_dir;
-			Vector3f u = m_up_dir;
-			Array4f b = m_background_color;
+			vec3 v = view_dir();
+			vec3 p = look_at();
+			vec3 s = m_sun_dir;
+			vec3 u = m_up_dir;
+			vec4 b = m_background_color;
 			snprintf(buf, sizeof(buf),
 				"testbed.background_color = [%0.3f, %0.3f, %0.3f, %0.3f]\n"
 				"testbed.exposure = %0.3f\n"
@@ -1409,15 +1475,15 @@ void Testbed::imgui() {
 				"testbed.fov,testbed.aperture_size,testbed.slice_plane_z = %0.3f,%0.3f,%0.3f\n"
 				"testbed.autofocus_target = [%0.3f,%0.3f,%0.3f]\n"
 				"testbed.autofocus = %s\n\n"
-				, b.x(), b.y(), b.z(), b.w()
+				, b.r, b.g, b.b, b.a
 				, m_exposure
-				, s.x(), s.y(), s.z()
-				, u.x(), u.y(), u.z()
-				, v.x(), v.y(), v.z()
-				, p.x(), p.y(), p.z()
+				, s.x, s.y, s.z
+				, u.x, u.y, u.z
+				, v.x, v.y, v.z
+				, p.x, p.y, p.z
 				, scale()
 				, fov(), m_aperture_size, m_slice_plane_z
-				, m_autofocus_target.x(), m_autofocus_target.y(), m_autofocus_target.z()
+				, m_autofocus_target.x, m_autofocus_target.y, m_autofocus_target.z
 				, m_autofocus ? "True" : "False"
 			);
 
@@ -1445,9 +1511,9 @@ void Testbed::imgui() {
 					, m_sdf.brdf.sheen
 					, m_sdf.brdf.clearcoat
 					, m_sdf.brdf.clearcoat_gloss
-					, m_sdf.brdf.basecolor.x()
-					, m_sdf.brdf.basecolor.y()
-					, m_sdf.brdf.basecolor.z()
+					, m_sdf.brdf.basecolor.x
+					, m_sdf.brdf.basecolor.y
+					, m_sdf.brdf.basecolor.z
 				);
 			}
 			ImGui::InputTextMultiline("Params", buf, sizeof(buf));
@@ -1529,11 +1595,11 @@ void Testbed::imgui() {
 			if (m_testbed_mode == ETestbedMode::Nerf) {
 				ImGui::SameLine();
 				if (imgui_colored_button("Save RGBA PNG sequence", 0.2f)) {
-					auto effective_view_dir = flip_y_and_z_axes ? Vector3f{0.0f, 1.0f, 0.0f} : Vector3f{0.0f, 0.0f, 1.0f};
+					auto effective_view_dir = flip_y_and_z_axes ? vec3{0.0f, 1.0f, 0.0f} : vec3{0.0f, 0.0f, 1.0f};
 					// Depth of 0.01f is arbitrarily chosen to produce a visually interpretable range of alpha values.
 					// Alternatively, if the true transparency of a given voxel is desired, one could use the voxel size,
 					// the voxel diagonal, or some form of expected ray length through the voxel, given random directions.
-					GPUMemory<Array4f> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, 0.01f);
+					GPUMemory<vec4> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, 0.01f);
 					auto dir = m_data_path / "rgba_slices";
 					if (!dir.exists()) {
 						fs::create_directory(dir);
@@ -1541,19 +1607,19 @@ void Testbed::imgui() {
 					save_rgba_grid_to_png_sequence(rgba, dir.str().c_str(), res3d, flip_y_and_z_axes);
 				}
 				if (imgui_colored_button("Save raw volumes", 0.4f)) {
-					auto effective_view_dir = flip_y_and_z_axes ? Vector3f{0.0f, 1.0f, 0.0f} : Vector3f{0.0f, 0.0f, 1.0f};
+					auto effective_view_dir = flip_y_and_z_axes ? vec3{0.0f, 1.0f, 0.0f} : vec3{0.0f, 0.0f, 1.0f};
 					auto old_local = m_render_aabb_to_local;
 					auto old_aabb = m_render_aabb;
-					m_render_aabb_to_local = Eigen::Matrix3f::Identity();
+					m_render_aabb_to_local = mat3(1.0f);
 					auto dir = m_data_path / "volume_raw";
 					if (!dir.exists()) {
 						fs::create_directory(dir);
 					}
-					for (int cascade = 0; (1<<cascade)<= m_aabb.diag().x()+0.5f; ++cascade) {
+					for (int cascade = 0; (1<<cascade)<= m_aabb.diag().x+0.5f; ++cascade) {
 						float radius = (1<<cascade) * 0.5f;
-						m_render_aabb = BoundingBox(Eigen::Vector3f::Constant(0.5f-radius), Eigen::Vector3f::Constant(0.5f+radius));
+						m_render_aabb = BoundingBox(vec3(0.5f-radius), vec3(0.5f+radius));
 						// Dump raw density values that the user can then convert to alpha as they please.
-						GPUMemory<Array4f> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, 0.0f, true);
+						GPUMemory<vec4> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, 0.0f, true);
 						save_rgba_grid_to_raw_file(rgba, dir.str().c_str(), res3d, flip_y_and_z_axes, cascade);
 					}
 					m_render_aabb_to_local = old_local;
@@ -1568,7 +1634,7 @@ void Testbed::imgui() {
 			ImGui::SliderInt("Res:", &m_mesh.res, 16, 2048, "%d", ImGuiSliderFlags_Logarithmic);
 			ImGui::SameLine();
 
-			ImGui::Text("%dx%dx%d", res3d.x(), res3d.y(), res3d.z());
+			ImGui::Text("%dx%dx%d", res3d.x, res3d.y, res3d.z);
 			float thresh_range = (m_testbed_mode == ETestbedMode::Sdf) ? 0.5f : 10.f;
 			ImGui::SliderFloat("MC density threshold",&m_mesh.thresh, -thresh_range, thresh_range);
 			ImGui::Combo("Mesh render mode", (int*)&m_mesh_render_mode, "Off\0Vertex Colors\0Vertex Normals\0\0");
@@ -1600,39 +1666,37 @@ void Testbed::imgui() {
 			accum_reset |= ImGui::SliderFloat("Clearcoat", &m_sdf.brdf.clearcoat, 0.f, 1.f);
 			accum_reset |= ImGui::SliderFloat("Clearcoat gloss", &m_sdf.brdf.clearcoat_gloss, 0.f, 1.f);
 		}
-		m_sdf.brdf.ambientcolor = (m_background_color * m_background_color).head<3>();
+		m_sdf.brdf.ambientcolor = (m_background_color * m_background_color).rgb;
 	}
 
 	if (ImGui::CollapsingHeader("Histograms of encoding parameters")) {
 		ImGui::Checkbox("Gather histograms", &m_gather_histograms);
 
-		static float minlevel = 0.f;
 		static float maxlevel = 1.f;
-		if (ImGui::SliderFloat("Max level", &maxlevel, 0.f, 1.f))
+		if (ImGui::SliderFloat("Max level", &maxlevel, 0.f, 1.f)) {
 			set_max_level(maxlevel);
-		if (ImGui::SliderFloat("##Min level", &minlevel, 0.f, 1.f))
-			set_min_level(minlevel);
+		}
 		ImGui::SameLine();
 		ImGui::Text("%0.1f%% values snapped to 0", m_quant_percent);
 
-		std::vector<float> f(m_num_levels);
+		std::vector<float> f(m_n_levels);
 
 
 		// Hashgrid statistics
-		for (int i = 0; i < m_num_levels; ++i) {
+		for (int i = 0; i < m_n_levels; ++i) {
 			f[i] = m_level_stats[i].mean();
 		}
-		ImGui::PlotHistogram("Grid means", f.data(), m_num_levels, 0, "means", FLT_MAX, FLT_MAX, ImVec2(0, 60.f));
-		for (int i = 0; i < m_num_levels; ++i) {
+		ImGui::PlotHistogram("Grid means", f.data(), m_n_levels, 0, "means", FLT_MAX, FLT_MAX, ImVec2(0, 60.f));
+		for (int i = 0; i < m_n_levels; ++i) {
 			f[i] = m_level_stats[i].sigma();
 		}
-		ImGui::PlotHistogram("Grid sigmas", f.data(), m_num_levels, 0, "sigma", FLT_MAX, FLT_MAX, ImVec2(0, 60.f));
+		ImGui::PlotHistogram("Grid sigmas", f.data(), m_n_levels, 0, "sigma", FLT_MAX, FLT_MAX, ImVec2(0, 60.f));
 		ImGui::Separator();
 
 
 		// Histogram of trained hashgrid params
-		ImGui::SliderInt("Show details for level", &m_histo_level, 0, m_num_levels - 1);
-		if (m_histo_level < m_num_levels) {
+		ImGui::SliderInt("Show details for level", &m_histo_level, 0, m_n_levels - 1);
+		if (m_histo_level < m_n_levels) {
 			LevelStats& s = m_level_stats[m_histo_level];
 			static bool excludezero = false;
 			if (excludezero) {
@@ -1666,40 +1730,39 @@ void Testbed::imgui() {
 	ImGui::End();
 }
 
-void Testbed::visualize_nerf_cameras(ImDrawList* list, const Matrix<float, 4, 4>& world2proj) {
+void Testbed::visualize_nerf_cameras(ImDrawList* list, const mat4& world2proj) {
 	for (int i = 0; i < m_nerf.training.n_images_for_training; ++i) {
 		auto res = m_nerf.training.dataset.metadata[i].resolution;
-		float aspect = float(res.x())/float(res.y());
-		auto current_xform = get_xform_given_rolling_shutter(m_nerf.training.transforms[i], m_nerf.training.dataset.metadata[i].rolling_shutter, Vector2f{0.5f, 0.5f}, 0.0f);
+		float aspect = float(res.x)/float(res.y);
+		auto current_xform = get_xform_given_rolling_shutter(m_nerf.training.transforms[i], m_nerf.training.dataset.metadata[i].rolling_shutter, vec2{0.5f, 0.5f}, 0.0f);
 		visualize_nerf_camera(list, world2proj, m_nerf.training.dataset.xforms[i].start, aspect, 0x40ffff40);
 		visualize_nerf_camera(list, world2proj, m_nerf.training.dataset.xforms[i].end, aspect, 0x40ffff40);
 		visualize_nerf_camera(list, world2proj, current_xform, aspect, 0x80ffffff);
 
 		// Visualize near distance
-		add_debug_line(list, world2proj, current_xform.col(3), current_xform.col(3) + current_xform.col(2) * m_nerf.training.near_distance, 0x20ffffff);
+		add_debug_line(list, world2proj, current_xform[3], current_xform[3] + current_xform[2] * m_nerf.training.near_distance, 0x20ffffff);
 	}
 
 }
 
-void Testbed::draw_visualizations(ImDrawList* list, const Matrix<float, 3, 4>& camera_matrix) {
-	Matrix<float, 4, 4> world2view, view2world, view2proj, world2proj;
-	view2world.setIdentity();
-	view2world.block<3, 4>(0, 0) = camera_matrix;
+void Testbed::draw_visualizations(ImDrawList* list, const mat4x3& camera_matrix) {
+	mat4 view2world = camera_matrix;
+	mat4 world2view = inverse(view2world);
 
-	auto focal = calc_focal_length(Vector2i::Ones(), m_relative_focal_length, m_fov_axis, m_zoom);
+	auto focal = calc_focal_length(ivec2(1), m_relative_focal_length, m_fov_axis, m_zoom);
 	float zscale = 1.0f / focal[m_fov_axis];
 
 	float xyscale = (float)m_window_res[m_fov_axis];
-	Vector2f screen_center = render_screen_center(m_screen_center);
-	view2proj <<
-		xyscale, 0,       (float)m_window_res.x()*screen_center.x()*zscale, 0,
-		0,       xyscale, (float)m_window_res.y()*screen_center.y()*zscale, 0,
-		0,       0,       1,                                                0,
-		0,       0,       zscale,                                           0;
+	vec2 screen_center = render_screen_center(m_screen_center);
+	mat4 view2proj = transpose(mat4(
+		xyscale, 0.0f,    (float)m_window_res.x*screen_center.x * zscale, 0.0f,
+		0.0f,    xyscale, (float)m_window_res.y*screen_center.y * zscale, 0.0f,
+		0.0f,    0.0f,    1.0f,                                           0.0f,
+		0.0f,    0.0f,    zscale,                                         0.0f
+	));
 
-	world2view = view2world.inverse();
-	world2proj = view2proj * world2view;
-	float aspect = (float)m_window_res.x() / (float)m_window_res.y();
+	mat4 world2proj = view2proj * world2view;
+	float aspect = (float)m_window_res.x / (float)m_window_res.y;
 
 	// Visualize NeRF training poses
 	if (m_testbed_mode == ETestbedMode::Nerf) {
@@ -1709,7 +1772,7 @@ void Testbed::draw_visualizations(ImDrawList* list, const Matrix<float, 3, 4>& c
 	}
 
 	if (m_visualize_unit_cube) {
-		visualize_cube(list, world2proj, Eigen::Vector3f::Constant(0.f), Eigen::Vector3f::Constant(1.f), Eigen::Matrix3f::Identity());
+		visualize_cube(list, world2proj, vec3(0.f), vec3(1.f), mat3(1.0f));
 	}
 
 	if (m_edit_render_aabb) {
@@ -1718,28 +1781,28 @@ void Testbed::draw_visualizations(ImDrawList* list, const Matrix<float, 3, 4>& c
 		}
 
 		ImGuiIO& io = ImGui::GetIO();
-		float flx = focal.x();
-		float fly = focal.y();
-		Matrix<float, 4, 4> view2proj_guizmo;
+		// float flx = focal.x;
+		float fly = focal.y;
 		float zfar = m_ndc_zfar;
 		float znear = m_ndc_znear;
-		view2proj_guizmo <<
-			fly * 2.f / aspect, 0, 0, 0,
-			0, -fly * 2.f, 0, 0,
-			0, 0, (zfar + znear) / (zfar - znear), -(2.f * zfar * znear) / (zfar - znear),
-			0, 0, 1, 0;
+		mat4 view2proj_guizmo = transpose(mat4(
+			fly * 2.0f / aspect, 0.0f,       0.0f,                            0.0f,
+			0.0f,                -fly * 2.f, 0.0f,                            0.0f,
+			0.0f,                0.0f,       (zfar + znear) / (zfar - znear), -(2.0f * zfar * znear) / (zfar - znear),
+			0.0f,                0.0f,       1.0f,                            0.0f
+		));
 
 		ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
 
-		static Eigen::Matrix4f matrix = Eigen::Matrix4f::Identity();
-		static Eigen::Matrix4f world2view_guizmo = Eigen::Matrix4f::Identity();
+		static mat4 matrix = mat4(1.0f);
+		static mat4 world2view_guizmo = mat4(1.0f);
 
+		vec3 cen = transpose(m_render_aabb_to_local) * m_render_aabb.center();
 		if (!ImGuizmo::IsUsing()) {
 			// The the guizmo is being used, it handles updating its matrix on its own.
 			// Outside interference can only lead to trouble.
-			matrix.block<3, 3>(0, 0) = m_render_aabb_to_local.transpose();
-			Eigen::Vector3f cen = m_render_aabb_to_local.transpose() * m_render_aabb.center();
-			matrix.block<3, 4>(0, 0).col(3) = cen;
+			auto rot = transpose(m_render_aabb_to_local);
+			matrix = mat4(mat4x3(rot[0], rot[1], rot[2], cen));
 
 			// Additionally, the world2view transform must stay fixed, else the guizmo will incorrectly
 			// interpret the state from past frames. Special handling is necessary here, because below
@@ -1747,22 +1810,21 @@ void Testbed::draw_visualizations(ImDrawList* list, const Matrix<float, 3, 4>& c
 			world2view_guizmo = world2view;
 		}
 
-		Eigen::Vector3f cen = m_render_aabb_to_local.transpose() * m_render_aabb.center();
 		auto prev_matrix = matrix;
 
 		if (ImGuizmo::Manipulate((const float*)&world2view_guizmo, (const float*)&view2proj_guizmo, m_camera_path.m_gizmo_op, ImGuizmo::LOCAL, (float*)&matrix, NULL, NULL)) {
 			auto crop_transform = matrix;
 			if (m_edit_world_transform) {
 				// We transform the world by transforming the camera in the opposite direction.
-				auto rel = prev_matrix * matrix.inverse();
-				m_camera = rel.block<3, 3>(0, 0) * m_camera;
-				m_camera.col(3) += rel.block<3, 1>(0, 3);
+				auto rel = prev_matrix * inverse(matrix);
+				m_camera = mat3(rel) * m_camera;
+				m_camera[3] += rel[3].xyz();
 
-				m_up_dir = rel.block<3, 3>(0, 0) * m_up_dir;
+				m_up_dir = mat3(rel) * m_up_dir;
 			} else {
-				m_render_aabb_to_local = matrix.block<3, 3>(0, 0).transpose();
-				Eigen::Vector3f new_cen = m_render_aabb_to_local * matrix.block<3, 4>(0, 0).col(3);
-				Eigen::Vector3f old_cen = m_render_aabb.center();
+				m_render_aabb_to_local = transpose(mat3(matrix));
+				vec3 new_cen = m_render_aabb_to_local * matrix[3].xyz;
+				vec3 old_cen = m_render_aabb.center();
 				m_render_aabb.min += new_cen - old_cen;
 				m_render_aabb.max += new_cen - old_cen;
 			}
@@ -1919,29 +1981,29 @@ bool Testbed::keyboard_event() {
 	}
 
 	// WASD camera movement
-	Vector3f translate_vec = Vector3f::Zero();
+	vec3 translate_vec = vec3(0.0f);
 	if (ImGui::IsKeyDown('W')) {
-		translate_vec.z() += 1.0f;
+		translate_vec.z += 1.0f;
 	}
 
 	if (ImGui::IsKeyDown('A')) {
-		translate_vec.x() += -1.0f;
+		translate_vec.x += -1.0f;
 	}
 
 	if (ImGui::IsKeyDown('S')) {
-		translate_vec.z() += -1.0f;
+		translate_vec.z += -1.0f;
 	}
 
 	if (ImGui::IsKeyDown('D')) {
-		translate_vec.x() += 1.0f;
+		translate_vec.x += 1.0f;
 	}
 
 	if (ImGui::IsKeyDown(' ')) {
-		translate_vec.y() += -1.0f;
+		translate_vec.y += -1.0f;
 	}
 
 	if (ImGui::IsKeyDown('C')) {
-		translate_vec.y() += 1.0f;
+		translate_vec.y += 1.0f;
 	}
 
 	translate_vec *= m_camera_velocity * m_frame_ms.val() / 1000.0f;
@@ -1949,14 +2011,14 @@ bool Testbed::keyboard_event() {
 		translate_vec *= 5;
 	}
 
-	if (translate_vec != Vector3f::Zero()) {
+	if (translate_vec != vec3(0.0f)) {
 		m_fps_camera = true;
 
 		// If VR is active, movement that isn't aligned with the current view
 		// direction is _very_ jarring to the user, so make keyboard-based
 		// movement aligned with the VR view, even though it is not an intended
 		// movement mechanism. (Users should use controllers.)
-		translate_camera(translate_vec, m_hmd && m_hmd->is_visible() ? m_views.front().camera0.block<3, 3>(0, 0) : m_camera.block<3, 3>(0, 0));
+		translate_camera(translate_vec, m_hmd && m_hmd->is_visible() ? mat3(m_views.front().camera0) : mat3(m_camera));
 	}
 
 	return false;
@@ -1973,30 +2035,30 @@ void Testbed::mouse_wheel() {
 
 	// When in image mode, zoom around the hovered point.
 	if (m_testbed_mode == ETestbedMode::Image) {
-		Vector2i mouse = {ImGui::GetMousePos().x, ImGui::GetMousePos().y};
-		Vector3f offset = get_3d_pos_from_pixel(*m_views.front().render_buffer, mouse) - look_at();
+		ivec2 mouse = {ImGui::GetMousePos().x, ImGui::GetMousePos().y};
+		vec3 offset = get_3d_pos_from_pixel(*m_views.front().render_buffer, mouse) - look_at();
 
 		// Don't center around infinitely distant points.
-		if (offset.norm() < 256.0f) {
-			m_camera.col(3) += offset * (1.0f - scale_factor);
+		if (length(offset) < 256.0f) {
+			m_camera[3] += offset * (1.0f - scale_factor);
 		}
 	}
 
 	reset_accumulation(true);
 }
 
-Matrix3f Testbed::rotation_from_angles(const Vector2f& angles) const {
-	Vector3f up = m_up_dir;
-	Vector3f side = m_camera.col(0);
-	return (AngleAxisf(angles.x(), up) * AngleAxisf(angles.y(), side)).matrix();
+mat3 Testbed::rotation_from_angles(const vec2& angles) const {
+	vec3 up = m_up_dir;
+	vec3 side = m_camera[0];
+	return rotmat(angles.x, up) * rotmat(angles.y, side);
 }
 
 void Testbed::mouse_drag() {
-	Vector2f rel = Vector2f{ImGui::GetIO().MouseDelta.x, ImGui::GetIO().MouseDelta.y} / (float)m_window_res[m_fov_axis];
-	Vector2i mouse = {ImGui::GetMousePos().x, ImGui::GetMousePos().y};
+	vec2 rel = vec2{ImGui::GetIO().MouseDelta.x, ImGui::GetIO().MouseDelta.y} / (float)m_window_res[m_fov_axis];
+	ivec2 mouse = {ImGui::GetMousePos().x, ImGui::GetMousePos().y};
 
-	Vector3f up = m_up_dir;
-	Vector3f side = m_camera.col(0);
+	vec3 up = m_up_dir;
+	vec3 side = m_camera[0];
 
 	bool shift = ImGui::GetIO().KeyMods & ImGuiKeyModFlags_Shift;
 
@@ -2009,10 +2071,11 @@ void Testbed::mouse_drag() {
 			reset_accumulation();
 		} else {
 			float rot_sensitivity = m_fps_camera ? 0.35f : 1.0f;
-			Matrix3f rot = rotation_from_angles(-rel * 2 * PI() * rot_sensitivity);
+			mat3 rot = rotation_from_angles(-rel * 2.0f * PI() * rot_sensitivity);
 
 			if (m_fps_camera) {
-				m_camera.block<3, 3>(0, 0) = rot * m_camera.block<3, 3>(0, 0);
+				rot *= mat3(m_camera);
+				m_camera = mat4x3(rot[0], rot[1], rot[2], m_camera[3]);
 			} else {
 				// Turntable
 				auto old_look_at = look_at();
@@ -2027,23 +2090,23 @@ void Testbed::mouse_drag() {
 
 	// Right held
 	if (ImGui::GetIO().MouseDown[1]) {
-		Matrix3f rot = rotation_from_angles(-rel * 2 * PI());
+		mat3 rot = rotation_from_angles(-rel * 2.0f * PI());
 		if (m_render_mode == ERenderMode::Shade) {
-			m_sun_dir = rot.transpose() * m_sun_dir;
+			m_sun_dir = transpose(rot) * m_sun_dir;
 		}
 
-		m_slice_plane_z += -rel.y() * m_bounding_radius;
+		m_slice_plane_z += -rel.y * m_bounding_radius;
 		reset_accumulation();
 	}
 
 	// Middle pressed
 	if (ImGui::GetIO().MouseClicked[2]) {
-		m_drag_depth = get_depth_from_renderbuffer(*m_views.front().render_buffer, mouse.cast<float>().cwiseQuotient(m_window_res.cast<float>()));
+		m_drag_depth = get_depth_from_renderbuffer(*m_views.front().render_buffer, vec2(mouse) / vec2(m_window_res));
 	}
 
 	// Middle held
 	if (ImGui::GetIO().MouseDown[2]) {
-		Vector3f translation = Vector3f{-rel.x(), -rel.y(), 0.0f} / m_zoom;
+		vec3 translation = vec3{-rel.x, -rel.y, 0.0f} / m_zoom;
 
 		// If we have a valid depth value, scale the scene translation by it such that the
 		// hovered point in 3D space stays under the cursor.
@@ -2051,7 +2114,7 @@ void Testbed::mouse_drag() {
 			translation *= m_drag_depth / m_relative_focal_length[m_fov_axis];
 		}
 
-		translate_camera(translation, m_camera.block<3, 3>(0, 0));
+		translate_camera(translation, mat3(m_camera));
 	}
 }
 
@@ -2069,7 +2132,7 @@ bool Testbed::begin_frame() {
 	}
 
 	glfwPollEvents();
-	glfwGetFramebufferSize(m_glfw_window, &m_window_res.x(), &m_window_res.y());
+	glfwGetFramebufferSize(m_glfw_window, &m_window_res.x, &m_window_res.y);
 
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
@@ -2108,8 +2171,8 @@ void Testbed::handle_user_input() {
 	}
 }
 
-Vector3f Testbed::vr_to_world(const Vector3f& pos) const {
-	return m_camera.block<3, 3>(0, 0) * pos * m_scale + m_camera.col(3);
+vec3 Testbed::vr_to_world(const vec3& pos) const {
+	return mat3(m_camera) * pos * m_scale + m_camera[3];
 }
 
 void Testbed::begin_vr_frame_and_handle_vr_input() {
@@ -2132,16 +2195,16 @@ void Testbed::begin_vr_frame_and_handle_vr_input() {
 	if (n_views > 0) {
 		set_n_views(n_views);
 
-		Vector2i total_size = Vector2i::Zero();
+		ivec2 total_size = ivec2(0);
 		for (size_t i = 0; i < n_views; ++i) {
-			Vector2i view_resolution = {views[i].view.subImage.imageRect.extent.width, views[i].view.subImage.imageRect.extent.height};
+			ivec2 view_resolution = {views[i].view.subImage.imageRect.extent.width, views[i].view.subImage.imageRect.extent.height};
 			total_size += view_resolution;
 
 			m_views[i].full_resolution = view_resolution;
 
 			// Apply the VR pose relative to the world camera transform.
-			m_views[i].camera0.block<3, 3>(0, 0) = m_camera.block<3, 3>(0, 0) * views[i].pose.block<3, 3>(0, 0);
-			m_views[i].camera0.col(3) = vr_to_world(views[i].pose.col(3));
+			m_views[i].camera0 = mat3(m_camera) * views[i].pose;
+			m_views[i].camera0[3] = vr_to_world(views[i].pose[3]);
 			m_views[i].camera1 = m_views[i].camera0;
 
 			m_views[i].visualized_dimension = m_visualized_dimension;
@@ -2149,15 +2212,15 @@ void Testbed::begin_vr_frame_and_handle_vr_input() {
 			const auto& xr_fov = views[i].view.fov;
 
 			// Compute the distance on the image plane (1 unit away from the camera) that an angle of the respective FOV spans
-			Vector2f rel_focal_length_left_down = 0.5f * fov_to_focal_length(Vector2i::Ones(), Vector2f{360.0f * xr_fov.angleLeft / PI(), 360.0f * xr_fov.angleDown / PI()});
-			Vector2f rel_focal_length_right_up = 0.5f * fov_to_focal_length(Vector2i::Ones(), Vector2f{360.0f * xr_fov.angleRight / PI(), 360.0f * xr_fov.angleUp / PI()});
+			vec2 rel_focal_length_left_down = 0.5f * fov_to_focal_length(ivec2(1), vec2{360.0f * xr_fov.angleLeft / PI(), 360.0f * xr_fov.angleDown / PI()});
+			vec2 rel_focal_length_right_up = 0.5f * fov_to_focal_length(ivec2(1), vec2{360.0f * xr_fov.angleRight / PI(), 360.0f * xr_fov.angleUp / PI()});
 
 			// Compute total distance (for X and Y) that is spanned on the image plane.
 			m_views[i].relative_focal_length = rel_focal_length_right_up - rel_focal_length_left_down;
 
 			// Compute fraction of that distance that is spanned by the right-up part and set screen center accordingly.
-			Vector2f ratio = rel_focal_length_right_up.cwiseQuotient(m_views[i].relative_focal_length);
-			m_views[i].screen_center = { 1.0f - ratio.x(), ratio.y() };
+			vec2 ratio = rel_focal_length_right_up / m_views[i].relative_focal_length;
+			m_views[i].screen_center = { 1.0f - ratio.x, ratio.y };
 
 			// Fix up weirdness in the rendering pipeline
 			m_views[i].relative_focal_length[(m_fov_axis+1)%2] *= (float)view_resolution[(m_fov_axis+1)%2] / (float)view_resolution[m_fov_axis];
@@ -2168,7 +2231,7 @@ void Testbed::begin_vr_frame_and_handle_vr_input() {
 		}
 
 		// Put all the views next to each other, but at half size
-		glfwSetWindowSize(m_glfw_window, total_size.x() / 2, (total_size.y() / 2) / n_views);
+		glfwSetWindowSize(m_glfw_window, total_size.x / 2, (total_size.y / 2) / n_views);
 
 		// VR controller input
 		const auto& hands = m_vr_frame_info->hands;
@@ -2176,9 +2239,9 @@ void Testbed::begin_vr_frame_and_handle_vr_input() {
 
 		// TRANSLATE BY STICK (if not pressing the stick)
 		if (!hands[0].pressing) {
-			Vector3f translate_vec = Vector3f{hands[0].thumbstick.x(), 0.0f, hands[0].thumbstick.y()} * m_camera_velocity * m_frame_ms.val() / 1000.0f;
-			if (translate_vec != Vector3f::Zero()) {
-				translate_camera(translate_vec, m_views.front().camera0.block<3, 3>(0, 0), false);
+			vec3 translate_vec = vec3{hands[0].thumbstick.x, 0.0f, hands[0].thumbstick.y} * m_camera_velocity * m_frame_ms.val() / 1000.0f;
+			if (translate_vec != vec3(0.0f)) {
+				translate_camera(translate_vec, mat3(m_views.front().camera0), false);
 			}
 		}
 
@@ -2188,10 +2251,11 @@ void Testbed::begin_vr_frame_and_handle_vr_input() {
 
 			// Turn around the up vector (equivalent to x-axis mouse drag) with right joystick left/right
 			float sensitivity = 0.35f;
-			m_camera.block<3, 3>(0, 0) = rotation_from_angles({-2.0f * PI() * sensitivity * hands[1].thumbstick.x() * m_frame_ms.val() / 1000.0f, 0.0f}) * m_camera.block<3, 3>(0, 0);
+			auto rot = rotation_from_angles({-2.0f * PI() * sensitivity * hands[1].thumbstick.x * m_frame_ms.val() / 1000.0f, 0.0f}) * mat3(m_camera);
+			m_camera = mat4x3(rot[0], rot[1], rot[2], m_camera[3]);
 
 			// Translate camera such that center of rotation was about the current view
-			m_camera.col(3) += prev_camera.block<3, 3>(0, 0) * views[0].pose.col(3) * m_scale - m_camera.block<3, 3>(0, 0) * views[0].pose.col(3) * m_scale;
+			m_camera[3] += mat3(prev_camera) * views[0].pose[3] * m_scale - mat3(m_camera) * views[0].pose[3] * m_scale;
 		}
 
 		// TRANSLATE, SCALE, AND ROTATE BY GRAB
@@ -2202,30 +2266,31 @@ void Testbed::begin_vr_frame_and_handle_vr_input() {
 			if (both_grabbing) {
 				drag_factor = 0.5f;
 
-				Vector3f prev_diff = hands[0].prev_grab_pos - hands[1].prev_grab_pos;
-				Vector3f diff = hands[0].grab_pos - hands[1].grab_pos;
-				Vector3f center = 0.5f * (hands[0].grab_pos + hands[1].grab_pos);
+				vec3 prev_diff = hands[0].prev_grab_pos - hands[1].prev_grab_pos;
+				vec3 diff = hands[0].grab_pos - hands[1].grab_pos;
+				vec3 center = 0.5f * (hands[0].grab_pos + hands[1].grab_pos);
 
-				Vector3f center_world = vr_to_world(0.5f * (hands[0].grab_pos + hands[1].grab_pos));
+				vec3 center_world = vr_to_world(0.5f * (hands[0].grab_pos + hands[1].grab_pos));
 
 				// Scale around center position of the two dragging hands. Makes the scaling feel similar to phone pinch-to-zoom
-				float scale = m_scale * prev_diff.norm() / diff.norm();
-				m_camera.col(3) = (view_pos() - center_world) * (scale / m_scale) + center_world;
+				float scale = m_scale * length(prev_diff) / length(diff);
+				m_camera[3] = (view_pos() - center_world) * (scale / m_scale) + center_world;
 				m_scale = scale;
 
 				// Take rotational component and project it to the nearest rotation about the up vector.
 				// We don't want to rotate the scene about any other axis.
-				Vector3f rot = prev_diff.normalized().cross(diff.normalized());
-				float rot_radians = std::asin(m_up_dir.dot(rot));
+				vec3 rot = cross(normalize(prev_diff), normalize(diff));
+				float rot_radians = std::asin(dot(m_up_dir, rot));
 
 				auto prev_camera = m_camera;
-				m_camera.block<3, 3>(0, 0) = AngleAxisf(rot_radians, m_up_dir) * m_camera.block<3, 3>(0, 0);
-				m_camera.col(3) += prev_camera.block<3, 3>(0, 0) * center * m_scale - m_camera.block<3, 3>(0, 0) * center * m_scale;
+				auto rotcam = rotmat(rot_radians, m_up_dir) * mat3(m_camera);
+				m_camera = mat4x3(rotcam[0], rotcam[1], rotcam[2], m_camera[3]);
+				m_camera[3] += mat3(prev_camera) * center * m_scale - mat3(m_camera) * center * m_scale;
 			}
 
 			for (const auto& hand : hands) {
 				if (hand.grabbing) {
-					m_camera.col(3) -= drag_factor * m_camera.block<3, 3>(0, 0) * hand.drag() * m_scale;
+					m_camera[3] -= drag_factor * mat3(m_camera) * hand.drag() * m_scale;
 				}
 			}
 		}
@@ -2234,7 +2299,7 @@ void Testbed::begin_vr_frame_and_handle_vr_input() {
 		if (m_testbed_mode == ETestbedMode::Nerf) {
 			for (const auto& hand : hands) {
 				if (hand.pressing) {
-					mark_density_grid_in_sphere_empty(vr_to_world(hand.pose.col(3)), m_scale * 0.05f, m_stream.get());
+					mark_density_grid_in_sphere_empty(vr_to_world(hand.pose[3]), m_scale * 0.05f, m_stream.get());
 				}
 			}
 		}
@@ -2339,7 +2404,7 @@ void Testbed::init_opengl_shaders() {
 	glGenVertexArrays(1, &m_blit_vao);
 }
 
-void Testbed::blit_texture(const Foveation& foveation, GLint rgba_texture, GLint rgba_filter_mode, GLint depth_texture, GLint framebuffer, const Vector2i& offset, const Vector2i& resolution) {
+void Testbed::blit_texture(const Foveation& foveation, GLint rgba_texture, GLint rgba_filter_mode, GLint depth_texture, GLint framebuffer, const ivec2& offset, const ivec2& resolution) {
 	if (m_blit_program == 0) {
 		return;
 	}
@@ -2401,7 +2466,7 @@ void Testbed::blit_texture(const Foveation& foveation, GLint rgba_texture, GLint
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, rgba_filter_mode);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-	glViewport(offset.x(), offset.y(), resolution.x(), resolution.y());
+	glViewport(offset.x, offset.y, resolution.x, resolution.y);
 
 	glDrawArrays(GL_TRIANGLES, 0, 3);
 
@@ -2436,17 +2501,17 @@ void Testbed::draw_gui() {
 	glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
 	glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-	Vector2i extent = Vector2f{(float)display_w / m_n_views.x(), (float)display_h / m_n_views.y()}.cast<int>();
+	ivec2 extent = ivec2((float)display_w / m_n_views.x, (float)display_h / m_n_views.y);
 
 	int i = 0;
-	for (int y = 0; y < m_n_views.y(); ++y) {
-		for (int x = 0; x < m_n_views.x(); ++x) {
+	for (int y = 0; y < m_n_views.y; ++y) {
+		for (int x = 0; x < m_n_views.x; ++x) {
 			if (i >= m_views.size()) {
 				break;
 			}
 
 			auto& view = m_views[i];
-			Vector2i top_left{x * extent.x(), display_h - (y + 1) * extent.y()};
+			ivec2 top_left{x * extent.x, display_h - (y + 1) * extent.y};
 			blit_texture(m_foveated_rendering_visualize ? Foveation{} : view.foveation, m_rgba_render_textures.at(i)->texture(), m_foveated_rendering ? GL_LINEAR : GL_NEAREST, m_depth_render_textures.at(i)->texture(), 0, top_left, extent);
 
 			++i;
@@ -2461,8 +2526,8 @@ void Testbed::draw_gui() {
 
 	auto draw_mesh = [&]() {
 		glClear(GL_DEPTH_BUFFER_BIT);
-		Vector2i res(display_w, display_h);
-		Vector2f focal_length = calc_focal_length(res, m_relative_focal_length, m_fov_axis, m_zoom);
+		ivec2 res(display_w, display_h);
+		vec2 focal_length = calc_focal_length(res, m_relative_focal_length, m_fov_axis, m_zoom);
 		draw_mesh_gl(m_mesh.verts, m_mesh.vert_normals, m_mesh.vert_colors, m_mesh.indices, res, focal_length, m_smoothed_camera, render_screen_center(m_screen_center), (int)m_mesh_render_mode);
 	};
 
@@ -2495,7 +2560,7 @@ void Testbed::draw_gui() {
 #endif //NGP_GUI
 
 __global__ void to_8bit_color_kernel(
-	Vector2i resolution,
+	ivec2 resolution,
 	EColorSpace output_color_space,
 	cudaSurfaceObject_t surface,
 	uint8_t* result
@@ -2503,19 +2568,19 @@ __global__ void to_8bit_color_kernel(
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
 
-	if (x >= resolution.x() || y >= resolution.y()) {
+	if (x >= resolution.x || y >= resolution.y) {
 		return;
 	}
 
-	Array4f color;
+	vec4 color;
 	surf2Dread((float4*)&color, surface, x * sizeof(float4), y);
 
 	if (output_color_space == EColorSpace::Linear) {
-		color.head<3>() = linear_to_srgb(color.head<3>());
+		color.rgb = linear_to_srgb(color.rgb);
 	}
 
 	for (uint32_t i = 0; i < 3; ++i) {
-		result[(x + resolution.x() * y) * 3 + i] = (uint8_t)(tcnn::clamp(color[i], 0.0f, 1.0f) * 255.0f + 0.5f);
+		result[(x + resolution.x * y) * 3 + i] = (uint8_t)(tcnn::clamp(color[i], 0.0f, 1.0f) * 255.0f + 0.5f);
 	}
 }
 
@@ -2537,11 +2602,11 @@ void Testbed::prepare_next_camera_path_frame() {
 			}
 		}
 
-		Vector2i res = m_views.front().render_buffer->out_resolution();
+		ivec2 res = m_views.front().render_buffer->out_resolution();
 		const dim3 threads = { 16, 8, 1 };
-		const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
+		const dim3 blocks = { div_round_up((uint32_t)res.x, threads.x), div_round_up((uint32_t)res.y, threads.y), 1 };
 
-		GPUMemory<uint8_t> image_data(res.prod() * 3);
+		GPUMemory<uint8_t> image_data(compMul(res) * 3);
 		to_8bit_color_kernel<<<blocks, threads>>>(
 			res,
 			EColorSpace::SRGB, // the GUI always renders in SRGB
@@ -2552,7 +2617,7 @@ void Testbed::prepare_next_camera_path_frame() {
 		m_render_futures.emplace_back(m_thread_pool.enqueue_task([image_data=std::move(image_data), frame_idx=m_camera_path.render_frame_idx++, res, tmp_dir] {
 			std::vector<uint8_t> cpu_image_data(image_data.size());
 			CUDA_CHECK_THROW(cudaMemcpy(cpu_image_data.data(), image_data.data(), image_data.bytes(), cudaMemcpyDeviceToHost));
-			write_stbi(tmp_dir / fmt::format("{:06d}.jpg", frame_idx), res.x(), res.y(), 3, cpu_image_data.data(), 100);
+			write_stbi(tmp_dir / fmt::format("{:06d}.jpg", frame_idx), res.x, res.y, 3, cpu_image_data.data(), 100);
 		}));
 
 		reset_accumulation(true);
@@ -2671,7 +2736,7 @@ void Testbed::train_and_render(bool skip_rendering) {
 		m_render_ms.update(std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now()-start).count());
 	}};
 
-	if ((m_smoothed_camera - m_camera).norm() < 0.001f) {
+	if (norm(m_smoothed_camera - m_camera) < 0.001f) {
 		m_smoothed_camera = m_camera;
 	} else if (!m_camera_path.rendering) {
 		reset_accumulation(true);
@@ -2702,7 +2767,7 @@ void Testbed::train_and_render(bool skip_rendering) {
 		view.camera0 = m_smoothed_camera;
 
 		// Motion blur over the fraction of time that the shutter is open. Interpolate in log-space to preserve rotations.
-		view.camera1 = m_camera_path.rendering ? log_space_lerp(m_smoothed_camera, m_camera_path.render_frame_end_camera, m_camera_path.render_settings.shutter_fraction) : view.camera0;
+		view.camera1 = m_camera_path.rendering ? camera_lerp(m_smoothed_camera, m_camera_path.render_frame_end_camera, m_camera_path.render_settings.shutter_fraction) : view.camera0;
 
 		view.visualized_dimension = m_visualized_dimension;
 		view.relative_focal_length = m_relative_focal_length;
@@ -2713,13 +2778,13 @@ void Testbed::train_and_render(bool skip_rendering) {
 	} else {
 		int n_views = n_dimensions_to_visualize()+1;
 
-		float d = std::sqrt((float)m_window_res.x() * (float)m_window_res.y() / (float)n_views);
+		float d = std::sqrt((float)m_window_res.x * (float)m_window_res.y / (float)n_views);
 
-		int nx = (int)std::ceil((float)m_window_res.x() / d);
+		int nx = (int)std::ceil((float)m_window_res.x / d);
 		int ny = (int)std::ceil((float)n_views / (float)nx);
 
 		m_n_views = {nx, ny};
-		Vector2i view_size = {m_window_res.x() / nx, m_window_res.y() / ny};
+		ivec2 view_size = {m_window_res.x / nx, m_window_res.y / ny};
 
 		set_n_views(n_views);
 
@@ -2763,8 +2828,8 @@ void Testbed::train_and_render(bool skip_rendering) {
 
 		size_t n_pixels = 0, n_pixels_full_res = 0;
 		for (const auto& view : m_views) {
-			n_pixels += view.render_buffer->in_resolution().prod();
-			n_pixels_full_res += view.full_resolution.prod();
+			n_pixels += compMul(view.render_buffer->in_resolution());
+			n_pixels_full_res += compMul(view.full_resolution);
 		}
 
 		float pixel_ratio = (n_pixels == 0 || (m_train && m_training_step == 0)) ? (1.0f / 256.0f) : ((float)n_pixels / (float)n_pixels_full_res);
@@ -2784,14 +2849,14 @@ void Testbed::train_and_render(bool skip_rendering) {
 				view.render_buffer->disable_dlss();
 			}
 
-			Vector2i render_res = view.render_buffer->in_resolution();
-			Vector2i new_render_res = (view.full_resolution.cast<float>() * factor).cast<int>().cwiseMin(view.full_resolution).cwiseMax(view.full_resolution / 16);
+			ivec2 render_res = view.render_buffer->in_resolution();
+			ivec2 new_render_res = clamp(ivec2(vec2(view.full_resolution) * factor), view.full_resolution / 16, view.full_resolution);
 
 			if (m_camera_path.rendering) {
 				new_render_res = m_camera_path.render_settings.resolution;
 			}
 
-			float ratio = std::sqrt((float)render_res.prod() / (float)new_render_res.prod());
+			float ratio = std::sqrt((float)compMul(render_res) / (float)compMul(new_render_res));
 			if (ratio > 1.2f || ratio < 0.8f || factor == 1.0f || !m_dynamic_res || m_camera_path.rendering) {
 				render_res = new_render_res;
 			}
@@ -2805,7 +2870,7 @@ void Testbed::train_and_render(bool skip_rendering) {
 
 			if (m_foveated_rendering) {
 				if (m_dynamic_foveated_rendering) {
-					Vector2f resolution_scale = render_res.cast<float>().cwiseQuotient(view.full_resolution.cast<float>());
+					vec2 resolution_scale = vec2(render_res) / vec2(view.full_resolution);
 
 					// Only start foveation when DLSS if off or if DLSS is asked to do more than 1.5x upscaling.
 					// The reason for the 1.5x threshold is that DLSS can do up to 3x upscaling, at which point a foveation
@@ -2813,12 +2878,12 @@ void Testbed::train_and_render(bool skip_rendering) {
 					// suppressing DLSS's artifacts.
 					float foveation_begin_factor = m_dlss ? 1.5f : 1.0f;
 
-					resolution_scale = (resolution_scale * foveation_begin_factor).cwiseMin(1.0f).cwiseMax(1.0f / m_foveated_rendering_max_scaling);
-					view.foveation = {resolution_scale, Vector2f::Ones() - view.screen_center, Vector2f::Constant(m_foveated_rendering_full_res_diameter * 0.5f)};
+					resolution_scale = clamp(resolution_scale * foveation_begin_factor, vec2(1.0f / m_foveated_rendering_max_scaling), vec2(1.0f));
+					view.foveation = {resolution_scale, vec2(1.0f) - view.screen_center, vec2(m_foveated_rendering_full_res_diameter * 0.5f)};
 
-					m_foveated_rendering_scaling = 1.0f / resolution_scale.mean();
+					m_foveated_rendering_scaling = 2.0f / compAdd(resolution_scale);
 				} else {
-					view.foveation = {Vector2f::Constant(1.0f / m_foveated_rendering_scaling), Vector2f::Ones() - view.screen_center, Vector2f::Constant(m_foveated_rendering_full_res_diameter * 0.5f)};
+					view.foveation = {vec2(1.0f / m_foveated_rendering_scaling), vec2(1.0f) - view.screen_center, vec2(m_foveated_rendering_full_res_diameter * 0.5f)};
 				}
 			} else {
 				view.foveation = {};
@@ -2868,14 +2933,14 @@ void Testbed::train_and_render(bool skip_rendering) {
 	}
 
 	if (m_picture_in_picture_res > 0) {
-		Vector2i res(m_picture_in_picture_res, m_picture_in_picture_res * 9/16);
+		ivec2 res(m_picture_in_picture_res, m_picture_in_picture_res * 9/16);
 		m_pip_render_buffer->resize(res);
 		if (m_pip_render_buffer->spp() < 8) {
 			// a bit gross, but let's copy the keyframe's state into the global state in order to not have to plumb through the fov etc to render_frame.
 			CameraKeyframe backup = copy_camera_to_keyframe();
 			CameraKeyframe pip_kf = m_camera_path.eval_camera_path(m_camera_path.play_time);
 			set_camera_from_keyframe(pip_kf);
-			render_frame(m_stream.get(), pip_kf.m(), pip_kf.m(), pip_kf.m(), m_screen_center, m_relative_focal_length, Eigen::Vector4f::Zero(), {}, {}, m_visualized_dimension, *m_pip_render_buffer);
+			render_frame(m_stream.get(), pip_kf.m(), pip_kf.m(), pip_kf.m(), m_screen_center, m_relative_focal_length, vec4(0.0f), {}, {}, m_visualized_dimension, *m_pip_render_buffer);
 			set_camera_from_keyframe(backup);
 
 			m_pip_render_texture->blit_from_cuda_mapping();
@@ -3002,7 +3067,7 @@ void Testbed::init_window(int resw, int resh, bool hidden, bool second_window) {
 
 	glfwWindowHint(GLFW_VISIBLE, hidden ? GLFW_FALSE : GLFW_TRUE);
 	std::string title = "Instant Neural Graphics Primitives";
-	m_glfw_window = glfwCreateWindow(m_window_res.x(), m_window_res.y(), title.c_str(), NULL, NULL);
+	m_glfw_window = glfwCreateWindow(m_window_res.x, m_window_res.y, title.c_str(), NULL, NULL);
 	if (m_glfw_window == NULL) {
 		throw std::runtime_error{"GLFW window could not be created."};
 	}
@@ -3335,12 +3400,12 @@ bool Testbed::frame() {
 			for (size_t i = 0; i < n_views; ++i) {
 				const auto& vr_view = m_vr_frame_info->views.at(i);
 
-				Vector2i resolution = {
+				ivec2 resolution = {
 					vr_view.view.subImage.imageRect.extent.width,
 					vr_view.view.subImage.imageRect.extent.height,
 				};
 
-				blit_texture(m_views.at(i).foveation, m_rgba_render_textures.at(i)->texture(), GL_LINEAR, m_depth_render_textures.at(i)->texture(), vr_view.framebuffer, Vector2i::Zero(), resolution);
+				blit_texture(m_views.at(i).foveation, m_rgba_render_textures.at(i)->texture(), GL_LINEAR, m_depth_render_textures.at(i)->texture(), vr_view.framebuffer, ivec2(0), resolution);
 			}
 
 			glFinish();
@@ -3369,7 +3434,7 @@ bool Testbed::want_repl() {
 void Testbed::apply_camera_smoothing(float elapsed_ms) {
 	if (m_camera_smoothing) {
 		float decay = std::pow(0.02f, elapsed_ms/1000.0f);
-		m_smoothed_camera = log_space_lerp(m_smoothed_camera, m_camera, 1.0f - decay);
+		m_smoothed_camera = camera_lerp(m_smoothed_camera, m_camera, 1.0f - decay);
 	} else {
 		m_smoothed_camera = m_camera;
 	}
@@ -3410,15 +3475,15 @@ float Testbed::fov() const {
 }
 
 void Testbed::set_fov(float val) {
-	m_relative_focal_length = Vector2f::Constant(fov_to_focal_length(1, val));
+	m_relative_focal_length = vec2(fov_to_focal_length(1, val));
 }
 
-Vector2f Testbed::fov_xy() const {
-	return focal_length_to_fov(Vector2i::Ones(), m_relative_focal_length);
+vec2 Testbed::fov_xy() const {
+	return focal_length_to_fov(ivec2(1), m_relative_focal_length);
 }
 
-void Testbed::set_fov_xy(const Vector2f& val) {
-	m_relative_focal_length = fov_to_focal_length(Vector2i::Ones(), val);
+void Testbed::set_fov_xy(const vec2& val) {
+	m_relative_focal_length = fov_to_focal_length(ivec2(1), val);
 }
 
 size_t Testbed::n_params() {
@@ -3456,16 +3521,6 @@ void Testbed::set_max_level(float maxlevel) {
 	auto hg_enc = dynamic_cast<GridEncoding<network_precision_t>*>(m_encoding.get());
 	if (hg_enc) {
 		hg_enc->set_max_level(maxlevel);
-	}
-
-	reset_accumulation();
-}
-
-void Testbed::set_min_level(float minlevel) {
-	if (!m_network) return;
-	auto hg_enc = dynamic_cast<GridEncoding<network_precision_t>*>(m_encoding.get());
-	if (hg_enc) {
-		hg_enc->set_quantize_threshold(powf(minlevel, 4.f) * 0.2f);
 	}
 
 	reset_accumulation();
@@ -3567,16 +3622,16 @@ void Testbed::reset_network(bool clear_density_grid) {
 	if (to_lower(encoding_config.value("otype", "OneBlob")).find("grid") != std::string::npos) {
 		encoding_config["n_pos_dims"] = dims.n_pos;
 
-		const uint32_t n_features_per_level = encoding_config.value("n_features_per_level", 2u);
+		m_n_features_per_level = encoding_config.value("n_features_per_level", 2u);
 
 		if (encoding_config.contains("n_features") && encoding_config["n_features"] > 0) {
-			m_num_levels = (uint32_t)encoding_config["n_features"] / n_features_per_level;
+			m_n_levels = (uint32_t)encoding_config["n_features"] / m_n_features_per_level;
 		} else {
-			m_num_levels = encoding_config.value("n_levels", 16u);
+			m_n_levels = encoding_config.value("n_levels", 16u);
 		}
 
-		m_level_stats.resize(m_num_levels);
-		m_first_layer_column_stats.resize(m_num_levels);
+		m_level_stats.resize(m_n_levels);
+		m_first_layer_column_stats.resize(m_n_levels);
 
 		const uint32_t log2_hashmap_size = encoding_config.value("log2_hashmap_size", 15);
 
@@ -3588,15 +3643,15 @@ void Testbed::reset_network(bool clear_density_grid) {
 
 		float desired_resolution = 2048.0f; // Desired resolution of the finest hashgrid level over the unit cube
 		if (m_testbed_mode == ETestbedMode::Image) {
-			desired_resolution = m_image.resolution.maxCoeff() / 2.0f;
+			desired_resolution = compMax(m_image.resolution) / 2.0f;
 		} else if (m_testbed_mode == ETestbedMode::Volume) {
 			desired_resolution = m_volume.world2index_scale;
 		}
 
 		// Automatically determine suitable per_level_scale
 		m_per_level_scale = encoding_config.value("per_level_scale", 0.0f);
-		if (m_per_level_scale <= 0.0f && m_num_levels > 1) {
-			m_per_level_scale = std::exp(std::log(desired_resolution * (float)m_nerf.training.dataset.aabb_scale / (float)m_base_grid_resolution) / (m_num_levels-1));
+		if (m_per_level_scale <= 0.0f && m_n_levels > 1) {
+			m_per_level_scale = std::exp(std::log(desired_resolution * (float)m_nerf.training.dataset.aabb_scale / (float)m_base_grid_resolution) / (m_n_levels-1));
 			encoding_config["per_level_scale"] = m_per_level_scale;
 		}
 
@@ -3604,9 +3659,9 @@ void Testbed::reset_network(bool clear_density_grid) {
 			<< "GridEncoding: "
 			<< " Nmin=" << m_base_grid_resolution
 			<< " b=" << m_per_level_scale
-			<< " F=" << n_features_per_level
+			<< " F=" << m_n_features_per_level
 			<< " T=2^" << log2_hashmap_size
-			<< " L=" << m_num_levels
+			<< " L=" << m_n_levels
 			;
 	}
 
@@ -3615,10 +3670,10 @@ void Testbed::reset_network(bool clear_density_grid) {
 
 	size_t n_encoding_params = 0;
 	if (m_testbed_mode == ETestbedMode::Nerf) {
-		m_nerf.training.cam_exposure.resize(m_nerf.training.dataset.n_images, AdamOptimizer<Array3f>(1e-3f, Array3f::Zero()));
-		m_nerf.training.cam_pos_offset.resize(m_nerf.training.dataset.n_images, AdamOptimizer<Vector3f>(1e-4f, Vector3f::Zero()));
+		m_nerf.training.cam_exposure.resize(m_nerf.training.dataset.n_images, AdamOptimizer<vec3>(1e-3f));
+		m_nerf.training.cam_pos_offset.resize(m_nerf.training.dataset.n_images, AdamOptimizer<vec3>(1e-4f));
 		m_nerf.training.cam_rot_offset.resize(m_nerf.training.dataset.n_images, RotationAdamOptimizer(1e-4f));
-		m_nerf.training.cam_focal_length_offset = AdamOptimizer<Vector2f>(1e-5f);
+		m_nerf.training.cam_focal_length_offset = AdamOptimizer<vec2>(1e-5f);
 
 		m_nerf.training.reset_extra_dims(m_rng);
 
@@ -3644,13 +3699,13 @@ void Testbed::reset_network(bool clear_density_grid) {
 
 		m_network = m_nerf_network = primary_device().nerf_network();
 
-		m_encoding = m_nerf_network->encoding();
+		m_encoding = m_nerf_network->pos_encoding();
 		n_encoding_params = m_encoding->n_params() + m_nerf_network->dir_encoding()->n_params();
 
 		tlog::info()
 			<< "Density model: " << dims.n_pos
 			<< "--[" << std::string(encoding_config["otype"])
-			<< "]-->" << m_nerf_network->encoding()->padded_output_width()
+			<< "]-->" << m_nerf_network->pos_encoding()->padded_output_width()
 			<< "--[" << std::string(network_config["otype"])
 			<< "(neurons=" << (int)network_config["n_neurons"] << ",layers=" << ((int)network_config["n_hidden_layers"]+2) << ")"
 			<< "]-->" << 1
@@ -3665,11 +3720,12 @@ void Testbed::reset_network(bool clear_density_grid) {
 			<< "]-->" << 3
 			;
 
+
 		// Create distortion map model
 		{
 			json& distortion_map_optimizer_config =  config.contains("distortion_map") && config["distortion_map"].contains("optimizer") ? config["distortion_map"]["optimizer"] : optimizer_config;
 
-			m_distortion.resolution = Vector2i::Constant(32);
+			m_distortion.resolution = ivec2(32);
 			if (config.contains("distortion_map") && config["distortion_map"].contains("resolution")) {
 				from_json(config["distortion_map"]["resolution"], m_distortion.resolution);
 			}
@@ -3848,7 +3904,6 @@ Testbed::Testbed(ETestbedMode mode) {
 
 	set_mode(mode);
 	set_exposure(0);
-	set_min_level(0.f);
 	set_max_level(1.f);
 
 	reset_camera();
@@ -3971,27 +4026,27 @@ void Testbed::train(uint32_t batch_size) {
 	}
 }
 
-Vector2f Testbed::calc_focal_length(const Vector2i& resolution, const Vector2f& relative_focal_length, int fov_axis, float zoom) const {
-	return relative_focal_length * resolution[fov_axis] * zoom;
+vec2 Testbed::calc_focal_length(const ivec2& resolution, const vec2& relative_focal_length, int fov_axis, float zoom) const {
+	return relative_focal_length * (float)resolution[fov_axis] * zoom;
 }
 
-Vector2f Testbed::render_screen_center(const Vector2f& screen_center) const {
+vec2 Testbed::render_screen_center(const vec2& screen_center) const {
 	// see pixel_to_ray for how screen center is used; 0.5, 0.5 is 'normal'. we flip so that it becomes the point in the original image we want to center on.
-	return (Vector2f::Constant(0.5f) - screen_center) * m_zoom + Vector2f::Constant(0.5f);
+	return (vec2(0.5f) - screen_center) * m_zoom + vec2(0.5f);
 }
 
 __global__ void dlss_prep_kernel(
-	Vector2i resolution,
+	ivec2 resolution,
 	uint32_t sample_index,
-	Vector2f focal_length,
-	Vector2f screen_center,
-	Vector3f parallax_shift,
+	vec2 focal_length,
+	vec2 screen_center,
+	vec3 parallax_shift,
 	bool snap_to_pixel_centers,
 	float* depth_buffer,
 	const float znear,
 	const float zfar,
-	Matrix<float, 3, 4> camera,
-	Matrix<float, 3, 4> prev_camera,
+	mat4x3 camera,
+	mat4x3 prev_camera,
 	cudaSurfaceObject_t depth_surface,
 	cudaSurfaceObject_t mvec_surface,
 	cudaSurfaceObject_t exposure_surface,
@@ -4002,17 +4057,17 @@ __global__ void dlss_prep_kernel(
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
 
-	if (x >= resolution.x() || y >= resolution.y()) {
+	if (x >= resolution.x || y >= resolution.y) {
 		return;
 	}
 
-	uint32_t idx = x + resolution.x() * y;
+	uint32_t idx = x + resolution.x * y;
 
 	uint32_t x_orig = x;
 	uint32_t y_orig = y;
 
 	const float depth = depth_buffer[idx];
-	Vector2f mvec = motion_vector(
+	vec2 mvec = motion_vector(
 		sample_index,
 		{x, y},
 		resolution,
@@ -4028,7 +4083,7 @@ __global__ void dlss_prep_kernel(
 		lens
 	);
 
-	surf2Dwrite(make_float2(mvec.x(), mvec.y()), mvec_surface, x_orig * sizeof(float2), y_orig);
+	surf2Dwrite(make_float2(mvec.x, mvec.y), mvec_surface, x_orig * sizeof(float2), y_orig);
 
 	// DLSS was trained on games, which presumably used standard normalized device coordinates (ndc)
 	// depth buffers. So: convert depth to NDC with reasonable near- and far planes.
@@ -4042,20 +4097,20 @@ __global__ void dlss_prep_kernel(
 }
 
 __global__ void spherical_checkerboard_kernel(
-	Vector2i resolution,
-	Vector2f focal_length,
-	Matrix<float, 3, 4> camera,
-	Vector2f screen_center,
-	Vector3f parallax_shift,
+	ivec2 resolution,
+	vec2 focal_length,
+	mat4x3 camera,
+	vec2 screen_center,
+	vec3 parallax_shift,
 	Foveation foveation,
 	Lens lens,
-	Array4f background_color,
-	Array4f* frame_buffer
+	vec4 background_color,
+	vec4* frame_buffer
 ) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
 
-	if (x >= resolution.x() || y >= resolution.y()) {
+	if (x >= resolution.x || y >= resolution.y) {
 		return;
 	}
 
@@ -4077,35 +4132,35 @@ __global__ void spherical_checkerboard_kernel(
 	);
 
 	// Blend with checkerboard to break up reprojection weirdness in some VR runtimes
-	host_device_swap(ray.d.z(), ray.d.y());
-	Vector2f spherical = dir_to_spherical(ray.d.normalized()) * 32.0f / PI();
-	const Array4f dark_gray = {0.5f, 0.5f, 0.5f, 1.0f};
-	const Array4f light_gray = {0.55f, 0.55f, 0.55f, 1.0f};
-	Array4f checker = fabsf(fmodf(floorf(spherical.x()) + floorf(spherical.y()), 2.0f)) < 0.5f ? dark_gray : light_gray;
+	host_device_swap(ray.d.z, ray.d.y);
+	vec2 spherical = dir_to_spherical(normalize(ray.d)) * 32.0f / PI();
+	const vec4 dark_gray = {0.5f, 0.5f, 0.5f, 1.0f};
+	const vec4 light_gray = {0.55f, 0.55f, 0.55f, 1.0f};
+	vec4 checker = fabsf(fmodf(floorf(spherical.x) + floorf(spherical.y), 2.0f)) < 0.5f ? dark_gray : light_gray;
 
 	// Blend background color on top of checkerboard first (checkerboard is meant to be "behind" the background,
 	// representing transparency), and then blend the result behind the frame buffer.
-	background_color.head<3>() = srgb_to_linear(background_color.head<3>());
-	background_color += (1.0f - background_color.w()) * checker;
+	background_color.rgb = srgb_to_linear(background_color.rgb);
+	background_color += (1.0f - background_color.a) * checker;
 
-	uint32_t idx = x + resolution.x() * y;
-	frame_buffer[idx] += (1.0f - frame_buffer[idx].w()) * background_color;
+	uint32_t idx = x + resolution.x * y;
+	frame_buffer[idx] += (1.0f - frame_buffer[idx].a) * background_color;
 }
 
 __global__ void vr_overlay_hands_kernel(
-	Vector2i resolution,
-	Vector2f focal_length,
-	Matrix<float, 3, 4> camera,
-	Vector2f screen_center,
-	Vector3f parallax_shift,
+	ivec2 resolution,
+	vec2 focal_length,
+	mat4x3 camera,
+	vec2 screen_center,
+	vec3 parallax_shift,
 	Foveation foveation,
 	Lens lens,
-	Vector3f left_hand_pos,
+	vec3 left_hand_pos,
 	float left_grab_strength,
-	Array4f left_hand_color,
-	Vector3f right_hand_pos,
+	vec4 left_hand_color,
+	vec3 right_hand_pos,
 	float right_grab_strength,
-	Array4f right_hand_color,
+	vec4 right_hand_color,
 	float hand_radius,
 	EColorSpace output_color_space,
 	cudaSurfaceObject_t surface
@@ -4114,7 +4169,7 @@ __global__ void vr_overlay_hands_kernel(
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
 
-	if (x >= resolution.x() || y >= resolution.y()) {
+	if (x >= resolution.x || y >= resolution.y) {
 		return;
 	}
 
@@ -4135,17 +4190,17 @@ __global__ void vr_overlay_hands_kernel(
 		lens
 	);
 
-	Array4f color = Array4f::Zero();
-	auto composit_hand = [&](Vector3f hand_pos, float grab_strength, Array4f hand_color) {
+	vec4 color = vec4(0.0f);
+	auto composit_hand = [&](vec3 hand_pos, float grab_strength, vec4 hand_color) {
 		// Don't render the hand indicator if it's behind the ray origin.
-		if (ray.d.dot(hand_pos - ray.o) < 0.0f) {
+		if (dot(ray.d, hand_pos - ray.o) < 0.0f) {
 			return;
 		}
 
 		float distance = ray.distance_to(hand_pos);
 
-		Array4f base_color = Array4f::Zero();
-		const Array4f border_color = {0.4f, 0.4f, 0.4f, 0.4f};
+		vec4 base_color = vec4(0.0f);
+		const vec4 border_color = {0.4f, 0.4f, 0.4f, 0.4f};
 
 		// Divide hand radius into an inner part (4/5ths) and a border (1/5th).
 		float radius = hand_radius * 0.8f;
@@ -4163,11 +4218,11 @@ __global__ void vr_overlay_hands_kernel(
 		}
 
 		// Make hand color opaque when grabbing.
-		base_color.w() = grab_strength + (1.0f - grab_strength) * base_color.w();
-		color += base_color * (1.0f - color.w());
+		base_color.a = grab_strength + (1.0f - grab_strength) * base_color.a;
+		color += base_color * (1.0f - color.a);
 	};
 
-	if (ray.d.dot(left_hand_pos - ray.o) < ray.d.dot(right_hand_pos - ray.o)) {
+	if (dot(ray.d, left_hand_pos - ray.o) < dot(ray.d, right_hand_pos - ray.o)) {
 		composit_hand(left_hand_pos, left_grab_strength, left_hand_color);
 		composit_hand(right_hand_pos, right_grab_strength, right_hand_color);
 	} else {
@@ -4176,16 +4231,16 @@ __global__ void vr_overlay_hands_kernel(
 	}
 
 	// Blend with existing color of pixel
-	Array4f prev_color;
+	vec4 prev_color;
 	surf2Dread((float4*)&prev_color, surface, x * sizeof(float4), y);
 	if (output_color_space == EColorSpace::SRGB) {
-		prev_color.head<3>() = srgb_to_linear(prev_color.head<3>());
+		prev_color.rgb = srgb_to_linear(prev_color.rgb);
 	}
 
-	color += (1.0f - color.w()) * prev_color;
+	color += (1.0f - color.a) * prev_color;
 
 	if (output_color_space == EColorSpace::SRGB) {
-		color.head<3>() = linear_to_srgb(color.head<3>());
+		color.rgb = linear_to_srgb(color.rgb);
 	}
 
 	surf2Dwrite(to_float4(color), surface, x * sizeof(float4), y);
@@ -4193,12 +4248,12 @@ __global__ void vr_overlay_hands_kernel(
 
 void Testbed::render_frame(
 	cudaStream_t stream,
-	const Matrix<float, 3, 4>& camera_matrix0,
-	const Matrix<float, 3, 4>& camera_matrix1,
-	const Matrix<float, 3, 4>& prev_camera_matrix,
-	const Vector2f& orig_screen_center,
-	const Vector2f& relative_focal_length,
-	const Vector4f& nerf_rolling_shutter,
+	const mat4x3& camera_matrix0,
+	const mat4x3& camera_matrix1,
+	const mat4x3& prev_camera_matrix,
+	const vec2& orig_screen_center,
+	const vec2& relative_focal_length,
+	const vec4& nerf_rolling_shutter,
 	const Foveation& foveation,
 	const Foveation& prev_foveation,
 	int visualized_dimension,
@@ -4222,11 +4277,11 @@ void Testbed::render_frame(
 
 void Testbed::render_frame_main(
 	CudaDevice& device,
-	const Matrix<float, 3, 4>& camera_matrix0,
-	const Matrix<float, 3, 4>& camera_matrix1,
-	const Vector2f& orig_screen_center,
-	const Vector2f& relative_focal_length,
-	const Vector4f& nerf_rolling_shutter,
+	const mat4x3& camera_matrix0,
+	const mat4x3& camera_matrix1,
+	const vec2& orig_screen_center,
+	const vec2& relative_focal_length,
+	const vec4& nerf_rolling_shutter,
 	const Foveation& foveation,
 	int visualized_dimension
 ) {
@@ -4236,8 +4291,8 @@ void Testbed::render_frame_main(
 		return;
 	}
 
-	Vector2f focal_length = calc_focal_length(device.render_buffer_view().resolution, relative_focal_length, m_fov_axis, m_zoom);
-	Vector2f screen_center = render_screen_center(orig_screen_center);
+	vec2 focal_length = calc_focal_length(device.render_buffer_view().resolution, relative_focal_length, m_fov_axis, m_zoom);
+	vec2 screen_center = render_screen_center(orig_screen_center);
 
 	switch (m_testbed_mode) {
 		case ETestbedMode::Nerf:
@@ -4251,8 +4306,8 @@ void Testbed::render_frame_main(
 					if (m_sdf.brick_data.size() == 0) {
 						tlog::info() << "Building voxel brick positions for " << m_sdf.triangle_octree->n_dual_nodes() << " dual nodes.";
 						m_sdf.brick_res = 5;
-						std::vector<Eigen::Vector3f> positions = m_sdf.triangle_octree->build_brick_voxel_position_list(m_sdf.brick_res);
-						GPUMemory<Eigen::Vector3f> positions_gpu;
+						std::vector<vec3> positions = m_sdf.triangle_octree->build_brick_voxel_position_list(m_sdf.brick_res);
+						GPUMemory<vec3> positions_gpu;
 						positions_gpu.resize_and_copy_from_host(positions);
 						m_sdf.brick_data.resize(positions.size());
 						tlog::info() << positions_gpu.size() << " voxel brick positions. Computing SDFs.";
@@ -4269,7 +4324,7 @@ void Testbed::render_frame_main(
 				}
 
 				distance_fun_t distance_fun =
-					m_render_ground_truth ? (distance_fun_t)[&](uint32_t n_elements, const Vector3f* positions, float* distances, cudaStream_t stream) {
+					m_render_ground_truth ? (distance_fun_t)[&](uint32_t n_elements, const vec3* positions, float* distances, cudaStream_t stream) {
 						if (m_sdf.groundtruth_mode == ESDFGroundTruthMode::SDFBricks) {
 							// linear_kernel(sdf_brick_kernel, 0, stream,
 							// 	n_elements,
@@ -4293,7 +4348,7 @@ void Testbed::render_frame_main(
 								stream
 							);
 						}
-					} : (distance_fun_t)[&](uint32_t n_elements, const Vector3f* positions, float* distances, cudaStream_t stream) {
+					} : (distance_fun_t)[&](uint32_t n_elements, const vec3* positions, float* distances, cudaStream_t stream) {
 						n_elements = next_multiple(n_elements, tcnn::batch_size_granularity);
 						GPUMatrix<float> positions_matrix((float*)positions, 3, n_elements);
 						GPUMatrix<float, RM> distances_matrix(distances, 1, n_elements);
@@ -4301,9 +4356,9 @@ void Testbed::render_frame_main(
 					};
 
 				normals_fun_t normals_fun =
-					m_render_ground_truth ? (normals_fun_t)[&](uint32_t n_elements, const Vector3f* positions, Vector3f* normals, cudaStream_t stream) {
+					m_render_ground_truth ? (normals_fun_t)[&](uint32_t n_elements, const vec3* positions, vec3* normals, cudaStream_t stream) {
 						// NO-OP. Normals will automatically be populated by raytrace
-					} : (normals_fun_t)[&](uint32_t n_elements, const Vector3f* positions, Vector3f* normals, cudaStream_t stream) {
+					} : (normals_fun_t)[&](uint32_t n_elements, const vec3* positions, vec3* normals, cudaStream_t stream) {
 						n_elements = next_multiple(n_elements, tcnn::batch_size_granularity);
 						GPUMatrix<float> positions_matrix((float*)positions, 3, n_elements);
 						GPUMatrix<float> normals_matrix((float*)normals, 3, n_elements);
@@ -4337,17 +4392,17 @@ void Testbed::render_frame_main(
 
 void Testbed::render_frame_epilogue(
 	cudaStream_t stream,
-	const Matrix<float, 3, 4>& camera_matrix0,
-	const Matrix<float, 3, 4>& prev_camera_matrix,
-	const Vector2f& orig_screen_center,
-	const Vector2f& relative_focal_length,
+	const mat4x3& camera_matrix0,
+	const mat4x3& prev_camera_matrix,
+	const vec2& orig_screen_center,
+	const vec2& relative_focal_length,
 	const Foveation& foveation,
 	const Foveation& prev_foveation,
 	CudaRenderBuffer& render_buffer,
 	bool to_srgb
 ) {
-	Vector2f focal_length = calc_focal_length(render_buffer.in_resolution(), relative_focal_length, m_fov_axis, m_zoom);
-	Vector2f screen_center = render_screen_center(orig_screen_center);
+	vec2 focal_length = calc_focal_length(render_buffer.in_resolution(), relative_focal_length, m_fov_axis, m_zoom);
+	vec2 screen_center = render_screen_center(orig_screen_center);
 
 	render_buffer.set_color_space(m_color_space);
 	render_buffer.set_tonemap_curve(m_tonemap_curve);
@@ -4359,7 +4414,7 @@ void Testbed::render_frame_epilogue(
 		auto res = render_buffer.in_resolution();
 
 		const dim3 threads = { 16, 8, 1 };
-		const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
+		const dim3 blocks = { div_round_up((uint32_t)res.x, threads.x), div_round_up((uint32_t)res.y, threads.y), 1 };
 
 		dlss_prep_kernel<<<blocks, threads, 0, stream>>>(
 			res,
@@ -4387,9 +4442,9 @@ void Testbed::render_frame_epilogue(
 	EColorSpace output_color_space = to_srgb ? EColorSpace::SRGB : EColorSpace::Linear;
 
 	if (m_render_transparency_as_checkerboard) {
-		Matrix<float, 3, 4> checkerboard_transform = Matrix<float, 3, 4>::Identity();
+		mat4x3 checkerboard_transform = mat4x3(1.0f);
 
-#if NGP_GUI
+#ifdef NGP_GUI
 		if (m_hmd && m_vr_frame_info && !m_vr_frame_info->views.empty()) {
 			checkerboard_transform = m_vr_frame_info->views[0].pose;
 		}
@@ -4397,7 +4452,7 @@ void Testbed::render_frame_epilogue(
 
 		auto res = render_buffer.in_resolution();
 		const dim3 threads = { 16, 8, 1 };
-		const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
+		const dim3 blocks = { div_round_up((uint32_t)res.x, threads.x), div_round_up((uint32_t)res.y, threads.y), 1 };
 		spherical_checkerboard_kernel<<<blocks, threads, 0, stream>>>(
 			res,
 			focal_length,
@@ -4421,7 +4476,7 @@ void Testbed::render_frame_epilogue(
 			if (m_ground_truth_render_mode == EGroundTruthRenderMode::Shade) {
 				render_buffer.overlay_image(
 					m_ground_truth_alpha,
-					Array3f::Constant(m_exposure) + m_nerf.training.cam_exposure[m_nerf.training.view].variable(),
+					vec3(m_exposure) + m_nerf.training.cam_exposure[m_nerf.training.view].variable(),
 					m_background_color,
 					output_color_space,
 					metadata.pixels,
@@ -4429,7 +4484,7 @@ void Testbed::render_frame_epilogue(
 					metadata.resolution,
 					m_fov_axis,
 					m_zoom,
-					Vector2f::Constant(0.5f),
+					vec2(0.5f),
 					stream
 				);
 			} else if (m_ground_truth_render_mode == EGroundTruthRenderMode::Depth && metadata.depth) {
@@ -4440,7 +4495,7 @@ void Testbed::render_frame_epilogue(
 					metadata.resolution,
 					m_fov_axis,
 					m_zoom,
-					Vector2f::Constant(0.5f),
+					vec2(0.5f),
 					stream
 				);
 			}
@@ -4449,12 +4504,12 @@ void Testbed::render_frame_epilogue(
 		// Visualize the accumulated error map if requested
 		if (m_nerf.training.render_error_overlay) {
 			const float* err_data = m_nerf.training.error_map.data.data();
-			Vector2i error_map_res = m_nerf.training.error_map.resolution;
+			ivec2 error_map_res = m_nerf.training.error_map.resolution;
 			if (m_render_ground_truth) {
 				err_data = m_nerf.training.dataset.sharpness_data.data();
 				error_map_res = m_nerf.training.dataset.sharpness_resolution;
 			}
-			size_t emap_size = error_map_res.x() * error_map_res.y();
+			size_t emap_size = error_map_res.x * error_map_res.y;
 			err_data += emap_size * m_nerf.training.view;
 
 			GPUMemory<float> average_error;
@@ -4469,26 +4524,26 @@ void Testbed::render_frame_epilogue(
 		}
 	}
 
-#if NGP_GUI
+#ifdef NGP_GUI
 	// If in VR, indicate the hand position and render transparent background
 	if (m_hmd && m_vr_frame_info) {
 		auto& hands = m_vr_frame_info->hands;
 
 		auto res = render_buffer.out_resolution();
 		const dim3 threads = { 16, 8, 1 };
-		const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
+		const dim3 blocks = { div_round_up((uint32_t)res.x, threads.x), div_round_up((uint32_t)res.y, threads.y), 1 };
 		vr_overlay_hands_kernel<<<blocks, threads, 0, stream>>>(
 			res,
-			focal_length.cwiseProduct(render_buffer.out_resolution().cast<float>()).cwiseQuotient(render_buffer.in_resolution().cast<float>()),
+			focal_length * vec2(render_buffer.out_resolution()) / vec2(render_buffer.in_resolution()),
 			camera_matrix0,
 			screen_center,
 			m_parallax_shift,
 			foveation,
 			lens,
-			vr_to_world(hands[0].pose.col(3)),
+			vr_to_world(hands[0].pose[3]),
 			hands[0].grab_strength,
 			{hands[0].pressing ? 0.8f : 0.0f, 0.0f, 0.0f, 0.8f},
-			vr_to_world(hands[1].pose.col(3)),
+			vr_to_world(hands[1].pose[3]),
 			hands[1].grab_strength,
 			{hands[1].pressing ? 0.8f : 0.0f, 0.0f, 0.0f, 0.8f},
 			0.05f * m_scale, // Hand radius
@@ -4499,28 +4554,27 @@ void Testbed::render_frame_epilogue(
 #endif
 }
 
-float Testbed::get_depth_from_renderbuffer(const CudaRenderBuffer& render_buffer, const Vector2f& uv) {
+float Testbed::get_depth_from_renderbuffer(const CudaRenderBuffer& render_buffer, const vec2& uv) {
 	if (!render_buffer.depth_buffer()) {
 		return m_scale;
 	}
 
 	float depth;
 	auto res = render_buffer.in_resolution();
-	Vector2i depth_pixel = uv.cwiseProduct(res.cast<float>()).cast<int>().cwiseMin(res).cwiseMax(0);
-	depth_pixel = depth_pixel.cwiseMin(res).cwiseMax(0);
+	ivec2 depth_pixel = clamp(ivec2(uv * vec2(res)), ivec2(0), res - ivec2(1));
 
-	CUDA_CHECK_THROW(cudaMemcpy(&depth, render_buffer.depth_buffer() + depth_pixel.x() + depth_pixel.y() * res.x(), sizeof(float), cudaMemcpyDeviceToHost));
+	CUDA_CHECK_THROW(cudaMemcpy(&depth, render_buffer.depth_buffer() + depth_pixel.x + depth_pixel.y * res.x, sizeof(float), cudaMemcpyDeviceToHost));
 	return depth;
 }
 
-Vector3f Testbed::get_3d_pos_from_pixel(const CudaRenderBuffer& render_buffer, const Vector2i& pixel) {
-	float depth = get_depth_from_renderbuffer(render_buffer, pixel.cast<float>().cwiseQuotient(m_window_res.cast<float>()));
+vec3 Testbed::get_3d_pos_from_pixel(const CudaRenderBuffer& render_buffer, const ivec2& pixel) {
+	float depth = get_depth_from_renderbuffer(render_buffer, vec2(pixel) / vec2(m_window_res));
 	auto ray = pixel_to_ray_pinhole(0, pixel, m_window_res, calc_focal_length(m_window_res, m_relative_focal_length, m_fov_axis, m_zoom), m_smoothed_camera, render_screen_center(m_screen_center));
 	return ray(depth);
 }
 
 void Testbed::autofocus() {
-	float new_slice_plane_z = std::max(view_dir().dot(m_autofocus_target - view_pos()), 0.1f) - m_scale;
+	float new_slice_plane_z = std::max(dot(view_dir(), m_autofocus_target - view_pos()), 0.1f) - m_scale;
 	if (new_slice_plane_z != m_slice_plane_z) {
 		m_slice_plane_z = new_slice_plane_z;
 		if (m_aperture_size != 0.0f) {
@@ -4570,13 +4624,13 @@ void Testbed::gather_histograms() {
 		CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
 
 
-		for (int l = 0; l < m_num_levels; ++l) {
+		for (int l = 0; l < m_n_levels; ++l) {
 			m_level_stats[l] = compute_level_stats(grid.data() + hg_enc->level_params_offset(l), hg_enc->level_n_params(l));
 		}
 
 		int numquant = 0;
 		m_quant_percent = float(numquant * 100) / (float)n_encoding_params;
-		if (m_histo_level < m_num_levels) {
+		if (m_histo_level < m_n_levels) {
 			size_t nperlevel = hg_enc->level_n_params(m_histo_level);
 			const float* d = grid.data() + hg_enc->level_params_offset(m_histo_level);
 			float scale = 128.f / (m_histo_scale); // fixed scale for now to make it more comparable between levels
@@ -4615,29 +4669,33 @@ void Testbed::save_snapshot(const fs::path& path, bool include_optimizer_state, 
 
 		snapshot["density_grid_binary"] = density_grid_fp16;
 		snapshot["nerf"]["aabb_scale"] = m_nerf.training.dataset.aabb_scale;
+
+		snapshot["nerf"]["cam_pos_offset"] = m_nerf.training.cam_pos_offset;
+		snapshot["nerf"]["cam_rot_offset"] = m_nerf.training.cam_rot_offset;
+		snapshot["nerf"]["extra_dims_opt"] = m_nerf.training.extra_dims_opt;
 	}
 
 	snapshot["training_step"] = m_training_step;
 	snapshot["loss"] = m_loss_scalar.val();
 	snapshot["aabb"] = m_aabb;
 	snapshot["bounding_radius"] = m_bounding_radius;
-	to_json(snapshot["render_aabb_to_local"], m_render_aabb_to_local);
+	snapshot["render_aabb_to_local"] = m_render_aabb_to_local;
 	snapshot["render_aabb"] = m_render_aabb;
-	to_json(snapshot["up_dir"], m_up_dir);
-	to_json(snapshot["sun_dir"], m_sun_dir);
+	snapshot["up_dir"] = m_up_dir;
+	snapshot["sun_dir"] = m_sun_dir;
 	snapshot["exposure"] = m_exposure;
-	to_json(snapshot["background_color"], m_background_color);
+	snapshot["background_color"] = m_background_color;
 
-	to_json(snapshot["camera"]["matrix"], m_camera);
+	snapshot["camera"]["matrix"] = m_camera;
 	snapshot["camera"]["fov_axis"] = m_fov_axis;
-	to_json(snapshot["camera"]["relative_focal_length"], m_relative_focal_length);
-	to_json(snapshot["camera"]["screen_center"], m_screen_center);
+	snapshot["camera"]["relative_focal_length"] = m_relative_focal_length;
+	snapshot["camera"]["screen_center"] = m_screen_center;
 	snapshot["camera"]["zoom"] = m_zoom;
 	snapshot["camera"]["scale"] = m_scale;
 
 	snapshot["camera"]["aperture_size"] = m_aperture_size;
 	snapshot["camera"]["autofocus"] = m_autofocus;
-	to_json(snapshot["camera"]["autofocus_target"], m_autofocus_target);
+	snapshot["camera"]["autofocus_target"] = m_autofocus_target;
 	snapshot["camera"]["autofocus_depth"] = m_slice_plane_z;
 
 	if (m_testbed_mode == ETestbedMode::Nerf) {
@@ -4701,6 +4759,10 @@ void Testbed::load_snapshot(const fs::path& path) {
 			if (snapshot["nerf"].contains("aabb_scale")) {
 				m_nerf.training.dataset.aabb_scale = snapshot["nerf"]["aabb_scale"];
 			}
+
+			if (snapshot["nerf"].contains("dataset")) {
+				m_nerf.training.dataset.n_extra_learnable_dims = snapshot["nerf"]["dataset"].value("n_extra_learnable_dims", m_nerf.training.dataset.n_extra_learnable_dims);
+			}
 		}
 
 		load_nerf_post();
@@ -4721,12 +4783,16 @@ void Testbed::load_snapshot(const fs::path& path) {
 	}
 
 	// Needs to happen after `load_nerf_post()`
-	if (snapshot.contains("sun_dir")) from_json(snapshot.at("sun_dir"), m_sun_dir);
+	m_sun_dir = snapshot.value("sun_dir", m_sun_dir);
 	m_exposure = snapshot.value("exposure", m_exposure);
-	if (snapshot.contains("background_color")) from_json(snapshot.at("background_color"), m_background_color);
+
+#ifdef NGP_GUI
+	if (!m_hmd)
+#endif
+	m_background_color = snapshot.value("background_color", m_background_color);
 
 	if (snapshot.contains("camera")) {
-		if (snapshot["camera"].contains("matrix")) from_json(snapshot["camera"]["matrix"], m_camera);
+		m_camera = snapshot["camera"].value("matrix", m_camera);
 		m_fov_axis = snapshot["camera"].value("fov_axis", m_fov_axis);
 		if (snapshot["camera"].contains("relative_focal_length")) from_json(snapshot["camera"]["relative_focal_length"], m_relative_focal_length);
 		if (snapshot["camera"].contains("screen_center")) from_json(snapshot["camera"]["screen_center"], m_screen_center);
@@ -4756,6 +4822,20 @@ void Testbed::load_snapshot(const fs::path& path) {
 	m_loss_scalar.set(m_network_config["snapshot"]["loss"]);
 
 	m_trainer->deserialize(m_network_config["snapshot"]);
+
+	if (m_testbed_mode == ETestbedMode::Nerf) {
+		// If the snapshot appears to come from the same dataset as was already present
+		// (or none was previously present, in which case it came from the snapshot
+		// in the first place), load dataset-specific optimized quantities, such as
+		// extrinsics, exposure, latents.
+		if (snapshot["nerf"].contains("dataset") && m_nerf.training.dataset.is_same(snapshot["nerf"]["dataset"])) {
+			if (snapshot["nerf"].contains("cam_pos_offset")) m_nerf.training.cam_pos_offset = snapshot["nerf"].at("cam_pos_offset").get<std::vector<AdamOptimizer<vec3>>>();
+			if (snapshot["nerf"].contains("cam_rot_offset")) m_nerf.training.cam_rot_offset = snapshot["nerf"].at("cam_rot_offset").get<std::vector<RotationAdamOptimizer>>();
+			if (snapshot["nerf"].contains("extra_dims_opt")) m_nerf.training.extra_dims_opt = snapshot["nerf"].at("extra_dims_opt").get<std::vector<VarAdamOptimizer>>();
+			m_nerf.training.update_transforms();
+			m_nerf.training.update_extra_dims();
+		}
+	}
 
 	set_all_devices_dirty();
 }
@@ -4829,10 +4909,10 @@ ScopeGuard Testbed::use_device(cudaStream_t stream, CudaRenderBuffer& render_buf
 	int active_device = cuda_device();
 	auto guard = device.device_guard();
 
-	size_t n_pixels = render_buffer.in_resolution().prod();
+	size_t n_pixels = compMul(render_buffer.in_resolution());
 
 	GPUMemoryArena::Allocation alloc;
-	auto scratch = allocate_workspace_and_distribute<Array4f, float>(device.stream(), &alloc, n_pixels, n_pixels);
+	auto scratch = allocate_workspace_and_distribute<vec4, float>(device.stream(), &alloc, n_pixels, n_pixels);
 
 	device.set_render_buffer_view({
 		std::get<0>(scratch),
@@ -4844,8 +4924,8 @@ ScopeGuard Testbed::use_device(cudaStream_t stream, CudaRenderBuffer& render_buf
 
 	return ScopeGuard{make_copyable_function([&render_buffer, &device, guard=std::move(guard), alloc=std::move(alloc), active_device, stream]() {
 		// Copy device's render buffer's data onto the original render buffer
-		CUDA_CHECK_THROW(cudaMemcpyPeerAsync(render_buffer.frame_buffer(), active_device, device.render_buffer_view().frame_buffer, device.id(), render_buffer.in_resolution().prod() * sizeof(Array4f), device.stream()));
-		CUDA_CHECK_THROW(cudaMemcpyPeerAsync(render_buffer.depth_buffer(), active_device, device.render_buffer_view().depth_buffer, device.id(), render_buffer.in_resolution().prod() * sizeof(float), device.stream()));
+		CUDA_CHECK_THROW(cudaMemcpyPeerAsync(render_buffer.frame_buffer(), active_device, device.render_buffer_view().frame_buffer, device.id(), compMul(render_buffer.in_resolution()) * sizeof(vec4), device.stream()));
+		CUDA_CHECK_THROW(cudaMemcpyPeerAsync(render_buffer.depth_buffer(), active_device, device.render_buffer_view().depth_buffer, device.id(), compMul(render_buffer.in_resolution()) * sizeof(float), device.stream()));
 
 		device.set_render_buffer_view({});
 		device.signal(stream);
@@ -4859,7 +4939,7 @@ void Testbed::set_all_devices_dirty() {
 }
 
 void Testbed::load_camera_path(const fs::path& path) {
-	m_camera_path.load(path, Matrix<float, 3, 4>::Identity());
+	m_camera_path.load(path, mat4x3(1.0f));
 }
 
 bool Testbed::loop_animation() {

@@ -21,7 +21,7 @@
 NGP_NAMESPACE_BEGIN
 
 struct SdfPayload {
-	Eigen::Vector3f dir;
+	vec3 dir;
 	uint32_t idx;
 	uint16_t n_steps;
 	bool alive;
@@ -30,8 +30,8 @@ struct SdfPayload {
 struct RaysSdfSoa {
 #if defined(__NVCC__) || (defined(__clang__) && defined(__CUDA__))
 	void copy_from_other_async(uint32_t n_elements, const RaysSdfSoa& other, cudaStream_t stream) {
-		CUDA_CHECK_THROW(cudaMemcpyAsync(pos, other.pos, n_elements * sizeof(Eigen::Vector3f), cudaMemcpyDeviceToDevice, stream));
-		CUDA_CHECK_THROW(cudaMemcpyAsync(normal, other.normal, n_elements * sizeof(Eigen::Vector3f), cudaMemcpyDeviceToDevice, stream));
+		CUDA_CHECK_THROW(cudaMemcpyAsync(pos, other.pos, n_elements * sizeof(vec3), cudaMemcpyDeviceToDevice, stream));
+		CUDA_CHECK_THROW(cudaMemcpyAsync(normal, other.normal, n_elements * sizeof(vec3), cudaMemcpyDeviceToDevice, stream));
 		CUDA_CHECK_THROW(cudaMemcpyAsync(distance, other.distance, n_elements * sizeof(float), cudaMemcpyDeviceToDevice, stream));
 		CUDA_CHECK_THROW(cudaMemcpyAsync(prev_distance, other.prev_distance, n_elements * sizeof(float), cudaMemcpyDeviceToDevice, stream));
 		CUDA_CHECK_THROW(cudaMemcpyAsync(total_distance, other.total_distance, n_elements * sizeof(float), cudaMemcpyDeviceToDevice, stream));
@@ -40,7 +40,7 @@ struct RaysSdfSoa {
 	}
 #endif
 
-	void set(Eigen::Vector3f* pos, Eigen::Vector3f* normal, float* distance, float* prev_distance, float* total_distance, float* min_visibility, SdfPayload* payload) {
+	void set(vec3* pos, vec3* normal, float* distance, float* prev_distance, float* total_distance, float* min_visibility, SdfPayload* payload) {
 		this->pos = pos;
 		this->normal = normal;
 		this->distance = distance;
@@ -50,8 +50,8 @@ struct RaysSdfSoa {
 		this->payload = payload;
 	}
 
-	Eigen::Vector3f* pos;
-	Eigen::Vector3f* normal;
+	vec3* pos;
+	vec3* normal;
 	float* distance;
 	float* prev_distance;
 	float* total_distance;
@@ -67,8 +67,8 @@ struct BRDFParams {
 	float sheen=0.f;
 	float clearcoat=0.f;
 	float clearcoat_gloss=0.f;
-	Eigen::Vector3f basecolor=Eigen::Vector3f(0.8f,0.8f,0.8f);
-	Eigen::Vector3f ambientcolor=Eigen::Vector3f(0.f,0.f,0.f);
+	vec3 basecolor=vec3(0.8f,0.8f,0.8f);
+	vec3 ambientcolor=vec3(0.f,0.f,0.f);
 };
 
 NGP_NAMESPACE_END

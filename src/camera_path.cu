@@ -14,6 +14,7 @@
 
 #include <neural-graphics-primitives/camera_path.h>
 #include <neural-graphics-primitives/common.h>
+#include <neural-graphics-primitives/json_binding.h>
 
 #ifdef NGP_GUI
 #include <imgui/imgui.h>
@@ -23,22 +24,22 @@
 #include <json/json.hpp>
 #include <fstream>
 
-using namespace Eigen;
 using namespace nlohmann;
 
 NGP_NAMESPACE_BEGIN
 
 CameraKeyframe lerp(const CameraKeyframe& p0, const CameraKeyframe& p1, float t, float t0, float t1) {
 	t = (t - t0) / (t1 - t0);
-	Eigen::Vector4f R1 = p1.R;
+	vec4 R1 = p1.R;
 
 	// take the short path
-	if (R1.dot(p0.R) < 0.f)  {
-		R1=-R1;
+	if (dot(R1, p0.R) < 0.0f)  {
+		R1 = -R1;
 	}
 
+	auto q = slerp(quat(p0.R), quat(R1), t);
 	return {
-		Eigen::Quaternionf(p0.R).slerp(t, Eigen::Quaternionf(R1)).coeffs(),
+		vec4(q.x, q.y, q.z, q.w),
 		p0.T + (p1.T - p0.T) * t,
 		p0.slice + (p1.slice - p0.slice) * t,
 		p0.scale + (p1.scale - p0.scale) * t,
@@ -72,30 +73,32 @@ CameraKeyframe spline(float t, const CameraKeyframe& p0, const CameraKeyframe& p
 }
 
 void to_json(json& j, const CameraKeyframe& p) {
-	j = json{{"R", p.R}, {"T", p.T}, {"slice", p.slice}, {"scale", p.scale}, {"fov", p.fov}, {"aperture_size", p.aperture_size}, {"glow_mode", p.glow_mode}, {"glow_y_cutoff", p.glow_y_cutoff}};
+	j = json{
+		{"R", p.R},
+		{"T", p.T},
+		{"slice", p.slice},
+		{"scale", p.scale},
+		{"fov", p.fov},
+		{"aperture_size", p.aperture_size},
+		{"glow_mode", p.glow_mode},
+		{"glow_y_cutoff", p.glow_y_cutoff},
+	};
 }
 
 bool load_relative_to_first=false; // set to true when using a camera path that is aligned with the first training image, such that it is invariant to changes in the space of the training data
 
-void from_json(bool is_first, const json& j, CameraKeyframe& p, const CameraKeyframe& first, const Eigen::Matrix<float, 3, 4>& ref) {
+void from_json(bool is_first, const json& j, CameraKeyframe& p, const CameraKeyframe& first, const mat4x3& ref) {
 	 if (is_first && load_relative_to_first) {
 	 	p.from_m(ref);
 	 } else {
-		p.R=Eigen::Vector4f(j["R"][0],j["R"][1],j["R"][2],j["R"][3]);
-		p.T=Eigen::Vector3f(j["T"][0],j["T"][1],j["T"][2]);
+		p.R = vec4(j["R"][0],j["R"][1],j["R"][2],j["R"][3]);
+		p.T = vec3(j["T"][0],j["T"][1],j["T"][2]);
 
 		if (load_relative_to_first) {
-	 		Eigen::Matrix4f ref4 = Eigen::Matrix4f::Identity();
-	 		ref4.block<3, 4>(0, 0) = ref;
-
-	 		Eigen::Matrix4f first4 = Eigen::Matrix4f::Identity();
-	 		first4.block<3, 4>(0, 0) = first.m();
-
-	 		Eigen::Matrix4f p4 = Eigen::Matrix4f::Identity();
-	 		p4.block<3, 4>(0, 0) = p.m();
-
-	 		auto cur4 = ref4 * first4.inverse() * p4;
-	 		p.from_m(cur4.block<3, 4>(0, 0));
+	 		mat4 ref4 = {ref};
+	 		mat4 first4 = {first.m()};
+	 		mat4 p4 = {p.m()};
+	 		p.from_m(mat4x3(ref4 * inverse(first4) * p4));
 		}
 	}
 	j.at("slice").get_to(p.slice);
@@ -105,7 +108,6 @@ void from_json(bool is_first, const json& j, CameraKeyframe& p, const CameraKeyf
 	if (j.contains("glow_mode")) j.at("glow_mode").get_to(p.glow_mode); else p.glow_mode = 0;
 	if (j.contains("glow_y_cutoff")) j.at("glow_y_cutoff").get_to(p.glow_y_cutoff); else p.glow_y_cutoff = 0.f;
 }
-
 
 void CameraPath::save(const fs::path& path) {
 	json j = {
@@ -117,7 +119,7 @@ void CameraPath::save(const fs::path& path) {
 	f << j;
 }
 
-void CameraPath::load(const fs::path& path, const Eigen::Matrix<float, 3, 4>& first_xform) {
+void CameraPath::load(const fs::path& path, const mat4x3& first_xform) {
 	std::ifstream f{native_string(path)};
 	if (!f) {
 		throw std::runtime_error{fmt::format("Camera path {} does not exist.", path.str())};
@@ -143,7 +145,7 @@ void CameraPath::load(const fs::path& path, const Eigen::Matrix<float, 3, 4>& fi
 }
 
 #ifdef NGP_GUI
-int CameraPath::imgui(char path_filename_buf[1024], float frame_milliseconds, Matrix<float, 3, 4>& camera, float slice_plane_z, float scale, float fov, float aperture_size, float bounding_radius, const Eigen::Matrix<float, 3, 4>& first_xform, int glow_mode, float glow_y_cutoff) {
+int CameraPath::imgui(char path_filename_buf[1024], float frame_milliseconds, mat4x3& camera, float slice_plane_z, float scale, float fov, float aperture_size, float bounding_radius, const mat4x3& first_xform, int glow_mode, float glow_y_cutoff) {
 	int n = std::max(0, int(keyframes.size()) - 1);
 	int read = 0; // 1=smooth, 2=hard
 
@@ -257,57 +259,57 @@ int CameraPath::imgui(char path_filename_buf[1024], float frame_milliseconds, Ma
 	return keyframes.empty() ? 0 : read;
 }
 
-bool debug_project(const Matrix<float, 4, 4>& proj, Vector3f p, ImVec2& o) {
-	Vector4f ph; ph << p, 1.f;
-	Vector4f pa = proj * ph;
-	if (pa.w() <= 0.f) {
+bool debug_project(const mat4& proj, vec3 p, ImVec2& o) {
+	vec4 ph(p, 1.0f);
+	vec4 pa = proj * ph;
+	if (pa.w <= 0.f) {
 		return false;
 	}
 
-	o.x = pa.x() / pa.w();
-	o.y = pa.y() / pa.w();
+	o.x = pa.x / pa.w;
+	o.y = pa.y / pa.w;
 	return true;
 }
 
-void add_debug_line(ImDrawList* list, const Matrix<float, 4, 4>& proj, Vector3f a, Vector3f b, uint32_t col, float thickness) {
+void add_debug_line(ImDrawList* list, const mat4& proj, vec3 a, vec3 b, uint32_t col, float thickness) {
 	ImVec2 aa, bb;
 	if (debug_project(proj, a, aa) && debug_project(proj, b, bb)) {
 		list->AddLine(aa, bb, col, thickness * 2.0f);
 	}
 }
 
-void visualize_cube(ImDrawList* list, const Matrix<float, 4, 4>& world2proj, const Vector3f& a, const Vector3f& b, const Matrix3f& render_aabb_to_local) {
-	Eigen::Matrix3f m = render_aabb_to_local.transpose();
-	add_debug_line(list, world2proj, m * Vector3f{a.x(), a.y(), a.z()}, m * Vector3f{a.x(), a.y(), b.z()}, 0xffff4040); // Z
-	add_debug_line(list, world2proj, m * Vector3f{b.x(), a.y(), a.z()}, m * Vector3f{b.x(), a.y(), b.z()}, 0xffffffff);
-	add_debug_line(list, world2proj, m * Vector3f{a.x(), b.y(), a.z()}, m * Vector3f{a.x(), b.y(), b.z()}, 0xffffffff);
-	add_debug_line(list, world2proj, m * Vector3f{b.x(), b.y(), a.z()}, m * Vector3f{b.x(), b.y(), b.z()}, 0xffffffff);
+void visualize_cube(ImDrawList* list, const mat4& world2proj, const vec3& a, const vec3& b, const mat3& render_aabb_to_local) {
+	mat3 m = transpose(render_aabb_to_local);
+	add_debug_line(list, world2proj, m * vec3{a.x, a.y, a.z}, m * vec3{a.x, a.y, b.z}, 0xffff4040); // Z
+	add_debug_line(list, world2proj, m * vec3{b.x, a.y, a.z}, m * vec3{b.x, a.y, b.z}, 0xffffffff);
+	add_debug_line(list, world2proj, m * vec3{a.x, b.y, a.z}, m * vec3{a.x, b.y, b.z}, 0xffffffff);
+	add_debug_line(list, world2proj, m * vec3{b.x, b.y, a.z}, m * vec3{b.x, b.y, b.z}, 0xffffffff);
 
-	add_debug_line(list, world2proj, m * Vector3f{a.x(), a.y(), a.z()}, m * Vector3f{b.x(), a.y(), a.z()}, 0xff4040ff); // X
-	add_debug_line(list, world2proj, m * Vector3f{a.x(), b.y(), a.z()}, m * Vector3f{b.x(), b.y(), a.z()}, 0xffffffff);
-	add_debug_line(list, world2proj, m * Vector3f{a.x(), a.y(), b.z()}, m * Vector3f{b.x(), a.y(), b.z()}, 0xffffffff);
-	add_debug_line(list, world2proj, m * Vector3f{a.x(), b.y(), b.z()}, m * Vector3f{b.x(), b.y(), b.z()}, 0xffffffff);
+	add_debug_line(list, world2proj, m * vec3{a.x, a.y, a.z}, m * vec3{b.x, a.y, a.z}, 0xff4040ff); // X
+	add_debug_line(list, world2proj, m * vec3{a.x, b.y, a.z}, m * vec3{b.x, b.y, a.z}, 0xffffffff);
+	add_debug_line(list, world2proj, m * vec3{a.x, a.y, b.z}, m * vec3{b.x, a.y, b.z}, 0xffffffff);
+	add_debug_line(list, world2proj, m * vec3{a.x, b.y, b.z}, m * vec3{b.x, b.y, b.z}, 0xffffffff);
 
-	add_debug_line(list, world2proj, m * Vector3f{a.x(), a.y(), a.z()}, m * Vector3f{a.x(), b.y(), a.z()}, 0xff40ff40); // Y
-	add_debug_line(list, world2proj, m * Vector3f{b.x(), a.y(), a.z()}, m * Vector3f{b.x(), b.y(), a.z()}, 0xffffffff);
-	add_debug_line(list, world2proj, m * Vector3f{a.x(), a.y(), b.z()}, m * Vector3f{a.x(), b.y(), b.z()}, 0xffffffff);
-	add_debug_line(list, world2proj, m * Vector3f{b.x(), a.y(), b.z()}, m * Vector3f{b.x(), b.y(), b.z()}, 0xffffffff);
+	add_debug_line(list, world2proj, m * vec3{a.x, a.y, a.z}, m * vec3{a.x, b.y, a.z}, 0xff40ff40); // Y
+	add_debug_line(list, world2proj, m * vec3{b.x, a.y, a.z}, m * vec3{b.x, b.y, a.z}, 0xffffffff);
+	add_debug_line(list, world2proj, m * vec3{a.x, a.y, b.z}, m * vec3{a.x, b.y, b.z}, 0xffffffff);
+	add_debug_line(list, world2proj, m * vec3{b.x, a.y, b.z}, m * vec3{b.x, b.y, b.z}, 0xffffffff);
 }
 
-void visualize_nerf_camera(ImDrawList* list, const Matrix<float, 4, 4>& world2proj, const Eigen::Matrix<float, 3, 4>& xform, float aspect, uint32_t col, float thickness) {
+void visualize_nerf_camera(ImDrawList* list, const mat4& world2proj, const mat4x3& xform, float aspect, uint32_t col, float thickness) {
 	const float axis_size = 0.025f;
-	const Vector3f* xforms = (const Vector3f*)&xform;
-	Vector3f pos = xforms[3];
+	const vec3* xforms = (const vec3*)&xform;
+	vec3 pos = xforms[3];
 	add_debug_line(list, world2proj, pos, pos+axis_size*xforms[0], 0xff4040ff, thickness);
 	add_debug_line(list, world2proj, pos, pos+axis_size*xforms[1], 0xff40ff40, thickness);
 	add_debug_line(list, world2proj, pos, pos+axis_size*xforms[2], 0xffff4040, thickness);
 	float xs = axis_size * aspect;
 	float ys = axis_size;
 	float zs = axis_size * 2.0f * aspect;
-	Vector3f a = pos + xs * xforms[0] + ys * xforms[1] + zs * xforms[2];
-	Vector3f b = pos - xs * xforms[0] + ys * xforms[1] + zs * xforms[2];
-	Vector3f c = pos - xs * xforms[0] - ys * xforms[1] + zs * xforms[2];
-	Vector3f d = pos + xs * xforms[0] - ys * xforms[1] + zs * xforms[2];
+	vec3 a = pos + xs * xforms[0] + ys * xforms[1] + zs * xforms[2];
+	vec3 b = pos - xs * xforms[0] + ys * xforms[1] + zs * xforms[2];
+	vec3 c = pos - xs * xforms[0] - ys * xforms[1] + zs * xforms[2];
+	vec3 d = pos + xs * xforms[0] - ys * xforms[1] + zs * xforms[2];
 	add_debug_line(list, world2proj, pos, a, col, thickness);
 	add_debug_line(list, world2proj, pos, b, col, thickness);
 	add_debug_line(list, world2proj, pos, c, col, thickness);
@@ -318,24 +320,24 @@ void visualize_nerf_camera(ImDrawList* list, const Matrix<float, 4, 4>& world2pr
 	add_debug_line(list, world2proj, d, a, col, thickness);
 }
 
-bool CameraPath::imgui_viz(ImDrawList* list, Matrix<float, 4, 4> &view2proj, Matrix<float, 4, 4> &world2proj, Matrix<float, 4, 4> &world2view, Vector2f focal, float aspect, float znear, float zfar) {
+bool CameraPath::imgui_viz(ImDrawList* list, mat4 &view2proj, mat4 &world2proj, mat4 &world2view, vec2 focal, float aspect, float znear, float zfar) {
 	bool changed = false;
-	float flx = focal.x();
-	float fly = focal.y();
-	Matrix<float, 4, 4> view2proj_guizmo;
-	view2proj_guizmo <<
-		fly * 2.0f / aspect, 0, 0, 0,
-		0, -fly * 2.0f, 0, 0,
-		0, 0, (zfar + znear) / (zfar - znear), -(2.0f * zfar * znear) / (zfar - znear),
-		0, 0, 1, 0;
+	// float flx = focal.x;
+	float fly = focal.y;
+	mat4 view2proj_guizmo(
+		fly * 2.0f / aspect, 0.0f, 0.0f, 0.0f,
+		0.0f, -fly * 2.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, (zfar + znear) / (zfar - znear), -(2.0f * zfar * znear) / (zfar - znear),
+		0.0f, 0.0f, 1.0f, 0.0f
+	);
 
 	if (!update_cam_from_path) {
 		ImDrawList* list = ImGui::GetForegroundDrawList();
 		int cur_cam_i=(int)round(play_time * (float)(keyframes.size()-1));
-		Eigen::Vector3f prevp;
+		vec3 prevp;
 		for (int i = 0; i < keyframes.size(); ++i) {
 			visualize_nerf_camera(list, world2proj, keyframes[i].m(), aspect, (i==cur_cam_i) ? 0xff80c0ff : 0x8080c0ff);
-			Eigen::Vector3f p = keyframes[i].T;
+			vec3 p = keyframes[i].T;
 			if (i) {
 				add_debug_line(list, world2proj, prevp, p, 0xccffc040);
 			}
@@ -343,25 +345,25 @@ bool CameraPath::imgui_viz(ImDrawList* list, Matrix<float, 4, 4> &view2proj, Mat
 		}
 		if (!keyframes.empty()) {
 			ImGuiIO& io = ImGui::GetIO();
-			Eigen::Matrix4f matrix = Eigen::Matrix4f::Identity();
-			matrix.block<3,4>(0, 0) = keyframes[cur_cam_i].m();
+			mat4 matrix = keyframes[cur_cam_i].m();
 			ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
 			if (ImGuizmo::Manipulate((const float*)&world2view, (const float*)&view2proj_guizmo, (ImGuizmo::OPERATION)m_gizmo_op, (ImGuizmo::MODE)m_gizmo_mode, (float*)&matrix, NULL, NULL)) {
-				int i0 = cur_cam_i; while (i0 > 0 && keyframes[cur_cam_i].SamePosAs(keyframes[i0 - 1])) i0--;
-				int i1 = cur_cam_i; while (i1 < keyframes.size() - 1 && keyframes[cur_cam_i].SamePosAs(keyframes[i1 + 1])) i1++;
+				int i0 = cur_cam_i; while (i0 > 0 && keyframes[cur_cam_i].same_pos_as(keyframes[i0 - 1])) i0--;
+				int i1 = cur_cam_i; while (i1 < keyframes.size() - 1 && keyframes[cur_cam_i].same_pos_as(keyframes[i1 + 1])) i1++;
 				for (int i = i0; i <= i1; ++i) {
-					keyframes[i].T = matrix.block<3, 4>(0, 0).col(3);
-					keyframes[i].R = Eigen::Quaternionf(matrix.block<3, 3>(0, 0)).coeffs();
+					keyframes[i].T = matrix[3].xyz;
+					auto q = quat(mat3(matrix));
+					keyframes[i].R = vec4(q.x, q.y, q.z, q.w);
 				}
 				changed=true;
 			}
 
 			visualize_nerf_camera(list, world2proj, eval_camera_path(play_time).m(), aspect, 0xff80ff80);
 			float dt = 0.05f / (float)keyframes.size();
-			Eigen::Vector3f prevp;
+			vec3 prevp;
 			for (float t = 0.0f;; t += dt) {
 				if (t > 1.0f) t = 1.0f;
-				Eigen::Vector3f p = eval_camera_path(t).T;
+				vec3 p = eval_camera_path(t).T;
 				if (t) {
 					// draw a line
 					add_debug_line(list, world2proj, (prevp+p) * 0.5f, p, 0xff80c0ff);
