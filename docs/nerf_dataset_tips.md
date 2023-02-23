@@ -43,7 +43,7 @@ If you have an existing dataset in `transforms.json` format, it should be center
 You can set any of the following parameters, where the listed values are the default.
 ```json
 {
-	"aabb_scale": 64,
+	"aabb_scale": 32,
 	"scale": 0.33,
 	"offset": [0.5, 0.5, 0.5],
 	...	
@@ -102,7 +102,7 @@ If you use Windows, you do not need to install anything. COLMAP and FFmpeg will 
 If you are training from a video file, run the [scripts/colmap2nerf.py](/scripts/colmap2nerf.py) script from the folder containing the video, with the following recommended parameters:
 
 ```sh
-data-folder$ python [path-to-instant-ngp]/scripts/colmap2nerf.py --video_in <filename of video> --video_fps 2 --run_colmap --aabb_scale 64
+data-folder$ python [path-to-instant-ngp]/scripts/colmap2nerf.py --video_in <filename of video> --video_fps 2 --run_colmap --aabb_scale 32
 ```
 
 The above assumes a single video file as input, which then has frames extracted at the specified framerate (2). It is recommended to choose a frame rate that leads to around 50-150 images. So for a one minute video, `--video_fps 2` is ideal.
@@ -110,7 +110,7 @@ The above assumes a single video file as input, which then has frames extracted 
 For training from images, place them in a subfolder called `images` and then use suitable options such as the ones below:
 
 ```sh
-data-folder$ python [path-to-instant-ngp]/scripts/colmap2nerf.py --colmap_matcher exhaustive --run_colmap --aabb_scale 64
+data-folder$ python [path-to-instant-ngp]/scripts/colmap2nerf.py --colmap_matcher exhaustive --run_colmap --aabb_scale 32
 ```
 
 The script will run (and install, if you use Windows) FFmpeg and COLMAP as needed, followed by a conversion step to the required `transforms.json` format, which will be written in the current directory. 
