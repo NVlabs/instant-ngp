@@ -19,10 +19,10 @@
 #include <json/json.hpp>
 
 #include <pybind11/pybind11.h>
-#include <pybind11/eigen.h>
 #include <pybind11/functional.h>
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
+#include <pybind11_glm/pybind11_glm.hpp>
 #include <pybind11_json/pybind11_json.hpp>
 
 #include <filesystem/path.h>
@@ -38,7 +38,6 @@
 #endif
 
 using namespace tcnn;
-using namespace Eigen;
 using namespace nlohmann;
 namespace py = pybind11;
 
@@ -76,14 +75,14 @@ void Testbed::override_sdf_training_data(py::array_t<float> points, py::array_t<
 		return;
 	}
 
-	std::vector<Vector3f> points_cpu(points_buf.shape[0]);
+	std::vector<vec3> points_cpu(points_buf.shape[0]);
 	std::vector<float> distances_cpu(distances_buf.shape[0]);
 
 	for (size_t i = 0; i < points_cpu.size(); ++i) {
-		Vector3f pos = *((Vector3f*)points_buf.ptr + i);
+		vec3 pos = *((vec3*)points_buf.ptr + i);
 		float dist = *((float*)distances_buf.ptr + i);
 
-		pos = (pos - m_raw_aabb.min) / m_sdf.mesh_scale + 0.5f * (Vector3f::Ones() - (m_raw_aabb.max - m_raw_aabb.min) / m_sdf.mesh_scale);
+		pos = (pos - m_raw_aabb.min) / m_sdf.mesh_scale + 0.5f * (vec3(1.0f) - (m_raw_aabb.max - m_raw_aabb.min) / m_sdf.mesh_scale);
 		dist /= m_sdf.mesh_scale;
 
 		points_cpu[i] = pos;
@@ -99,8 +98,8 @@ void Testbed::override_sdf_training_data(py::array_t<float> points, py::array_t<
 	m_sdf.training.generate_sdf_data_online = false;
 }
 
-pybind11::dict Testbed::compute_marching_cubes_mesh(Eigen::Vector3i res3d, BoundingBox aabb, float thresh) {
-	Matrix3f render_aabb_to_local = Matrix3f::Identity();
+pybind11::dict Testbed::compute_marching_cubes_mesh(ivec3 res3d, BoundingBox aabb, float thresh) {
+	mat3 render_aabb_to_local = mat3(1.0f);
 	if (aabb.is_empty()) {
 		aabb = m_testbed_mode == ETestbedMode::Nerf ? m_render_aabb : m_aabb;
 		render_aabb_to_local = m_render_aabb_to_local;
@@ -117,9 +116,9 @@ pybind11::dict Testbed::compute_marching_cubes_mesh(Eigen::Vector3i res3d, Bound
 	CUDA_CHECK_THROW(cudaMemcpy(cpucolors.request().ptr, m_mesh.vert_colors.data() , m_mesh.vert_colors.size() * 3 * sizeof(float), cudaMemcpyDeviceToHost));
 	CUDA_CHECK_THROW(cudaMemcpy(cpuindices.request().ptr, m_mesh.indices.data() , m_mesh.indices.size() * sizeof(int), cudaMemcpyDeviceToHost));
 
-	Eigen::Vector3f* ns = (Eigen::Vector3f*)cpunormals.request().ptr;
+	vec3* ns = (vec3*)cpunormals.request().ptr;
 	for (size_t i = 0; i < m_mesh.vert_normals.size(); ++i) {
-		ns[i].normalize();
+		ns[i] = normalize(ns[i]);
 	}
 
 	return py::dict("V"_a=cpuverts, "N"_a=cpunormals, "C"_a=cpucolors, "F"_a=cpuindices);
@@ -164,7 +163,7 @@ py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool l
 		float end_alpha = ((float)i + 1.0f)/(float)spp * shutter_fraction;
 
 		auto sample_start_cam_matrix = start_cam_matrix;
-		auto sample_end_cam_matrix = log_space_lerp(start_cam_matrix, end_cam_matrix, shutter_fraction);
+		auto sample_end_cam_matrix = camera_lerp(start_cam_matrix, end_cam_matrix, shutter_fraction);
 		if (i == 0) {
 			prev_camera_matrix = sample_start_cam_matrix;
 		}
@@ -215,17 +214,16 @@ py::array_t<float> Testbed::view(bool linear, size_t view_idx) const {
 
 	auto res = render_buffer.out_resolution();
 
-	py::array_t<float> result({res.y(), res.x(), 4});
+	py::array_t<float> result({res.y, res.x, 4});
 	py::buffer_info buf = result.request();
 	float* data = (float*)buf.ptr;
 
-	CUDA_CHECK_THROW(cudaMemcpy2DFromArray(data, res.x() * sizeof(float) * 4, render_buffer.surface_provider().array(), 0, 0, res.x() * sizeof(float) * 4, res.y(), cudaMemcpyDeviceToHost));
+	CUDA_CHECK_THROW(cudaMemcpy2DFromArray(data, res.x * sizeof(float) * 4, render_buffer.surface_provider().array(), 0, 0, res.x * sizeof(float) * 4, res.y, cudaMemcpyDeviceToHost));
 
 	if (linear) {
-		ThreadPool{}.parallel_for<size_t>(0, res.y(), [&](size_t y) {
-			size_t base = y * res.x();
-			size_t base_reverse = (res.y() - y - 1) * res.x();
-			for (uint32_t x = 0; x < res.x(); ++x) {
+		ThreadPool{}.parallel_for<size_t>(0, res.y, [&](size_t y) {
+			size_t base = y * res.x;
+			for (uint32_t x = 0; x < res.x; ++x) {
 				size_t px = base + x;
 				data[px*4+0] = srgb_to_linear(data[px*4+0]);
 				data[px*4+1] = srgb_to_linear(data[px*4+1]);
@@ -239,19 +237,19 @@ py::array_t<float> Testbed::view(bool linear, size_t view_idx) const {
 
 #ifdef NGP_GUI
 py::array_t<float> Testbed::screenshot(bool linear, bool front_buffer) const {
-	std::vector<float> tmp(m_window_res.prod() * 4);
+	std::vector<float> tmp(compMul(m_window_res) * 4);
 	glReadBuffer(front_buffer ? GL_FRONT : GL_BACK);
-	glReadPixels(0, 0, m_window_res.x(), m_window_res.y(), GL_RGBA, GL_FLOAT, tmp.data());
+	glReadPixels(0, 0, m_window_res.x, m_window_res.y, GL_RGBA, GL_FLOAT, tmp.data());
 
-	py::array_t<float> result({m_window_res.y(), m_window_res.x(), 4});
+	py::array_t<float> result({m_window_res.y, m_window_res.x, 4});
 	py::buffer_info buf = result.request();
 	float* data = (float*)buf.ptr;
 
 	// Linear, alpha premultiplied, Y flipped
-	ThreadPool{}.parallel_for<size_t>(0, m_window_res.y(), [&](size_t y) {
-		size_t base = y * m_window_res.x();
-		size_t base_reverse = (m_window_res.y() - y - 1) * m_window_res.x();
-		for (uint32_t x = 0; x < m_window_res.x(); ++x) {
+	ThreadPool{}.parallel_for<size_t>(0, m_window_res.y, [&](size_t y) {
+		size_t base = y * m_window_res.x;
+		size_t base_reverse = (m_window_res.y - y - 1) * m_window_res.x;
+		for (uint32_t x = 0; x < m_window_res.x; ++x) {
 			size_t px = base + x;
 			size_t px_reverse = base_reverse + x;
 			data[px_reverse*4+0] = linear ? srgb_to_linear(tmp[px*4+0]) : tmp[px*4+0];
@@ -359,13 +357,13 @@ PYBIND11_MODULE(pyngp, m) {
 
 	py::class_<BoundingBox>(m, "BoundingBox")
 		.def(py::init<>())
-		.def(py::init<const Vector3f&, const Vector3f&>())
+		.def(py::init<const vec3&, const vec3&>())
 		.def("center", &BoundingBox::center)
 		.def("contains", &BoundingBox::contains)
 		.def("diag", &BoundingBox::diag)
 		.def("distance", &BoundingBox::distance)
 		.def("distance_sq", &BoundingBox::distance_sq)
-		.def("enlarge", py::overload_cast<const Vector3f&>(&BoundingBox::enlarge))
+		.def("enlarge", py::overload_cast<const vec3&>(&BoundingBox::enlarge))
 		.def("enlarge", py::overload_cast<const BoundingBox&>(&BoundingBox::enlarge))
 		.def("get_vertices", &BoundingBox::get_vertices)
 		.def("inflate", &BoundingBox::inflate)
@@ -455,7 +453,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_property("loop_animation", &Testbed::loop_animation, &Testbed::set_loop_animation)
 		.def("compute_and_save_png_slices", &Testbed::compute_and_save_png_slices,
 			py::arg("filename"),
-			py::arg("resolution") = Eigen::Vector3i::Constant(256),
+			py::arg("resolution") = ivec3(256),
 			py::arg("aabb") = BoundingBox{},
 			py::arg("thresh") = std::numeric_limits<float>::max(),
 			py::arg("density_range") = 4.f,
@@ -464,7 +462,7 @@ PYBIND11_MODULE(pyngp, m) {
 		)
 		.def("compute_and_save_marching_cubes_mesh", &Testbed::compute_and_save_marching_cubes_mesh,
 			py::arg("filename"),
-			py::arg("resolution") = Eigen::Vector3i::Constant(256),
+			py::arg("resolution") = ivec3(256),
 			py::arg("aabb") = BoundingBox{},
 			py::arg("thresh") = std::numeric_limits<float>::max(),
 			py::arg("generate_uvs_for_obj_file") = false,
@@ -474,7 +472,7 @@ PYBIND11_MODULE(pyngp, m) {
 			"If the aabb parameter specifies an inside-out (\"empty\") box (default), the current render_aabb bounding box is used."
 		)
 		.def("compute_marching_cubes_mesh", &Testbed::compute_marching_cubes_mesh,
-			py::arg("resolution") = Eigen::Vector3i::Constant(256),
+			py::arg("resolution") = ivec3(256),
 			py::arg("aabb") = BoundingBox{},
 			py::arg("thresh") = std::numeric_limits<float>::max(),
 			"Compute a marching cubes mesh from the current SDF or NeRF model. "

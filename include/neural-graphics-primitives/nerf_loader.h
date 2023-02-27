@@ -37,11 +37,11 @@ struct TrainingImageMetadata {
 	const Ray* rays = nullptr;
 
 	Lens lens = {};
-	Eigen::Vector2i resolution = Eigen::Vector2i::Zero();
-	Eigen::Vector2f principal_point = Eigen::Vector2f::Constant(0.5f);
-	Eigen::Vector2f focal_length = Eigen::Vector2f::Constant(1000.f);
-	Eigen::Vector4f rolling_shutter = Eigen::Vector4f::Zero();
-	Eigen::Vector3f light_dir = Eigen::Vector3f::Constant(0.f); // TODO: replace this with more generic float[] of task-specific metadata.
+	ivec2 resolution = ivec2(0);
+	vec2 principal_point = vec2(0.5f);
+	vec2 focal_length = vec2(1000.f);
+	vec4 rolling_shutter = vec4(0.0f);
+	vec3 light_dir = vec3(0.f); // TODO: replace this with more generic float[] of task-specific metadata.
 };
 
 inline size_t image_type_size(EImageDataType type) {
@@ -63,6 +63,10 @@ inline size_t depth_type_size(EDepthDataType type) {
 }
 
 struct NerfDataset {
+	bool is_same(const NerfDataset& other) {
+		return xforms == other.xforms && paths == other.paths;
+	}
+
 	std::vector<tcnn::GPUMemory<Ray>> raymemory;
 	std::vector<tcnn::GPUMemory<uint8_t>> pixelmemory;
 	std::vector<tcnn::GPUMemory<float>> depthmemory;
@@ -75,15 +79,15 @@ struct NerfDataset {
 	std::vector<TrainingXForm> xforms;
 	std::vector<std::string> paths;
 	tcnn::GPUMemory<float> sharpness_data;
-	Eigen::Vector2i sharpness_resolution = {0, 0};
+	ivec2 sharpness_resolution = {0, 0};
 	tcnn::GPUMemory<float> envmap_data;
 
 	BoundingBox render_aabb = {};
-	Eigen::Matrix3f render_aabb_to_local = Eigen::Matrix3f::Identity();
-	Eigen::Vector3f up = {0.0f, 1.0f, 0.0f};
-	Eigen::Vector3f offset = {0.0f, 0.0f, 0.0f};
+	mat3 render_aabb_to_local = mat3(1.0f);
+	vec3 up = {0.0f, 1.0f, 0.0f};
+	vec3 offset = {0.0f, 0.0f, 0.0f};
 	size_t n_images = 0;
-	Eigen::Vector2i envmap_resolution = {0, 0};
+	ivec2 envmap_resolution = {0, 0};
 	float scale = 1.0f;
 	int aabb_scale = 1;
 	bool from_mitsuba = false;
@@ -98,68 +102,68 @@ struct NerfDataset {
 		return (has_light_dirs ? 3u : 0u) + n_extra_learnable_dims;
 	}
 
-	void set_training_image(int frame_idx, const Eigen::Vector2i& image_resolution, const void* pixels, const void* depth_pixels, float depth_scale, bool image_data_on_gpu, EImageDataType image_type, EDepthDataType depth_type, float sharpen_amount = 0.f, bool white_transparent = false, bool black_transparent = false, uint32_t mask_color = 0, const Ray *rays = nullptr);
+	void set_training_image(int frame_idx, const ivec2& image_resolution, const void* pixels, const void* depth_pixels, float depth_scale, bool image_data_on_gpu, EImageDataType image_type, EDepthDataType depth_type, float sharpen_amount = 0.f, bool white_transparent = false, bool black_transparent = false, uint32_t mask_color = 0, const Ray *rays = nullptr);
 
-	Eigen::Vector3f nerf_direction_to_ngp(const Eigen::Vector3f& nerf_dir) {
-		Eigen::Vector3f result = nerf_dir;
+	vec3 nerf_direction_to_ngp(const vec3& nerf_dir) {
+		vec3 result = nerf_dir;
 		if (from_mitsuba) {
 			result *= -1;
 		} else {
-			result = Eigen::Vector3f(result.y(), result.z(), result.x());
+			result = vec3(result.y, result.z, result.x);
 		}
 		return result;
 	}
 
-	Eigen::Matrix<float, 3, 4> nerf_matrix_to_ngp(const Eigen::Matrix<float, 3, 4>& nerf_matrix, bool scale_columns = false) const {
-		Eigen::Matrix<float, 3, 4> result = nerf_matrix;
-		result.col(0) *= scale_columns ? scale : 1.f;
-		result.col(1) *= scale_columns ? -scale : -1.f;
-		result.col(2) *= scale_columns ? -scale : -1.f;
-		result.col(3) = result.col(3) * scale + offset;
+	mat4x3 nerf_matrix_to_ngp(const mat4x3& nerf_matrix, bool scale_columns = false) const {
+		mat4x3 result = nerf_matrix;
+		result[0] *= scale_columns ? scale : 1.f;
+		result[1] *= scale_columns ? -scale : -1.f;
+		result[2] *= scale_columns ? -scale : -1.f;
+		result[3] = result[3] * scale + offset;
 
 		if (from_mitsuba) {
-			result.col(0) *= -1;
-			result.col(2) *= -1;
+			result[0] *= -1;
+			result[2] *= -1;
 		} else {
 			// Cycle axes xyz<-yzx
-			Eigen::Vector4f tmp = result.row(0);
-			result.row(0) = (Eigen::Vector4f)result.row(1);
-			result.row(1) = (Eigen::Vector4f)result.row(2);
-			result.row(2) = tmp;
+			vec4 tmp = row(result, 0);
+			result = row(result, 0, row(result, 1));
+			result = row(result, 1, row(result, 2));
+			result = row(result, 2, tmp);
 		}
 
 		return result;
 	}
 
-	Eigen::Matrix<float, 3, 4> ngp_matrix_to_nerf(const Eigen::Matrix<float, 3, 4>& ngp_matrix, bool scale_columns = false) const {
-		Eigen::Matrix<float, 3, 4> result = ngp_matrix;
+	mat4x3 ngp_matrix_to_nerf(const mat4x3& ngp_matrix, bool scale_columns = false) const {
+		mat4x3 result = ngp_matrix;
 		if (from_mitsuba) {
-			result.col(0) *= -1;
-			result.col(2) *= -1;
+			result[0] *= -1;
+			result[2] *= -1;
 		} else {
 			// Cycle axes xyz->yzx
-			Eigen::Vector4f tmp = result.row(0);
-			result.row(0) = (Eigen::Vector4f)result.row(2);
-			result.row(2) = (Eigen::Vector4f)result.row(1);
-			result.row(1) = tmp;
+			vec4 tmp = row(result, 0);
+			result = row(result, 0, row(result, 2));
+			result = row(result, 2, row(result, 1));
+			result = row(result, 1, tmp);
 		}
-		result.col(0) *= scale_columns ?  1.f/scale :  1.f;
-		result.col(1) *= scale_columns ? -1.f/scale : -1.f;
-		result.col(2) *= scale_columns ? -1.f/scale : -1.f;
-		result.col(3) = (result.col(3) - offset) / scale;
+		result[0] *= scale_columns ?  1.f/scale :  1.f;
+		result[1] *= scale_columns ? -1.f/scale : -1.f;
+		result[2] *= scale_columns ? -1.f/scale : -1.f;
+		result[3] = (result[3] - offset) / scale;
 		return result;
 	}
 
-	Eigen::Vector3f ngp_position_to_nerf(Eigen::Vector3f pos) const {
+	vec3 ngp_position_to_nerf(vec3 pos) const {
 		if (!from_mitsuba) {
-			pos = Eigen::Vector3f(pos.z(), pos.x(), pos.y());
+			pos = vec3(pos.z, pos.x, pos.y);
 		}
 		return (pos - offset) / scale;
 	}
 
-	Eigen::Vector3f nerf_position_to_ngp(const Eigen::Vector3f &pos) const {
-		Eigen::Vector3f rv = pos * scale + offset;
-		return from_mitsuba ? rv : Eigen::Vector3f(rv.y(), rv.z(), rv.x());
+	vec3 nerf_position_to_ngp(const vec3 &pos) const {
+		vec3 rv = pos * scale + offset;
+		return from_mitsuba ? rv : vec3(rv.y, rv.z, rv.x);
 	}
 
 	void nerf_ray_to_ngp(Ray& ray, bool scale_direction = false) {

@@ -57,12 +57,12 @@ private:
 using FixedIntStack = FixedStack<int>;
 
 
-__host__ __device__ std::pair<int, float> trianglebvh_ray_intersect(const Eigen::Vector3f& ro, const Eigen::Vector3f& rd, const TriangleBvhNode* __restrict__ bvhnodes, const Triangle* __restrict__ triangles);
+__host__ __device__ std::pair<int, float> trianglebvh_ray_intersect(const vec3& ro, const vec3& rd, const TriangleBvhNode* __restrict__ bvhnodes, const Triangle* __restrict__ triangles);
 
 class TriangleBvh {
 public:
-	virtual void signed_distance_gpu(uint32_t n_elements, EMeshSdfMode mode, const Eigen::Vector3f* gpu_positions, float* gpu_distances, const Triangle* gpu_triangles, bool use_existing_distances_as_upper_bounds, cudaStream_t stream) = 0;
-	virtual void ray_trace_gpu(uint32_t n_elements, Eigen::Vector3f* gpu_positions, Eigen::Vector3f* gpu_directions, const Triangle* gpu_triangles, cudaStream_t stream) = 0;
+	virtual void signed_distance_gpu(uint32_t n_elements, EMeshSdfMode mode, const vec3* gpu_positions, float* gpu_distances, const Triangle* gpu_triangles, bool use_existing_distances_as_upper_bounds, cudaStream_t stream) = 0;
+	virtual void ray_trace_gpu(uint32_t n_elements, vec3* gpu_positions, vec3* gpu_directions, const Triangle* gpu_triangles, cudaStream_t stream) = 0;
 	virtual bool touches_triangle(const BoundingBox& bb, const Triangle* __restrict__ triangles) const = 0;
 	virtual void build(std::vector<Triangle>& triangles, uint32_t n_primitives_per_leaf) = 0;
 	virtual void build_optix(const tcnn::GPUMemory<Triangle>& triangles, cudaStream_t stream) = 0;

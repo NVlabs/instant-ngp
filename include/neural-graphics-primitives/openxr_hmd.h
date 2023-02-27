@@ -32,8 +32,6 @@
 #include <xr_dependencies.h>
 #include <openxr/openxr_platform.h>
 
-#include <Eigen/Dense>
-
 #include <tiny-cuda-nn/gpu_memory.h>
 
 #include <array>
@@ -76,18 +74,18 @@ public:
 			XrCompositionLayerProjectionView view{XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW};
 			XrCompositionLayerDepthInfoKHR depth_info{XR_TYPE_COMPOSITION_LAYER_DEPTH_INFO_KHR};
 			std::shared_ptr<Buffer2D<uint8_t>> hidden_area_mask = nullptr;
-			Eigen::Matrix<float, 3, 4> pose;
+			mat4x3 pose;
 		};
 		struct Hand {
-			Eigen::Matrix<float, 3, 4> pose;
+			mat4x3 pose;
 			bool pose_active = false;
-			Eigen::Vector2f thumbstick = Eigen::Vector2f::Zero();
+			vec2 thumbstick = vec2(0.0f);
 			float grab_strength = 0.0f;
 			bool grabbing = false;
 			bool pressing = false;
-			Eigen::Vector3f grab_pos;
-			Eigen::Vector3f prev_grab_pos;
-			Eigen::Vector3f drag() const {
+			vec3 grab_pos;
+			vec3 prev_grab_pos;
+			vec3 drag() const {
 				return grab_pos - prev_grab_pos;
 			}
 		};

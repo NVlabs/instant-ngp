@@ -30,8 +30,8 @@ inline constexpr __device__ uint32_t NERF_GRID_N_CELLS() {
 }
 
 struct NerfPayload {
-	Eigen::Vector3f origin;
-	Eigen::Vector3f dir;
+	vec3 origin;
+	vec3 dir;
 	float t;
 	float max_weight;
 	uint32_t idx;
@@ -42,20 +42,20 @@ struct NerfPayload {
 struct RaysNerfSoa {
 #if defined(__NVCC__) || (defined(__clang__) && defined(__CUDA__))
 	void copy_from_other_async(const RaysNerfSoa& other, cudaStream_t stream) {
-		CUDA_CHECK_THROW(cudaMemcpyAsync(rgba, other.rgba, size * sizeof(Eigen::Array4f), cudaMemcpyDeviceToDevice, stream));
+		CUDA_CHECK_THROW(cudaMemcpyAsync(rgba, other.rgba, size * sizeof(vec4), cudaMemcpyDeviceToDevice, stream));
 		CUDA_CHECK_THROW(cudaMemcpyAsync(depth, other.depth, size * sizeof(float), cudaMemcpyDeviceToDevice, stream));
 		CUDA_CHECK_THROW(cudaMemcpyAsync(payload, other.payload, size * sizeof(NerfPayload), cudaMemcpyDeviceToDevice, stream));
 	}
 #endif
 
-	void set(Eigen::Array4f* rgba, float* depth, NerfPayload* payload, size_t size) {
+	void set(vec4* rgba, float* depth, NerfPayload* payload, size_t size) {
 		this->rgba = rgba;
 		this->depth = depth;
 		this->payload = payload;
 		this->size = size;
 	}
 
-	Eigen::Array4f* rgba;
+	vec4* rgba;
 	float* depth;
 	NerfPayload* payload;
 	size_t size;
@@ -64,27 +64,27 @@ struct RaysNerfSoa {
 //#define TRIPLANAR_COMPATIBLE_POSITIONS   // if this is defined, then positions are stored as [x,y,z,x] so that it can be split as [x,y] [y,z] [z,x] by the input encoding
 
 struct NerfPosition {
-	NGP_HOST_DEVICE NerfPosition(const Eigen::Vector3f& pos, float dt)
+	NGP_HOST_DEVICE NerfPosition(const vec3& pos, float dt)
 	:
 	p{pos}
 #ifdef TRIPLANAR_COMPATIBLE_POSITIONS
-	, x{pos.x()}
+	, x{pos.x}
 #endif
 	{}
-	Eigen::Vector3f p;
+	vec3 p;
 #ifdef TRIPLANAR_COMPATIBLE_POSITIONS
 	float x;
 #endif
 };
 
 struct NerfDirection {
-	NGP_HOST_DEVICE NerfDirection(const Eigen::Vector3f& dir, float dt) : d{dir} {}
-	Eigen::Vector3f d;
+	NGP_HOST_DEVICE NerfDirection(const vec3& dir, float dt) : d{dir} {}
+	vec3 d;
 };
 
 struct NerfCoordinate {
-	NGP_HOST_DEVICE NerfCoordinate(const Eigen::Vector3f& pos, const Eigen::Vector3f& dir, float dt) : pos{pos, dt}, dt{dt}, dir{dir, dt} {}
-	NGP_HOST_DEVICE void set_with_optional_extra_dims(const Eigen::Vector3f& pos, const Eigen::Vector3f& dir, float dt, const float* extra_dims, uint32_t stride_in_bytes) {
+	NGP_HOST_DEVICE NerfCoordinate(const vec3& pos, const vec3& dir, float dt) : pos{pos, dt}, dt{dt}, dir{dir, dt} {}
+	NGP_HOST_DEVICE void set_with_optional_extra_dims(const vec3& pos, const vec3& dir, float dt, const float* extra_dims, uint32_t stride_in_bytes) {
 		this->dt = dt;
 		this->pos = NerfPosition(pos, dt);
 		this->dir = NerfDirection(dir, dt);

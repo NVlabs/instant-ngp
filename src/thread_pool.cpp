@@ -18,14 +18,12 @@
 
 NGP_NAMESPACE_BEGIN
 
-using namespace std;
-
 ThreadPool::ThreadPool()
-: ThreadPool{thread::hardware_concurrency()} {}
+: ThreadPool{std::thread::hardware_concurrency()} {}
 
 ThreadPool::ThreadPool(size_t max_num_threads, bool force) {
 	if (!force) {
-		max_num_threads = min((size_t)thread::hardware_concurrency(), max_num_threads);
+		max_num_threads = std::min((size_t)std::thread::hardware_concurrency(), max_num_threads);
 	}
 	start_threads(max_num_threads);
 }
@@ -40,7 +38,7 @@ void ThreadPool::start_threads(size_t num) {
 	for (size_t i = m_threads.size(); i < m_num_threads; ++i) {
 		m_threads.emplace_back([this, i] {
 			while (true) {
-				unique_lock<mutex> lock{m_task_queue_mutex};
+				std::unique_lock<std::mutex> lock{m_task_queue_mutex};
 
 				// look for a work item
 				while (i < m_num_threads && m_task_queue.empty()) {
@@ -54,7 +52,7 @@ void ThreadPool::start_threads(size_t num) {
 					break;
 				}
 
-				function<void()> task{move(m_task_queue.front())};
+				std::function<void()> task{move(m_task_queue.front())};
 				m_task_queue.pop_front();
 
 				// Unlock the lock, so we can process the task without blocking other threads
@@ -67,10 +65,10 @@ void ThreadPool::start_threads(size_t num) {
 }
 
 void ThreadPool::shutdown_threads(size_t num) {
-	auto num_to_close = min(num, m_num_threads);
+	auto num_to_close = std::min(num, m_num_threads);
 
 	{
-		lock_guard<mutex> lock{m_task_queue_mutex};
+		std::lock_guard<std::mutex> lock{m_task_queue_mutex};
 		m_num_threads -= num_to_close;
 	}
 
@@ -91,12 +89,12 @@ void ThreadPool::set_n_threads(size_t num) {
 }
 
 void ThreadPool::wait_until_queue_completed() {
-	unique_lock<mutex> lock{m_task_queue_mutex};
+	std::unique_lock<std::mutex> lock{m_task_queue_mutex};
 	m_task_queue_completed_condition.wait(lock, [this]() { return m_task_queue.empty(); });
 }
 
 void ThreadPool::flush_queue() {
-	lock_guard<mutex> lock{m_task_queue_mutex};
+	std::lock_guard<std::mutex> lock{m_task_queue_mutex};
 	m_task_queue.clear();
 }
 

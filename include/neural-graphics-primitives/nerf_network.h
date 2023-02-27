@@ -447,12 +447,20 @@ public:
 		}
 	}
 
-	const std::shared_ptr<tcnn::Encoding<T>>& encoding() const {
+	const std::shared_ptr<tcnn::Encoding<T>>& pos_encoding() const {
 		return m_pos_encoding;
 	}
 
 	const std::shared_ptr<tcnn::Encoding<T>>& dir_encoding() const {
 		return m_dir_encoding;
+	}
+
+	const std::shared_ptr<tcnn::Network<T>>& density_network() const {
+		return m_density_network;
+	}
+
+	const std::shared_ptr<tcnn::Network<T>>& rgb_network() const {
+		return m_rgb_network;
 	}
 
 	tcnn::json hyperparams() const override {
@@ -468,8 +476,8 @@ public:
 	}
 
 private:
-	std::unique_ptr<tcnn::Network<T>> m_density_network;
-	std::unique_ptr<tcnn::Network<T>> m_rgb_network;
+	std::shared_ptr<tcnn::Network<T>> m_density_network;
+	std::shared_ptr<tcnn::Network<T>> m_rgb_network;
 	std::shared_ptr<tcnn::Encoding<T>> m_pos_encoding;
 	std::shared_ptr<tcnn::Encoding<T>> m_dir_encoding;
 

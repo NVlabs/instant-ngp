@@ -24,8 +24,6 @@
 
 #include <openxr/openxr_reflection.h>
 
-#include <fmt/format.h>
-
 #include <imgui/imgui.h>
 
 #include <tinylogger/tinylogger.h>
@@ -40,7 +38,6 @@
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers" //TODO: XR struct are uninitiaized apart from their type
 #endif
 
-using namespace Eigen;
 using namespace tcnn;
 
 NGP_NAMESPACE_BEGIN
@@ -877,15 +874,15 @@ OpenXRHMD::EControlFlow OpenXRHMD::poll_events() {
 	return flow;
 }
 
-__global__ void read_hidden_area_mask_kernel(const Vector2i resolution, cudaSurfaceObject_t surface, uint8_t* __restrict__ mask) {
+__global__ void read_hidden_area_mask_kernel(const ivec2 resolution, cudaSurfaceObject_t surface, uint8_t* __restrict__ mask) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
 
-	if (x >= resolution.x() || y >= resolution.y()) {
+	if (x >= resolution.x || y >= resolution.y) {
 		return;
 	}
 
-	uint32_t idx = x + resolution.x() * y;
+	uint32_t idx = x + resolution.x * y;
 	surf2Dread(&mask[idx], surface, x, y);
 }
 
@@ -921,7 +918,7 @@ std::shared_ptr<Buffer2D<uint8_t>> OpenXRHMD::rasterize_hidden_area_mask(uint32_
 
 	CUDA_CHECK_THROW(cudaDeviceSynchronize());
 
-	Vector2i size = {view.subImage.imageRect.extent.width, view.subImage.imageRect.extent.height};
+	ivec2 size = {view.subImage.imageRect.extent.width, view.subImage.imageRect.extent.height};
 
 	bool tex = glIsEnabled(GL_TEXTURE_2D);
 	bool depth = glIsEnabled(GL_DEPTH_TEST);
@@ -948,7 +945,7 @@ std::shared_ptr<Buffer2D<uint8_t>> OpenXRHMD::rasterize_hidden_area_mask(uint32_
 	GLenum draw_buffers[1] = {GL_COLOR_ATTACHMENT0};
 	glDrawBuffers(1, draw_buffers);
 
-	glViewport(0, 0, size.x(), size.y());
+	glViewport(0, 0, size.x, size.y);
 
 	// Draw hidden area mask
 	GLuint vao;
@@ -999,7 +996,7 @@ std::shared_ptr<Buffer2D<uint8_t>> OpenXRHMD::rasterize_hidden_area_mask(uint32_
 	std::shared_ptr<Buffer2D<uint8_t>> mask = std::make_shared<Buffer2D<uint8_t>>(size);
 
 	const dim3 threads = { 16, 8, 1 };
-	const dim3 blocks = { div_round_up((uint32_t)size.x(), threads.x), div_round_up((uint32_t)size.y(), threads.y), 1 };
+	const dim3 blocks = { div_round_up((uint32_t)size.x, threads.x), div_round_up((uint32_t)size.y, threads.y), 1 };
 
 	read_hidden_area_mask_kernel<<<blocks, threads>>>(size, mask_texture.surface(), mask->data());
 	CUDA_CHECK_THROW(cudaDeviceSynchronize());
@@ -1007,33 +1004,33 @@ std::shared_ptr<Buffer2D<uint8_t>> OpenXRHMD::rasterize_hidden_area_mask(uint32_
 	return mask;
 }
 
-Matrix<float, 3, 4> convert_xr_matrix_to_eigen(const XrMatrix4x4f& m) {
-	Matrix<float, 3, 4> out;
+mat4x3 convert_xr_matrix_to_glm(const XrMatrix4x4f& m) {
+	mat4x3 out;
 
 	for (size_t i = 0; i < 3; ++i) {
 		for (size_t j = 0; j < 4; ++j) {
-			out(i, j) = m.m[i + j * 4];
+			out[j][i] = m.m[i + j * 4];
 		}
 	}
 
 	// Flip Y and Z axes to match NGP conventions
-	out(0, 1) *= -1.f;
-	out(1, 0) *= -1.f;
+	out[1][0] *= -1.f;
+	out[0][1] *= -1.f;
 
-	out(0, 2) *= -1.f;
-	out(2, 0) *= -1.f;
+	out[2][0] *= -1.f;
+	out[0][2] *= -1.f;
 
-	out(1, 3) *= -1.f;
-	out(2, 3) *= -1.f;
+	out[3][1] *= -1.f;
+	out[3][2] *= -1.f;
 
 	return out;
 }
 
-Matrix<float, 3, 4> convert_xr_pose_to_eigen(const XrPosef& pose) {
+mat4x3 convert_xr_pose_to_eigen(const XrPosef& pose) {
 	XrMatrix4x4f matrix;
 	XrVector3f unit_scale{1.0f, 1.0f, 1.0f};
 	XrMatrix4x4f_CreateTranslationRotationScale(&matrix, &pose.position, &pose.orientation, &unit_scale);
-	return convert_xr_matrix_to_eigen(matrix);
+	return convert_xr_matrix_to_glm(matrix);
 }
 
 OpenXRHMD::FrameInfoPtr OpenXRHMD::begin_frame() {
@@ -1158,10 +1155,10 @@ OpenXRHMD::FrameInfoPtr OpenXRHMD::begin_frame() {
 			XR_CHECK_THROW(xrGetActionStateVector2f(m_session, &get_info, &thumbstick_state));
 
 			if (thumbstick_state.isActive) {
-				frame_info->hands[i].thumbstick.x() = thumbstick_state.currentState.x;
-				frame_info->hands[i].thumbstick.y() = thumbstick_state.currentState.y;
+				frame_info->hands[i].thumbstick.x = thumbstick_state.currentState.x;
+				frame_info->hands[i].thumbstick.y = thumbstick_state.currentState.y;
 			} else {
-				frame_info->hands[i].thumbstick = Vector2f::Zero();
+				frame_info->hands[i].thumbstick = vec2(0.0f);
 			}
 		}
 
@@ -1198,8 +1195,8 @@ OpenXRHMD::FrameInfoPtr OpenXRHMD::begin_frame() {
 			frame_info->hands[i].grabbing = frame_info->hands[i].grab_strength >= 0.5f;
 
 			if (frame_info->hands[i].grabbing) {
-				frame_info->hands[i].prev_grab_pos = was_grabbing ? frame_info->hands[i].grab_pos : frame_info->hands[i].pose.col(3);
-				frame_info->hands[i].grab_pos = frame_info->hands[i].pose.col(3);
+				frame_info->hands[i].prev_grab_pos = was_grabbing ? frame_info->hands[i].grab_pos : frame_info->hands[i].pose[3];
+				frame_info->hands[i].grab_pos = frame_info->hands[i].pose[3];
 			}
 		}
 	}

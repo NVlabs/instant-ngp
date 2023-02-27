@@ -37,7 +37,6 @@
 
 using namespace tcnn;
 using namespace std::literals;
-using namespace Eigen;
 
 NGP_NAMESPACE_BEGIN
 
@@ -107,38 +106,38 @@ __global__ void sharpen(const uint64_t num_pixels, const uint32_t w, const T* __
 	for (int j=0;j<4;++j) destpix[i*4+j]=(T)max(0.f, rgba[j] * inv_totalw);
 }
 
-__device__ inline float luma(const Array4f& c) {
+__device__ inline float luma(const vec4& c) {
 	return c[0] * 0.2126f + c[1] * 0.7152f + c[2] * 0.0722f;
 }
 
-__global__ void compute_sharpness(Eigen::Vector2i sharpness_resolution, Eigen::Vector2i image_resolution, uint32_t n_images, const void* __restrict__ images_data, EImageDataType image_data_type, float* __restrict__ sharpness_data) {
+__global__ void compute_sharpness(ivec2 sharpness_resolution, ivec2 image_resolution, uint32_t n_images, const void* __restrict__ images_data, EImageDataType image_data_type, float* __restrict__ sharpness_data) {
 	const uint32_t x = threadIdx.x + blockIdx.x * blockDim.x;
 	const uint32_t y = threadIdx.y + blockIdx.y * blockDim.y;
 	const uint32_t i = threadIdx.z + blockIdx.z * blockDim.z;
-	if (x >= sharpness_resolution.x() || y >= sharpness_resolution.y() || i>=n_images) return;
-	const size_t sharp_size = sharpness_resolution.x() * sharpness_resolution.y();
-	sharpness_data += sharp_size * i + x + y * sharpness_resolution.x();
+	if (x >= sharpness_resolution.x || y >= sharpness_resolution.y || i>=n_images) return;
+	const size_t sharp_size = sharpness_resolution.x * sharpness_resolution.y;
+	sharpness_data += sharp_size * i + x + y * sharpness_resolution.x;
 
 	// overlap patches a bit
-	int x_border = 0; // (image_resolution.x()/sharpness_resolution.x())/4;
-	int y_border = 0; // (image_resolution.y()/sharpness_resolution.y())/4;
+	int x_border = 0; // (image_resolution.x/sharpness_resolution.x)/4;
+	int y_border = 0; // (image_resolution.y/sharpness_resolution.y)/4;
 
-	int x1 = (x*image_resolution.x())/sharpness_resolution.x()-x_border, x2 = ((x+1)*image_resolution.x())/sharpness_resolution.x()+x_border;
-	int y1 = (y*image_resolution.y())/sharpness_resolution.y()-y_border, y2 = ((y+1)*image_resolution.y())/sharpness_resolution.y()+y_border;
+	int x1 = (x*image_resolution.x)/sharpness_resolution.x-x_border, x2 = ((x+1)*image_resolution.x)/sharpness_resolution.x+x_border;
+	int y1 = (y*image_resolution.y)/sharpness_resolution.y-y_border, y2 = ((y+1)*image_resolution.y)/sharpness_resolution.y+y_border;
 	// clamp to 1 pixel in from edge
 	x1=max(x1,1); y1=max(y1,1);
-	x2=min(x2,image_resolution.x()-2); y2=min(y2,image_resolution.y()-2);
+	x2=min(x2,image_resolution.x-2); y2=min(y2,image_resolution.y-2);
 	// yes, yes I know I should do a parallel reduction and shared memory and stuff. but we have so many tiles in flight, and this is load-time, meh.
 	float tot_lap=0.f,tot_lap2=0.f,tot_lum=0.f;
 	float scal=1.f/((x2-x1)*(y2-y1));
 	for (int yy=y1;yy<y2;++yy) {
 		for (int xx=x1; xx<x2; ++xx) {
-			Array4f n, e, s, w, c;
-			c = read_rgba(Vector2i{xx, yy}, image_resolution, images_data, image_data_type, i);
-			n = read_rgba(Vector2i{xx, yy-1}, image_resolution, images_data, image_data_type, i);
-			w = read_rgba(Vector2i{xx-1, yy}, image_resolution, images_data, image_data_type, i);
-			s = read_rgba(Vector2i{xx, yy+1}, image_resolution, images_data, image_data_type, i);
-			e = read_rgba(Vector2i{xx+1, yy}, image_resolution, images_data, image_data_type, i);
+			vec4 n, e, s, w, c;
+			c = read_rgba(ivec2{xx, yy}, image_resolution, images_data, image_data_type, i);
+			n = read_rgba(ivec2{xx, yy-1}, image_resolution, images_data, image_data_type, i);
+			w = read_rgba(ivec2{xx-1, yy}, image_resolution, images_data, image_data_type, i);
+			s = read_rgba(ivec2{xx, yy+1}, image_resolution, images_data, image_data_type, i);
+			e = read_rgba(ivec2{xx+1, yy}, image_resolution, images_data, image_data_type, i);
 			float lum = luma(c);
 			float lap = lum * 4.f - luma(n) - luma(e) - luma(s) - luma(w);
 			tot_lap += lap;
@@ -157,7 +156,7 @@ NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale, bool is_h
 	NerfDataset result{};
 	result.n_images = n_images;
 	result.sharpness_resolution = { 128, 72 };
-	result.sharpness_data.enlarge( result.sharpness_resolution.x() * result.sharpness_resolution.y() *  result.n_images );
+	result.sharpness_data.enlarge( result.sharpness_resolution.x * result.sharpness_resolution.y *  result.n_images );
 	result.xforms.resize(n_images);
 	result.metadata.resize(n_images);
 	result.pixelmemory.resize(n_images);
@@ -169,13 +168,13 @@ NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale, bool is_h
 	result.is_hdr = is_hdr;
 	result.paths = std::vector<std::string>(n_images, "");
 	for (size_t i = 0; i < n_images; ++i) {
-		result.xforms[i].start = Eigen::Matrix<float, 3, 4>::Identity();
-		result.xforms[i].end = Eigen::Matrix<float, 3, 4>::Identity();
+		result.xforms[i].start = mat4x3(1.0f);
+		result.xforms[i].end = mat4x3(1.0f);
 	}
 	return result;
 }
 
-void read_lens(const nlohmann::json& json, Lens& lens, Vector2f& principal_point, Vector4f& rolling_shutter) {
+void read_lens(const nlohmann::json& json, Lens& lens, vec2& principal_point, vec4& rolling_shutter) {
 	ELensMode mode = ELensMode::Perspective;
 
 	ELensMode opencv_mode = json.value("is_fisheye", false) ? ELensMode::OpenCVFisheye : ELensMode::OpenCV;
@@ -197,11 +196,11 @@ void read_lens(const nlohmann::json& json, Lens& lens, Vector2f& principal_point
 	read_opencv_parameter("p2", 3);
 
 	if (json.contains("cx")) {
-		principal_point.x() = (float)json["cx"] / (float)json["w"];
+		principal_point.x = (float)json["cx"] / (float)json["w"];
 	}
 
 	if (json.contains("cy")) {
-		principal_point.y() = (float)json["cy"] / (float)json["h"];
+		principal_point.y = (float)json["cy"] / (float)json["h"];
 	}
 
 	if (json.contains("rolling_shutter")) {
@@ -243,7 +242,7 @@ void read_lens(const nlohmann::json& json, Lens& lens, Vector2f& principal_point
 	}
 }
 
-bool read_focal_length(const nlohmann::json &json, Vector2f &focal_length, const Vector2i &res) {
+bool read_focal_length(const nlohmann::json &json, vec2 &focal_length, const ivec2 &res) {
 	auto read_focal_length = [&](int resolution, const std::string& axis) {
 		if (json.contains(axis + "_fov")) {
 			return fov_to_focal_length(resolution, (float)json[axis + "_fov"]);
@@ -257,16 +256,16 @@ bool read_focal_length(const nlohmann::json &json, Vector2f &focal_length, const
 	};
 
 	// x_fov is in degrees, camera_angle_x in radians. Yes, it's silly.
-	float x_fl = read_focal_length(res.x(), "x");
-	float y_fl = read_focal_length(res.y(), "y");
+	float x_fl = read_focal_length(res.x, "x");
+	float y_fl = read_focal_length(res.y, "y");
 
 	if (x_fl != 0) {
-		focal_length = Vector2f::Constant(x_fl);
+		focal_length = vec2(x_fl);
 		if (y_fl != 0) {
-			focal_length.y() = y_fl;
+			focal_length.y = y_fl;
 		}
 	} else if (y_fl != 0) {
-		focal_length = Vector2f::Constant(y_fl);
+		focal_length = vec2(y_fl);
 	} else {
 		return false;
 	}
@@ -288,7 +287,7 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 	ThreadPool pool;
 
 	struct LoadedImageInfo {
-		Eigen::Vector2i res = Eigen::Vector2i::Zero();
+		ivec2 res = ivec2(0);
 		bool image_data_on_gpu = false;
 		EImageDataType image_type = EImageDataType::None;
 		bool white_transparent = false;
@@ -480,8 +479,8 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 		}
 
 		Lens lens = {};
-		Vector2f principal_point = Vector2f::Constant(0.5f);
-		Vector4f rolling_shutter = Vector4f::Zero();
+		vec2 principal_point = vec2(0.5f);
+		vec4 rolling_shutter = vec4(0.0f);
 
 		if (json.contains("integer_depth_scale")) {
 			info.depth_scale = json["integer_depth_scale"];
@@ -497,8 +496,8 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 		if (json.contains("offset")) {
 			result.offset =
 				json["offset"].is_array() ?
-				Vector3f{float(json["offset"][0]), float(json["offset"][1]), float(json["offset"][2])} :
-				Vector3f{float(json["offset"]), float(json["offset"]), float(json["offset"])};
+				vec3{float(json["offset"][0]), float(json["offset"][1]), float(json["offset"][2])} :
+				vec3{float(json["offset"]), float(json["offset"]), float(json["offset"])};
 		}
 
 		if (json.contains("aabb")) {
@@ -514,8 +513,8 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 				auto& frame = json["frames"][j];
 				nlohmann::json& jsonmatrix_start = frame.contains("transform_matrix_start") ? frame["transform_matrix_start"] : frame["transform_matrix"];
 				nlohmann::json& jsonmatrix_end = frame.contains("transform_matrix_end") ? frame["transform_matrix_end"] : jsonmatrix_start;
-				const Vector3f p = Vector3f{float(jsonmatrix_start[0][3]), float(jsonmatrix_start[1][3]), float(jsonmatrix_start[2][3])} * result.scale + result.offset;
-				const Vector3f q = Vector3f{float(jsonmatrix_end[0][3]), float(jsonmatrix_end[1][3]), float(jsonmatrix_end[2][3])} * result.scale + result.offset;
+				const vec3 p = vec3{float(jsonmatrix_start[0][3]), float(jsonmatrix_start[1][3]), float(jsonmatrix_start[2][3])} * result.scale + result.offset;
+				const vec3 q = vec3{float(jsonmatrix_end[0][3]), float(jsonmatrix_end[1][3]), float(jsonmatrix_end[2][3])} * result.scale + result.offset;
 				cam_aabb.enlarge(p);
 				cam_aabb.enlarge(q);
 			}
@@ -528,17 +527,17 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 			result.up[2] = float(json["up"][0]);
 		}
 
-		if (json.contains("envmap") && result.envmap_resolution.isZero()) {
+		if (json.contains("envmap") && !any(equal(result.envmap_resolution, ivec2(0)))) {
 			fs::path envmap_path = resolve_path(base_path, json["envmap"]);
 			if (!envmap_path.exists()) {
 				throw std::runtime_error{fmt::format("Environment map {} does not exist.", envmap_path.str())};
 			}
 
 			if (equals_case_insensitive(envmap_path.extension(), "exr")) {
-				result.envmap_data = load_exr_gpu(envmap_path, &result.envmap_resolution.x(), &result.envmap_resolution.y());
+				result.envmap_data = load_exr_gpu(envmap_path, &result.envmap_resolution.x, &result.envmap_resolution.y);
 				result.is_hdr = true;
 			} else {
-				result.envmap_data = load_stbi_gpu(envmap_path, &result.envmap_resolution.x(), &result.envmap_resolution.y());
+				result.envmap_data = load_stbi_gpu(envmap_path, &result.envmap_resolution.x, &result.envmap_resolution.y);
 			}
 		}
 
@@ -563,13 +562,13 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 
 			int comp = 0;
 			if (equals_case_insensitive(path.extension(), "exr")) {
-				dst.pixels = load_exr_to_gpu(&dst.res.x(), &dst.res.y(), path.str().c_str(), fix_premult);
+				dst.pixels = load_exr_to_gpu(&dst.res.x, &dst.res.y, path.str().c_str(), fix_premult);
 				dst.image_type = EImageDataType::Half;
 				dst.image_data_on_gpu = true;
 				result.is_hdr = true;
 			} else {
 				dst.image_data_on_gpu = false;
-				uint8_t* img = load_stbi(path, &dst.res.x(), &dst.res.y(), &comp, 4);
+				uint8_t* img = load_stbi(path, &dst.res.x, &dst.res.y, &comp, 4);
 				if (!img) {
 					throw std::runtime_error{"Could not open image file: "s + std::string{stbi_failure_reason()}};
 				}
@@ -583,12 +582,12 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 					}
 
 					ScopeGuard mem_guard{[&]() { stbi_image_free(alpha_img); }};
-					if (wa != dst.res.x() || ha != dst.res.y()) {
+					if (wa != dst.res.x || ha != dst.res.y) {
 						throw std::runtime_error{fmt::format("Alpha image {} has wrong resolution.", alphapath.str())};
 					}
 
 					tlog::success() << "Alpha loaded from " << alphapath;
-					for (int i = 0; i < dst.res.prod(); ++i) {
+					for (int i = 0; i < compMul(dst.res); ++i) {
 						img[i*4+3] = (uint8_t)(255.0f*srgb_to_linear(alpha_img[i*4]*(1.f/255.f))); // copy red channel of alpha to alpha.png to our alpha channel
 					}
 				}
@@ -602,12 +601,12 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 					}
 
 					ScopeGuard mem_guard{[&]() { stbi_image_free(mask_img); }};
-					if (wa != dst.res.x() || ha != dst.res.y()) {
+					if (wa != dst.res.x || ha != dst.res.y) {
 						throw std::runtime_error{fmt::format("Dynamic mask {} has wrong resolution.", maskpath.str())};
 					}
 
 					dst.mask_color = 0x00FF00FF; // HOT PINK
-					for (int i = 0; i < dst.res.prod(); ++i) {
+					for (int i = 0; i < compMul(dst.res); ++i) {
 						if (mask_img[i*4] != 0 || mask_img[i*4+1] != 0 || mask_img[i*4+2] != 0) {
 							*(uint32_t*)&img[i*4] = dst.mask_color;
 						}
@@ -631,7 +630,7 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 						throw std::runtime_error{fmt::format("Could not load depth image '{}'.", depthpath.str())};
 					}
 
-					if (wa != dst.res.x() || ha != dst.res.y()) {
+					if (wa != dst.res.x || ha != dst.res.y) {
 						throw std::runtime_error{fmt::format("Depth image {} has wrong resolution.", depthpath.str())};
 					}
 				}
@@ -639,7 +638,7 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 
 			fs::path rayspath = path.parent_path() / fmt::format("rays_{}.dat", path.basename());
 			if (enable_ray_loading && rayspath.exists()) {
-				uint32_t n_pixels = dst.res.prod();
+				uint32_t n_pixels = compMul(dst.res);
 				dst.rays = (Ray*)malloc(n_pixels * sizeof(Ray));
 
 				std::ifstream rays_file{native_string(rayspath), std::ios::binary};
@@ -665,12 +664,12 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 			nlohmann::json& jsonmatrix_end = frame.contains("transform_matrix_end") ? frame["transform_matrix_end"] : jsonmatrix_start;
 
 			if (frame.contains("driver_parameters")) {
-				Eigen::Vector3f light_dir(
+				vec3 light_dir(
 					frame["driver_parameters"].value("LightX", 0.f),
 					frame["driver_parameters"].value("LightY", 0.f),
 					frame["driver_parameters"].value("LightZ", 0.f)
 				);
-				result.metadata[i_img].light_dir = result.nerf_direction_to_ngp(light_dir.normalized());
+				result.metadata[i_img].light_dir = result.nerf_direction_to_ngp(normalize(light_dir));
 				result.has_light_dirs = true;
 				result.n_extra_learnable_dims = 0;
 			}
@@ -683,8 +682,8 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 
 			for (int m = 0; m < 3; ++m) {
 				for (int n = 0; n < 4; ++n) {
-					result.xforms[i_img].start(m, n) = float(jsonmatrix_start[m][n]);
-					result.xforms[i_img].end(m, n) = float(jsonmatrix_end[m][n]);
+					result.xforms[i_img].start[n][m] = float(jsonmatrix_start[m][n]);
+					result.xforms[i_img].end[n][m] = float(jsonmatrix_end[m][n]);
 				}
 			}
 
@@ -720,7 +719,7 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 	}
 
 	result.sharpness_resolution = { 128, 72 };
-	result.sharpness_data.enlarge( result.sharpness_resolution.x() * result.sharpness_resolution.y() *  result.n_images );
+	result.sharpness_data.enlarge( result.sharpness_resolution.x * result.sharpness_resolution.y *  result.n_images );
 
 	// copy / convert images to the GPU
 	for (uint32_t i = 0; i < result.n_images; ++i) {
@@ -742,12 +741,12 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 	return result;
 }
 
-void NerfDataset::set_training_image(int frame_idx, const Eigen::Vector2i& image_resolution, const void* pixels, const void* depth_pixels, float depth_scale, bool image_data_on_gpu, EImageDataType image_type, EDepthDataType depth_type, float sharpen_amount, bool white_transparent, bool black_transparent, uint32_t mask_color, const Ray *rays) {
+void NerfDataset::set_training_image(int frame_idx, const ivec2& image_resolution, const void* pixels, const void* depth_pixels, float depth_scale, bool image_data_on_gpu, EImageDataType image_type, EDepthDataType depth_type, float sharpen_amount, bool white_transparent, bool black_transparent, uint32_t mask_color, const Ray *rays) {
 	if (frame_idx < 0 || frame_idx >= n_images) {
 		throw std::runtime_error{"NerfDataset::set_training_image: invalid frame index"};
 	}
 
-	size_t n_pixels = image_resolution.prod();
+	size_t n_pixels = compMul(image_resolution);
 	size_t img_size = n_pixels * 4; // 4 channels
 	size_t image_type_stride = image_type_size(image_type);
 	// copy to gpu if we need to do a conversion
@@ -814,9 +813,9 @@ void NerfDataset::set_training_image(int frame_idx, const Eigen::Vector2i& image
 
 		float center_w = 4.f + 1.f / sharpen_amount; // center_w ranges from 5 (strong sharpening) to infinite (no sharpening)
 		if (image_type == EImageDataType::Half) {
-			linear_kernel(sharpen<__half>, 0, nullptr, n_pixels, image_resolution.x(), (__half*)dst, (__half*)images_data_sharpened.data(), center_w, 1.f / (center_w - 4.f));
+			linear_kernel(sharpen<__half>, 0, nullptr, n_pixels, image_resolution.x, (__half*)dst, (__half*)images_data_sharpened.data(), center_w, 1.f / (center_w - 4.f));
 		} else {
-			linear_kernel(sharpen<float>, 0, nullptr, n_pixels, image_resolution.x(), (float*)dst, (float*)images_data_sharpened.data(), center_w, 1.f / (center_w - 4.f));
+			linear_kernel(sharpen<float>, 0, nullptr, n_pixels, image_resolution.x, (float*)dst, (float*)images_data_sharpened.data(), center_w, 1.f / (center_w - 4.f));
 		}
 
 		pixelmemory[frame_idx] = std::move(images_data_sharpened);
@@ -826,9 +825,9 @@ void NerfDataset::set_training_image(int frame_idx, const Eigen::Vector2i& image
 	if (sharpness_data.size() > 0) {
 		// compute overall sharpness
 		const dim3 threads = { 16, 8, 1 };
-		const dim3 blocks = { div_round_up((uint32_t)sharpness_resolution.x(), threads.x), div_round_up((uint32_t)sharpness_resolution.y(), threads.y), 1 };
-		sharpness_data.enlarge(sharpness_resolution.x() * sharpness_resolution.y());
-		compute_sharpness<<<blocks, threads, 0, nullptr>>>(sharpness_resolution, image_resolution, 1, dst, image_type, sharpness_data.data() + sharpness_resolution.x() * sharpness_resolution.y() * (size_t)frame_idx);
+		const dim3 blocks = { div_round_up((uint32_t)sharpness_resolution.x, threads.x), div_round_up((uint32_t)sharpness_resolution.y, threads.y), 1 };
+		sharpness_data.enlarge(sharpness_resolution.x * sharpness_resolution.y);
+		compute_sharpness<<<blocks, threads, 0, nullptr>>>(sharpness_resolution, image_resolution, 1, dst, image_type, sharpness_data.data() + sharpness_resolution.x * sharpness_resolution.y * (size_t)frame_idx);
 	}
 
 	metadata[frame_idx].pixels = pixelmemory[frame_idx].data();

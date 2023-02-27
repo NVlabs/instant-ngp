@@ -25,11 +25,9 @@
 #include <iostream>
 #include <vector>
 
-using namespace Eigen;
-
 NGP_NAMESPACE_BEGIN
 
-std::vector<Vector3f> load_obj(const fs::path& path) {
+std::vector<vec3> load_obj(const fs::path& path) {
 	tinyobj::attrib_t attrib;
 	std::vector<tinyobj::shape_t> shapes;
 	std::vector<tinyobj::material_t> materials;
@@ -48,7 +46,7 @@ std::vector<Vector3f> load_obj(const fs::path& path) {
 		throw std::runtime_error{fmt::format("Error loading '{}': {}", path.str(), err)};
 	}
 
-	std::vector<Vector3f> result;
+	std::vector<vec3> result;
 
 	tlog::success() << "Loaded mesh \"" << path.str() << "\" file with " << shapes.size() << " shapes.";
 

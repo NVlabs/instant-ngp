@@ -31,7 +31,6 @@
 
 #include <fstream>
 
-using namespace Eigen;
 using namespace tcnn;
 
 NGP_NAMESPACE_BEGIN
@@ -44,9 +43,9 @@ Testbed::NetworkDims Testbed::network_dims_volume() const {
 	return dims;
 }
 
-__device__ Array4f proc_envmap(const Vector3f& dir, const Vector3f& up_dir, const Vector3f& sun_dir, const Array3f& skycol) {
-	float skyam = up_dir.dot(dir) * 0.5f + 0.5f;
-	float sunam = std::max(0.f, sun_dir.dot(dir));
+__device__ vec4 proc_envmap(const vec3& dir, const vec3& up_dir, const vec3& sun_dir, const vec3& skycol) {
+	float skyam = dot(up_dir, dir) * 0.5f + 0.5f;
+	float sunam = std::max(0.f, dot(sun_dir, dir));
 	sunam *= sunam;
 	sunam *= sunam;
 	sunam *= sunam;
@@ -54,29 +53,29 @@ __device__ Array4f proc_envmap(const Vector3f& dir, const Vector3f& up_dir, cons
 	sunam *= sunam;
 	sunam *= sunam;
 
-	Array4f result;
-	result.head<3>() = skycol * skyam + Array3f{255.f/255.0f, 215.f/255.0f, 195.f/255.0f} * (20.f*sunam);
-	result.w() = 1.0f;
+	vec4 result;
+	result.rgb = skycol * skyam + vec3{255.f/255.0f, 215.f/255.0f, 195.f/255.0f} * (20.f * sunam);
+	result.a = 1.0f;
 	return result;
 }
 
-__device__ Array4f proc_envmap_render(const Vector3f& dir, const Vector3f& up_dir, const Vector3f& sun_dir, const Array3f& skycol) {
+__device__ vec4 proc_envmap_render(const vec3& dir, const vec3& up_dir, const vec3& sun_dir, const vec3& skycol) {
 	// Constant background color. Uncomment the following two lines to instead render the
 	// actual sunsky model that we trained from.
-	Array4f result = Array4f::Zero();
+	vec4 result = vec4(0.0f);
 
 	result = proc_envmap(dir, up_dir, sun_dir, skycol);
 
 	return result;
 }
 
-__device__ inline bool walk_to_next_event(default_rng_t &rng, const BoundingBox &aabb, Vector3f &pos, const Vector3f &dir, const uint8_t *bitgrid, float scale) {
+__device__ inline bool walk_to_next_event(default_rng_t &rng, const BoundingBox &aabb, vec3 &pos, const vec3 &dir, const uint8_t *bitgrid, float scale) {
 	while (1) {
 		float zeta1 = random_val(rng); // sample a free flight distance and go there!
 		float dt = -std::log(1.0f - zeta1) * scale; // todo - for spatially varying majorant, we must check dt against the range over which the majorant is defined. we can turn this into an optical thickness accumulating loop...
 		pos += dir*dt;
 		if (!aabb.contains(pos)) return false; // escape to the mooon!
-		uint32_t bitidx = tcnn::morton3D(int(pos.x()*128.f+0.5f),int(pos.y()*128.f+0.5f),int(pos.z()*128.f+0.5f));
+		uint32_t bitidx = tcnn::morton3D(int(pos.x*128.f+0.5f),int(pos.y*128.f+0.5f),int(pos.z*128.f+0.5f));
 		if (bitidx<128*128*128 && bitgrid[bitidx>>3]&(1<<(bitidx&7))) break;
 		// loop around and try again as we are in density=0 region!
 	}
@@ -86,11 +85,11 @@ __device__ inline bool walk_to_next_event(default_rng_t &rng, const BoundingBox 
 static constexpr uint32_t MAX_TRAIN_VERTICES = 4; // record the first few real interactions and use as training data. uses a local array so cant be big.
 
 __global__ void volume_generate_training_data_kernel(uint32_t n_elements,
-	Vector3f* pos_out,
-	Array4f* target_out,
+	vec3* pos_out,
+	vec4* target_out,
 	const void* nanovdb,
 	const uint8_t* bitgrid,
-	Vector3f world2index_offset,
+	vec3 world2index_offset,
 	float world2index_scale,
 	BoundingBox aabb,
 	default_rng_t rng,
@@ -98,33 +97,33 @@ __global__ void volume_generate_training_data_kernel(uint32_t n_elements,
 	float scattering,
 	float distance_scale,
 	float global_majorant,
-	Vector3f up_dir,
-	Vector3f sun_dir,
-	Array3f sky_col
+	vec3 up_dir,
+	vec3 sun_dir,
+	vec3 sky_col
 ) {
 	uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx >= n_elements) return;
 	rng.advance(idx*256);
 	uint32_t numout = 0;
-	Vector3f outpos[MAX_TRAIN_VERTICES];
+	vec3 outpos[MAX_TRAIN_VERTICES];
 	float outdensity[MAX_TRAIN_VERTICES];
 	float scale = distance_scale / global_majorant;
 	const nanovdb::FloatGrid* grid = reinterpret_cast<const nanovdb::FloatGrid*>(nanovdb);
 	auto acc = grid->tree().getAccessor();
 	while (numout < MAX_TRAIN_VERTICES) {
 		uint32_t prev_numout = numout;
-		Vector3f pos = random_dir(rng) * 2. + Vector3f::Constant(0.5f);
-		Vector3f target = random_val_3d(rng).cwiseProduct(aabb.diag()) + aabb.min;
-		Vector3f dir = (target-pos).normalized();
+		vec3 pos = random_dir(rng) * 2.0f + vec3(0.5f);
+		vec3 target = random_val_3d(rng) * aabb.diag() + aabb.min;
+		vec3 dir = normalize(target - pos);
 		auto box_intersection = aabb.ray_intersect(pos, dir);
-		float t = max(box_intersection.x(), 0.0f);
+		float t = max(box_intersection.x, 0.0f);
 		pos = pos + (t + 1e-6f) * dir;
 		float throughput = 1.f;
 		for (int iter=0; iter<128; ++iter) {
 			if (!walk_to_next_event(rng, aabb, pos, dir, bitgrid, scale)) // escaped!
 				break;
-			Vector3f nanovdbpos = pos*world2index_scale + world2index_offset;
-			float density = acc.getValue({int(nanovdbpos.x()+random_val(rng)), int(nanovdbpos.y()+random_val(rng)), int(nanovdbpos.z()+random_val(rng))});
+			vec3 nanovdbpos = pos*world2index_scale + world2index_offset;
+			float density = acc.getValue({int(nanovdbpos.x+random_val(rng)), int(nanovdbpos.y+random_val(rng)), int(nanovdbpos.z+random_val(rng))});
 
 			if (numout < MAX_TRAIN_VERTICES) {
 				outdensity[numout]=density;
@@ -138,20 +137,20 @@ __global__ void volume_generate_training_data_kernel(uint32_t n_elements,
 			if (zeta2 >= extinction_prob)
 				continue; // null collision
 			if (zeta2 < scatter_prob) // was it a scatter?
-				dir = (dir*scattering + random_dir(rng)).normalized();
+				dir = normalize(dir * scattering + random_dir(rng));
 			else {
 				throughput = 0.f; // absorb
 				break;
 			}
 		}
-		Array4f targetcol = proc_envmap(dir, up_dir, sun_dir, sky_col) * throughput;
+		vec4 targetcol = proc_envmap(dir, up_dir, sun_dir, sky_col) * throughput;
 		uint32_t oidx=idx * MAX_TRAIN_VERTICES;
 		for (uint32_t i=prev_numout;i<numout;++i) {
 			float density=outdensity[i];
-			Vector3f pos=outpos[i];
+			vec3 pos=outpos[i];
 			pos_out[oidx + i]=pos;
 			target_out[oidx + i] = targetcol;
-			target_out[oidx + i].w() = density;
+			target_out[oidx + i].w = density;
 		}
 	}
 }
@@ -170,7 +169,7 @@ void Testbed::train_volume(size_t target_batch_size, bool get_loss_scalar, cudaS
 	m_volume.training.targets.enlarge(n_elements);
 
 	float distance_scale = 1.f/std::max(m_volume.inv_distance_scale,0.01f);
-	auto sky_col = m_background_color.head<3>();
+	auto sky_col = m_background_color.rgb;
 
 	linear_kernel(volume_generate_training_data_kernel, 0, stream, n_elements / MAX_TRAIN_VERTICES,
 		    m_volume.training.positions.data(),
@@ -205,38 +204,38 @@ void Testbed::train_volume(size_t target_batch_size, bool get_loss_scalar, cudaS
 
 __global__ void init_rays_volume(
 	uint32_t sample_index,
-	Vector3f* __restrict__ positions,
+	vec3* __restrict__ positions,
 	Testbed::VolPayload* __restrict__ payloads,
 	uint32_t *pixel_counter,
-	Vector2i resolution,
-	Vector2f focal_length,
-	Matrix<float, 3, 4> camera_matrix,
-	Vector2f screen_center,
-	Vector3f parallax_shift,
+	ivec2 resolution,
+	vec2 focal_length,
+	mat4x3 camera_matrix,
+	vec2 screen_center,
+	vec3 parallax_shift,
 	bool snap_to_pixel_centers,
 	BoundingBox aabb,
 	float near_distance,
 	float plane_z,
 	float aperture_size,
 	Foveation foveation,
-	Buffer2DView<const Array4f> envmap,
-	Array4f* __restrict__ frame_buffer,
+	Buffer2DView<const vec4> envmap,
+	vec4* __restrict__ frame_buffer,
 	float* __restrict__ depth_buffer,
 	Buffer2DView<const uint8_t> hidden_area_mask,
 	default_rng_t rng,
 	const uint8_t *bitgrid,
 	float distance_scale,
 	float global_majorant,
-	Vector3f up_dir,
-	Vector3f sun_dir,
-	Array3f sky_col
+	vec3 up_dir,
+	vec3 sun_dir,
+	vec3 sky_col
 ) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
-	if (x >= resolution.x() || y >= resolution.y()) {
+	if (x >= resolution.x || y >= resolution.y) {
 		return;
 	}
-	uint32_t idx = x + resolution.x() * y;
+	uint32_t idx = x + resolution.x * y;
 	rng.advance(idx<<8);
 	if (plane_z < 0) {
 		aperture_size = 0.0;
@@ -263,54 +262,55 @@ __global__ void init_rays_volume(
 		return;
 	}
 
-	ray.d = ray.d.normalized();
+	ray.d = normalize(ray.d);
 	auto box_intersection = aabb.ray_intersect(ray.o, ray.d);
-	float t = max(box_intersection.x(), 0.0f);
+	float t = max(box_intersection.x, 0.0f);
 	ray.advance(t + 1e-6f);
 	float scale = distance_scale / global_majorant;
 
-	if (t >= box_intersection.y() || !walk_to_next_event(rng, aabb, ray.o, ray.d, bitgrid, scale)) {
+	if (t >= box_intersection.y || !walk_to_next_event(rng, aabb, ray.o, ray.d, bitgrid, scale)) {
 		frame_buffer[idx] = proc_envmap_render(ray.d, up_dir, sun_dir, sky_col);
 		depth_buffer[idx] = MAX_DEPTH();
 	} else {
 		uint32_t dstidx = atomicAdd(pixel_counter, 1);
 		positions[dstidx] = ray.o;
-		payloads[dstidx] = {ray.d, Array4f::Constant(0.f), idx};
-		depth_buffer[idx] = camera_matrix.col(2).dot(ray.o - camera_matrix.col(3));
+		payloads[dstidx] = {ray.d, vec4(0.f), idx};
+		depth_buffer[idx] = dot(camera_matrix[2], ray.o - camera_matrix[3]);
 	}
 }
 
 __global__ void volume_render_kernel_gt(
 	uint32_t n_pixels,
-	Vector2i resolution,
+	ivec2 resolution,
 	default_rng_t rng,
 	BoundingBox aabb,
-	const Vector3f* __restrict__ positions_in,
+	const vec3* __restrict__ positions_in,
 	const Testbed::VolPayload* __restrict__ payloads_in,
 	const uint32_t *pixel_counter_in,
-	const Vector3f up_dir,
-	const Vector3f sun_dir,
-	const Array3f sky_col,
+	const vec3 up_dir,
+	const vec3 sun_dir,
+	const vec3 sky_col,
 	const void *nanovdb,
 	const uint8_t *bitgrid,
 	float global_majorant,
-	Vector3f world2index_offset,
+	vec3 world2index_offset,
 	float world2index_scale,
 	float distance_scale,
 	float albedo,
 	float scattering,
-	Array4f* __restrict__ frame_buffer
+	vec4* __restrict__ frame_buffer
 ) {
 	uint32_t idx = threadIdx.x + blockDim.x * blockIdx.x;
-	if (idx>=n_pixels || idx>=pixel_counter_in[0])
+	if (idx >= n_pixels || idx >= pixel_counter_in[0])
 		return;
 	uint32_t pixidx = payloads_in[idx].pixidx;
-	uint32_t x = pixidx % resolution.x();
-	uint32_t y = pixidx / resolution.x();
-	if (y>=resolution.y())
+
+	uint32_t y = pixidx / resolution.x;
+	if (y >= resolution.y)
 		return;
-	Vector3f pos = positions_in[idx];
-	Vector3f dir = payloads_in[idx].dir;
+
+	vec3 pos = positions_in[idx];
+	vec3 dir = payloads_in[idx].dir;
 	rng.advance(pixidx<<8);
 	const nanovdb::FloatGrid* grid = reinterpret_cast<const nanovdb::FloatGrid*>(nanovdb);
 	auto acc = grid->tree().getAccessor();
@@ -322,13 +322,13 @@ __global__ void volume_render_kernel_gt(
 	bool scattered = false;
 
 	for (int iter=0;iter<128;++iter) {
-		Vector3f nanovdbpos = pos*world2index_scale + world2index_offset;
-		float density = acc.getValue({int(nanovdbpos.x()+random_val(rng)), int(nanovdbpos.y()+random_val(rng)), int(nanovdbpos.z()+random_val(rng))});
+		vec3 nanovdbpos = pos*world2index_scale + world2index_offset;
+		float density = acc.getValue({int(nanovdbpos.x+random_val(rng)), int(nanovdbpos.y+random_val(rng)), int(nanovdbpos.z+random_val(rng))});
 		float extinction_prob = density / global_majorant;
 		float scatter_prob = extinction_prob * albedo;
 		float zeta2=random_val(rng);
 		if (zeta2<scatter_prob) {
-			dir = (dir*scattering + random_dir(rng)).normalized();
+			dir = normalize(dir * scattering + random_dir(rng));
 			scattered = true;
 		} else if (zeta2<extinction_prob) {
 			absorbed = true;
@@ -339,7 +339,7 @@ __global__ void volume_render_kernel_gt(
 	}
 	// the ray is done!
 
-	Array4f col;
+	vec4 col;
 	if (absorbed) {
 		col = {0.0f, 0.0f, 0.0f, 1.0f};
 	} else if (scattered) {
@@ -352,57 +352,56 @@ __global__ void volume_render_kernel_gt(
 
 __global__ void volume_render_kernel_step(
 	uint32_t n_pixels,
-	Vector2i resolution,
+	ivec2 resolution,
 	default_rng_t rng,
 	BoundingBox aabb,
-	const Vector3f* __restrict__ positions_in,
+	const vec3* __restrict__ positions_in,
 	const Testbed::VolPayload* __restrict__ payloads_in,
 	const uint32_t *pixel_counter_in,
-	Vector3f* __restrict__ positions_out,
+	vec3* __restrict__ positions_out,
 	Testbed::VolPayload* __restrict__ payloads_out,
 	uint32_t *pixel_counter_out,
-	const Array4f *network_outputs_in,
-	const Vector3f up_dir,
-	const Vector3f sun_dir,
-	const Array3f sky_col,
+	const vec4 *network_outputs_in,
+	const vec3 up_dir,
+	const vec3 sun_dir,
+	const vec3 sky_col,
 	const void *nanovdb,
 	const uint8_t *bitgrid,
 	float global_majorant,
-	Vector3f world2index_offset,
+	vec3 world2index_offset,
 	float world2index_scale,
 	float distance_scale,
 	float albedo,
 	float scattering,
-	Array4f* __restrict__ frame_buffer,
+	vec4* __restrict__ frame_buffer,
 	bool force_finish_ray
 ) {
 	uint32_t idx = threadIdx.x + blockDim.x * blockIdx.x;
-	if (idx>=n_pixels || idx>=pixel_counter_in[0])
+	if (idx >= n_pixels || idx >= pixel_counter_in[0])
 		return;
 	Testbed::VolPayload payload = payloads_in[idx];
 	uint32_t pixidx = payload.pixidx;
-	uint32_t x = pixidx % resolution.x();
-	uint32_t y = pixidx / resolution.x();
-	if (y>=resolution.y())
+	uint32_t y = pixidx / resolution.x;
+	if (y >= resolution.y)
 		return;
-	Vector3f pos = positions_in[idx];
-	Vector3f dir = payload.dir;
+	vec3 pos = positions_in[idx];
+	vec3 dir = payload.dir;
 	rng.advance(pixidx<<8);
 	const nanovdb::FloatGrid* grid = reinterpret_cast<const nanovdb::FloatGrid*>(nanovdb);
 	auto acc = grid->tree().getAccessor();
 	// ye olde delta tracker
 
-	Array4f local_output = network_outputs_in[idx];
+	vec4 local_output = network_outputs_in[idx];
 	float scale = distance_scale / global_majorant;
-	float density = local_output.w();
+	float density = local_output.w;
 	float extinction_prob = density / global_majorant;
 	if (extinction_prob>1.f) extinction_prob=1.f;
-	float T = 1.f-payload.col.w();
+	float T = 1.f - payload.col.a;
 	float alpha = extinction_prob * T;
-	payload.col.head<3>() += local_output.head<3>() * alpha;
-	payload.col.w() += alpha;
-	if (payload.col.w() > 0.99f || !walk_to_next_event(rng, aabb, pos, dir, bitgrid, scale) || force_finish_ray) {
-		payload.col += (1.f-payload.col.w()) * proc_envmap_render(dir, up_dir, sun_dir, sky_col);
+	payload.col.rgb += local_output.rgb * alpha;
+	payload.col.a += alpha;
+	if (payload.col.a > 0.99f || !walk_to_next_event(rng, aabb, pos, dir, bitgrid, scale) || force_finish_ray) {
+		payload.col += (1.f-payload.col.a) * proc_envmap_render(dir, up_dir, sun_dir, sky_col);
 		frame_buffer[pixidx] = payload.col;
 		return;
 	}
@@ -414,16 +413,16 @@ __global__ void volume_render_kernel_step(
 void Testbed::render_volume(
 	cudaStream_t stream,
 	const CudaRenderBufferView& render_buffer,
-	const Vector2f& focal_length,
-	const Matrix<float, 3, 4>& camera_matrix,
-	const Vector2f& screen_center,
+	const vec2& focal_length,
+	const mat4x3& camera_matrix,
+	const vec2& screen_center,
 	const Foveation& foveation
 ) {
 	float plane_z = m_slice_plane_z + m_scale;
 	float distance_scale = 1.f/std::max(m_volume.inv_distance_scale,0.01f);
 	auto res = render_buffer.resolution;
 
-	size_t n_pixels = (size_t)res.x() * res.y();
+	size_t n_pixels = (size_t)res.x * res.y;
 	for (uint32_t i=0;i<2;++i) {
 		m_volume.pos[i].enlarge(n_pixels);
 		m_volume.payload[i].enlarge(n_pixels);
@@ -431,10 +430,10 @@ void Testbed::render_volume(
 	m_volume.hit_counter.enlarge(2);
 	m_volume.hit_counter.memset(0);
 
-	Array3f sky_col = m_background_color.head<3>();
+	vec3 sky_col = m_background_color.rgb;
 
 	const dim3 threads = { 16, 8, 1 };
-	const dim3 blocks = { div_round_up((uint32_t)res.x(), threads.x), div_round_up((uint32_t)res.y(), threads.y), 1 };
+	const dim3 blocks = { div_round_up((uint32_t)res.x, threads.x), div_round_up((uint32_t)res.y, threads.y), 1 };
 	init_rays_volume<<<blocks, threads, 0, stream>>>(
 		render_buffer.spp,
 		m_volume.pos[0].data(),
@@ -615,13 +614,13 @@ void Testbed::load_volume(const fs::path& data_path) {
 	float maxsize = std::max(std::max(xsize, ysize), zsize);
 	float scale = 1.0f / maxsize;
 	m_aabb = m_render_aabb = BoundingBox{
-		Vector3f{0.5f - xsize * scale * 0.5f, 0.5f - ysize * scale * 0.5f, 0.5f - zsize * scale * 0.5f},
-		Vector3f{0.5f + xsize * scale * 0.5f, 0.5f + ysize * scale * 0.5f, 0.5f + zsize * scale * 0.5f},
+		vec3{0.5f - xsize * scale * 0.5f, 0.5f - ysize * scale * 0.5f, 0.5f - zsize * scale * 0.5f},
+		vec3{0.5f + xsize * scale * 0.5f, 0.5f + ysize * scale * 0.5f, 0.5f + zsize * scale * 0.5f},
 	};
-	m_render_aabb_to_local = Matrix3f::Identity();
+	m_render_aabb_to_local = mat3(1.0f);
 
 	m_volume.world2index_scale = maxsize;
-	m_volume.world2index_offset = Vector3f{
+	m_volume.world2index_offset = vec3{
 		(metadata.indexBBox[0][0] + metadata.indexBBox[1][0]) * 0.5f - 0.5f * maxsize,
 		(metadata.indexBBox[0][1] + metadata.indexBBox[1][1]) * 0.5f - 0.5f * maxsize,
 		(metadata.indexBBox[0][2] + metadata.indexBBox[1][2]) * 0.5f - 0.5f * maxsize,
@@ -637,9 +636,9 @@ void Testbed::load_volume(const fs::path& data_path) {
 		if (d > mx) mx = d;
 		if (d < mn) mn = d;
 		if (d > 0.001f) {
-			float fx = ((i + 0.5f) - m_volume.world2index_offset.x()) / m_volume.world2index_scale;
-			float fy = ((j + 0.5f) - m_volume.world2index_offset.y()) / m_volume.world2index_scale;
-			float fz = ((k + 0.5f) - m_volume.world2index_offset.z()) / m_volume.world2index_scale;
+			float fx = ((i + 0.5f) - m_volume.world2index_offset.x) / m_volume.world2index_scale;
+			float fy = ((j + 0.5f) - m_volume.world2index_offset.y) / m_volume.world2index_scale;
+			float fz = ((k + 0.5f) - m_volume.world2index_offset.z) / m_volume.world2index_scale;
 			uint32_t bitidx = tcnn::morton3D(int(fx * 128.0f + 0.5f), int(fy * 128.0f + 0.5f), int(fz * 128.0f + 0.5f));
 			if (bitidx < 128 * 128 * 128)
 				bitgrid[bitidx / 8] |= 1 << (bitidx & 7);

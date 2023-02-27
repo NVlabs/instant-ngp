@@ -20,7 +20,6 @@
 
 #include "raystab.h"
 
-using namespace Eigen;
 using namespace tcnn;
 
 NGP_NAMESPACE_BEGIN
@@ -33,17 +32,17 @@ extern "C" __global__ void __raygen__rg() {
 	const uint3 idx = optixGetLaunchIndex();
 	const uint3 dim = optixGetLaunchDimensions();
 
-	Vector3f ray_origin = params.ray_origins[idx.x];
+	vec3 ray_origin = params.ray_origins[idx.x];
 
 	default_rng_t rng;
 	rng.advance(idx.x * 2);
-	Vector2f offset = random_val_2d(rng);
+	vec2 offset = random_val_2d(rng);
 
 	static constexpr uint32_t N_STAB_RAYS = 32;
 	for (uint32_t i = 0; i < N_STAB_RAYS; ++i) {
 		// Use a Fibonacci lattice (with random offset) to regularly
 		// distribute the stab rays over the sphere.
-		Vector3f ray_direction = fibonacci_dir<N_STAB_RAYS>(i, offset);
+		vec3 ray_direction = fibonacci_dir<N_STAB_RAYS>(i, offset);
 
 		// Trace the stab ray against our scene hierarchy
 		unsigned int p0;

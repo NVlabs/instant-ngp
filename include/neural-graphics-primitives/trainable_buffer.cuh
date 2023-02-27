@@ -28,10 +28,12 @@ NGP_NAMESPACE_BEGIN
 
 template <uint32_t N_DIMS, uint32_t RANK, typename T>
 class TrainableBuffer : public tcnn::DifferentiableObject<float, T, T> {
-	using ResVector = Eigen::Matrix<int, RANK, 1>;
-
 public:
-	TrainableBuffer(const ResVector& resolution) : m_resolution{resolution} {
+	template <typename RES>
+	TrainableBuffer(const RES& resolution) {
+		for (uint32_t i = 0; i < RANK; ++i) {
+			m_resolution[i] = resolution[i];
+		}
 		m_params_gradient_weight.resize(n_params());
 	}
 
@@ -66,7 +68,11 @@ public:
 	}
 
 	size_t n_params() const override {
-		return m_resolution.prod() * N_DIMS;
+		size_t result = N_DIMS;
+		for (uint32_t i = 0; i < RANK; ++i) {
+			result *= m_resolution[i];
+		}
+		return result;
 	}
 
 	uint32_t input_width() const override {
@@ -100,7 +106,7 @@ public:
 	}
 
 private:
-	ResVector m_resolution;
+	uint32_t m_resolution[RANK];
 	tcnn::GPUMemory<T> m_params_gradient_weight;
 };
 
