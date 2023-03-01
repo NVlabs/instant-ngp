@@ -132,18 +132,18 @@ namespace glm {
 
 	template <typename T>
 	void to_json(nlohmann::json& j, const tquat<T>& q) {
-		j.push_back(q.w);
 		j.push_back(q.x);
 		j.push_back(q.y);
 		j.push_back(q.z);
+		j.push_back(q.w);
 	}
 
 	template <typename T>
 	void from_json(const nlohmann::json& j, tquat<T>& q) {
-		q.w = j.at(0).get<T>();
-		q.x = j.at(1).get<T>();
-		q.y = j.at(2).get<T>();
-		q.z = j.at(3).get<T>();
+		q.x = j.at(0).get<T>();
+		q.y = j.at(1).get<T>();
+		q.z = j.at(2).get<T>();
+		q.w = j.at(3).get<T>();
 	}
 }
 

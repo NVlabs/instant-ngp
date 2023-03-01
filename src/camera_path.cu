@@ -30,16 +30,15 @@ NGP_NAMESPACE_BEGIN
 
 CameraKeyframe lerp(const CameraKeyframe& p0, const CameraKeyframe& p1, float t, float t0, float t1) {
 	t = (t - t0) / (t1 - t0);
-	vec4 R1 = p1.R;
+	quat R1 = p1.R;
 
 	// take the short path
 	if (dot(R1, p0.R) < 0.0f)  {
 		R1 = -R1;
 	}
 
-	auto q = slerp(quat(p0.R), quat(R1), t);
 	return {
-		vec4(q.x, q.y, q.z, q.w),
+		slerp(p0.R, R1, t),
 		p0.T + (p1.T - p0.T) * t,
 		p0.slice + (p1.slice - p0.slice) * t,
 		p0.scale + (p1.scale - p0.scale) * t,
@@ -91,8 +90,8 @@ void from_json(bool is_first, const json& j, CameraKeyframe& p, const CameraKeyf
 	 if (is_first && load_relative_to_first) {
 	 	p.from_m(ref);
 	 } else {
-		p.R = vec4(j["R"][0],j["R"][1],j["R"][2],j["R"][3]);
-		p.T = vec3(j["T"][0],j["T"][1],j["T"][2]);
+		p.R = j.at("R");
+		p.T = j.at("T");
 
 		if (load_relative_to_first) {
 	 		mat4 ref4 = {ref};
@@ -324,12 +323,12 @@ bool CameraPath::imgui_viz(ImDrawList* list, mat4 &view2proj, mat4 &world2proj, 
 	bool changed = false;
 	// float flx = focal.x;
 	float fly = focal.y;
-	mat4 view2proj_guizmo(
+	mat4 view2proj_guizmo = transpose(mat4(
 		fly * 2.0f / aspect, 0.0f, 0.0f, 0.0f,
 		0.0f, -fly * 2.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, (zfar + znear) / (zfar - znear), -(2.0f * zfar * znear) / (zfar - znear),
 		0.0f, 0.0f, 1.0f, 0.0f
-	);
+	));
 
 	if (!update_cam_from_path) {
 		ImDrawList* list = ImGui::GetForegroundDrawList();
@@ -352,8 +351,7 @@ bool CameraPath::imgui_viz(ImDrawList* list, mat4 &view2proj, mat4 &world2proj, 
 				int i1 = cur_cam_i; while (i1 < keyframes.size() - 1 && keyframes[cur_cam_i].same_pos_as(keyframes[i1 + 1])) i1++;
 				for (int i = i0; i <= i1; ++i) {
 					keyframes[i].T = matrix[3].xyz;
-					auto q = quat(mat3(matrix));
-					keyframes[i].R = vec4(q.x, q.y, q.z, q.w);
+					keyframes[i].R = quat(mat3(matrix));
 				}
 				changed=true;
 			}

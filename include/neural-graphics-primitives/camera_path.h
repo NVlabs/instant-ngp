@@ -31,7 +31,7 @@ struct ImDrawList;
 NGP_NAMESPACE_BEGIN
 
 struct CameraKeyframe {
-	vec4 R;
+	quat R;
 	vec3 T;
 	float slice;
 	float scale; // not a scale factor as in scaling the world, but the value of m_scale (setting the focal plane along with slice)
@@ -46,21 +46,20 @@ struct CameraKeyframe {
 
 	void from_m(const mat4x3& rv) {
 		T = rv[3];
-		quat q = mat3(rv);
-		R = vec4(q.x, q.y, q.z, q.w);
+		R = quat(mat3(rv));
 	}
 
 	CameraKeyframe() = default;
-	CameraKeyframe(const vec4 &r, const vec3 &t, float sl, float sc, float fv, float df, int gm, float gyc) : R(r), T(t), slice(sl), scale(sc), fov(fv), aperture_size(df), glow_mode(gm), glow_y_cutoff(gyc) {}
+	CameraKeyframe(const quat& r, const vec3& t, float sl, float sc, float fv, float df, int gm, float gyc) : R(r), T(t), slice(sl), scale(sc), fov(fv), aperture_size(df), glow_mode(gm), glow_y_cutoff(gyc) {}
 	CameraKeyframe(mat4x3 m, float sl, float sc, float fv, float df, int gm, float gyc) : slice(sl), scale(sc), fov(fv), aperture_size(df), glow_mode(gm), glow_y_cutoff(gyc) { from_m(m); }
 	CameraKeyframe operator*(float f) const { return {R*f, T*f, slice*f, scale*f, fov*f, aperture_size*f, glow_mode, glow_y_cutoff*f}; }
-	CameraKeyframe operator+(const CameraKeyframe &rhs) const {
-		vec4 Rr = rhs.R;
+	CameraKeyframe operator+(const CameraKeyframe& rhs) const {
+		quat Rr = rhs.R;
 		if (dot(Rr, R) < 0.0f) Rr = -Rr;
 		return {R+Rr, T+rhs.T, slice+rhs.slice, scale+rhs.scale, fov+rhs.fov, aperture_size+rhs.aperture_size, glow_mode, glow_y_cutoff+rhs.glow_y_cutoff};
 	}
 
-	bool same_pos_as(const CameraKeyframe &rhs) const {
+	bool same_pos_as(const CameraKeyframe& rhs) const {
 		return distance(T, rhs.T) < 0.0001f && fabsf(dot(R, rhs.R)) >= 0.999f;
 	}
 };
