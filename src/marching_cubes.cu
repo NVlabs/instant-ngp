@@ -822,6 +822,13 @@ void save_mesh(
 	colors.copy_to_host(cpucolors);
 	indices.copy_to_host(cpuindices);
 
+	// Replace invalid values with reasonable defaults
+	for (size_t i = 0; i < cpuverts.size(); ++i) {
+		if (!all(isfinite(cpuverts[i]))) cpuverts[i] = vec3(0.0f);
+		if (!all(isfinite(cpunormals[i]))) cpunormals[i] = vec3(0.0f, 1.0f, 0.0f);
+		if (!all(isfinite(cpucolors[i]))) cpucolors[i] = vec3(0.0f);
+	}
+
 	uint32_t numquads = ((cpuindices.size()/3)+1)/2;
 	uint32_t numquadsx = uint32_t(sqrtf(numquads)+4) & (~3);
 	uint32_t numquadsy = (numquads+numquadsx-1)/numquadsx;

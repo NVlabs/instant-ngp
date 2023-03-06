@@ -729,6 +729,22 @@ inline NGP_HOST_DEVICE float norm(const mat4x3& mat) {
 	return sqrt(length2(mat[0]) + length2(mat[1]) + length2(mat[2]) + length2(mat[3]));
 }
 
+inline NGP_HOST_DEVICE bool isfinite(float v) {
+	return std::isfinite(v);
+}
+
+inline NGP_HOST_DEVICE bvec2 isfinite(const vec2& v) {
+	return bvec2(std::isfinite(v.x), std::isfinite(v.y));
+}
+
+inline NGP_HOST_DEVICE bvec3 isfinite(const vec3& v) {
+	return bvec3(std::isfinite(v.x), std::isfinite(v.y), std::isfinite(v.z));
+}
+
+inline NGP_HOST_DEVICE bvec4 isfinite(const vec4& v) {
+	return bvec4(std::isfinite(v.x), std::isfinite(v.y), std::isfinite(v.z), std::isfinite(v.w));
+}
+
 inline NGP_HOST_DEVICE void apply_quilting(uint32_t* x, uint32_t* y, const ivec2& resolution, vec3& parallax_shift, const ivec2& quilting_dims) {
 	float resx = float(resolution.x) / quilting_dims.x;
 	float resy = float(resolution.y) / quilting_dims.y;
