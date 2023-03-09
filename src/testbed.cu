@@ -495,7 +495,7 @@ void Testbed::set_train(bool mtrain) {
 	m_train = mtrain;
 }
 
-void Testbed::compute_and_save_marching_cubes_mesh(const char* filename, ivec3 res3d , BoundingBox aabb, float thresh, bool unwrap_it) {
+void Testbed::compute_and_save_marching_cubes_mesh(const fs::path& filename, ivec3 res3d , BoundingBox aabb, float thresh, bool unwrap_it) {
 	mat3 render_aabb_to_local = mat3(1.0f);
 	if (aabb.is_empty()) {
 		aabb = m_testbed_mode == ETestbedMode::Nerf ? m_render_aabb : m_aabb;
@@ -505,7 +505,7 @@ void Testbed::compute_and_save_marching_cubes_mesh(const char* filename, ivec3 r
 	save_mesh(m_mesh.verts, m_mesh.vert_normals, m_mesh.vert_colors, m_mesh.indices, filename, unwrap_it, m_nerf.training.dataset.scale, m_nerf.training.dataset.offset);
 }
 
-ivec3 Testbed::compute_and_save_png_slices(const char* filename, int res, BoundingBox aabb, float thresh, float density_range, bool flip_y_and_z_axes) {
+ivec3 Testbed::compute_and_save_png_slices(const fs::path& filename, int res, BoundingBox aabb, float thresh, float density_range, bool flip_y_and_z_axes) {
 	mat3 render_aabb_to_local = mat3(1.0f);
 	if (aabb.is_empty()) {
 		aabb = m_testbed_mode == ETestbedMode::Nerf ? m_render_aabb : m_aabb;
@@ -520,13 +520,15 @@ ivec3 Testbed::compute_and_save_png_slices(const char* filename, int res, Boundi
 		aabb.inflate(range * aabb.diag().x/res3d.x);
 	}
 	auto res3d = get_marching_cubes_res(res, aabb);
-	if (m_testbed_mode == ETestbedMode::Sdf)
-		range *= -aabb.diag().x/res3d.x; // rescale the range to be in output voxels. ie this scale factor is mapped back to the original world space distances.
-			// negated so that black = outside, white = inside
-	char fname[128];
-	snprintf(fname, sizeof(fname), ".density_slices_%dx%dx%d.png", res3d.x, res3d.y, res3d.z);
+	if (m_testbed_mode == ETestbedMode::Sdf) {
+		// rescale the range to be in output voxels. ie this scale factor is mapped back to the original world space distances.
+		// negated so that black = outside, white = inside
+		range *= -aabb.diag().x / res3d.x;
+	}
+
+	std::string fname = fmt::format(".density_slices_{}x{}x{}.png", res3d.x, res3d.y, res3d.z);
 	GPUMemory<float> density = (m_render_ground_truth && m_testbed_mode == ETestbedMode::Sdf) ? get_sdf_gt_on_grid(res3d, aabb, render_aabb_to_local) : get_density_on_grid(res3d, aabb, render_aabb_to_local);
-	save_density_grid_to_png(density, (std::string(filename) + fname).c_str(), res3d, thresh, flip_y_and_z_axes, range);
+	save_density_grid_to_png(density, filename.str() + fname, res3d, thresh, flip_y_and_z_axes, range);
 	return res3d;
 }
 
@@ -1589,7 +1591,7 @@ void Testbed::imgui() {
 			ImGui::SameLine();
 
 			if (imgui_colored_button("Save density PNG", -0.7f)) {
-				Testbed::compute_and_save_png_slices(m_data_path.str().c_str(), m_mesh.res, {}, m_mesh.thresh, density_range, flip_y_and_z_axes);
+				compute_and_save_png_slices(m_data_path, m_mesh.res, {}, m_mesh.thresh, density_range, flip_y_and_z_axes);
 			}
 
 			if (m_testbed_mode == ETestbedMode::Nerf) {
@@ -1600,27 +1602,29 @@ void Testbed::imgui() {
 					// Alternatively, if the true transparency of a given voxel is desired, one could use the voxel size,
 					// the voxel diagonal, or some form of expected ray length through the voxel, given random directions.
 					GPUMemory<vec4> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, 0.01f);
-					auto dir = m_data_path / "rgba_slices";
+					auto dir = m_data_path.is_directory() || m_data_path.empty() ? (m_data_path / "rgba_slices") : (m_data_path.parent_path() / fmt::format("{}_rgba_slices", m_data_path.filename()));
 					if (!dir.exists()) {
 						fs::create_directory(dir);
 					}
-					save_rgba_grid_to_png_sequence(rgba, dir.str().c_str(), res3d, flip_y_and_z_axes);
+
+					save_rgba_grid_to_png_sequence(rgba, dir, res3d, flip_y_and_z_axes);
 				}
 				if (imgui_colored_button("Save raw volumes", 0.4f)) {
 					auto effective_view_dir = flip_y_and_z_axes ? vec3{0.0f, 1.0f, 0.0f} : vec3{0.0f, 0.0f, 1.0f};
 					auto old_local = m_render_aabb_to_local;
 					auto old_aabb = m_render_aabb;
 					m_render_aabb_to_local = mat3(1.0f);
-					auto dir = m_data_path / "volume_raw";
+					auto dir = m_data_path.is_directory() || m_data_path.empty() ? (m_data_path / "volume_raw") : (m_data_path.parent_path() / fmt::format("{}_volume_raw", m_data_path.filename()));
 					if (!dir.exists()) {
 						fs::create_directory(dir);
 					}
+
 					for (int cascade = 0; (1<<cascade)<= m_aabb.diag().x+0.5f; ++cascade) {
 						float radius = (1<<cascade) * 0.5f;
 						m_render_aabb = BoundingBox(vec3(0.5f-radius), vec3(0.5f+radius));
 						// Dump raw density values that the user can then convert to alpha as they please.
 						GPUMemory<vec4> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, 0.0f, true);
-						save_rgba_grid_to_raw_file(rgba, dir.str().c_str(), res3d, flip_y_and_z_axes, cascade);
+						save_rgba_grid_to_raw_file(rgba, dir, res3d, flip_y_and_z_axes, cascade);
 					}
 					m_render_aabb_to_local = old_local;
 					m_render_aabb = old_aabb;

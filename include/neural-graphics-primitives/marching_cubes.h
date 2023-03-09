@@ -71,9 +71,7 @@ bool check_shader(uint32_t handle, const char* desc, bool program);
 #endif
 
 void save_density_grid_to_png(const tcnn::GPUMemory<float>& density, const fs::path& path, ivec3 res3d, float thresh, bool swap_y_z = true, float density_range = 4.f);
-
 void save_rgba_grid_to_png_sequence(const tcnn::GPUMemory<vec4>& rgba, const fs::path& path, ivec3 res3d, bool swap_y_z = true);
-
 void save_rgba_grid_to_raw_file(const tcnn::GPUMemory<vec4>& rgba, const fs::path& path, ivec3 res3d, bool swap_y_z, int cascade);
 
 NGP_NAMESPACE_END
