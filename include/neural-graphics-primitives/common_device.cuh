@@ -924,7 +924,8 @@ inline NGP_HOST_DEVICE float read_depth(vec2 pos, const ivec2& resolution, const
 	return read_val(image_pos(pos, resolution));
 }
 
-mat4x3 camera_lerp(const mat4x3& begin, const mat4x3& end, float t);
+mat4x3 camera_log_lerp(const mat4x3& begin, const mat4x3& end, float t);
+mat4x3 camera_slerp(const mat4x3& begin, const mat4x3& end, float t);
 
 tcnn::GPUMemory<float> load_exr_gpu(const fs::path& path, int* width, int* height);
 tcnn::GPUMemory<float> load_stbi_gpu(const fs::path& path, int* width, int* height);

@@ -2771,7 +2771,7 @@ void Testbed::train_and_render(bool skip_rendering) {
 		view.camera0 = m_smoothed_camera;
 
 		// Motion blur over the fraction of time that the shutter is open. Interpolate in log-space to preserve rotations.
-		view.camera1 = m_camera_path.rendering ? camera_lerp(m_smoothed_camera, m_camera_path.render_frame_end_camera, m_camera_path.render_settings.shutter_fraction) : view.camera0;
+		view.camera1 = m_camera_path.rendering ? camera_log_lerp(m_smoothed_camera, m_camera_path.render_frame_end_camera, m_camera_path.render_settings.shutter_fraction) : view.camera0;
 
 		view.visualized_dimension = m_visualized_dimension;
 		view.relative_focal_length = m_relative_focal_length;
@@ -3438,7 +3438,7 @@ bool Testbed::want_repl() {
 void Testbed::apply_camera_smoothing(float elapsed_ms) {
 	if (m_camera_smoothing) {
 		float decay = std::pow(0.02f, elapsed_ms/1000.0f);
-		m_smoothed_camera = camera_lerp(m_smoothed_camera, m_camera, 1.0f - decay);
+		m_smoothed_camera = camera_log_lerp(m_smoothed_camera, m_camera, 1.0f - decay);
 	} else {
 		m_smoothed_camera = m_camera;
 	}

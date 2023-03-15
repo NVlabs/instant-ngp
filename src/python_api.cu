@@ -163,7 +163,7 @@ py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool l
 		float end_alpha = ((float)i + 1.0f)/(float)spp * shutter_fraction;
 
 		auto sample_start_cam_matrix = start_cam_matrix;
-		auto sample_end_cam_matrix = camera_lerp(start_cam_matrix, end_cam_matrix, shutter_fraction);
+		auto sample_end_cam_matrix = camera_log_lerp(start_cam_matrix, end_cam_matrix, shutter_fraction);
 		if (i == 0) {
 			prev_camera_matrix = sample_start_cam_matrix;
 		}
