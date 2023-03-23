@@ -151,7 +151,7 @@ With an >=iPhone 12 Pro, one can use [Record3D](https://record3d.app/) to collec
 	
 ### NeRFCapture
 
-[NeRFCapture](https://github.com/jc211/NeRFCapture) is an iOS app that runs on any ARKit device. It allows you to stream images directly from your phone to __instant-ngp__ thus enabling a more interactive experience. It can also collect an offline dataset for later use. 
+[NeRFCapture](https://github.com/jc211/NeRFCapture) is an iOS app - available on the [Apple App Store](https://apps.apple.com/au/app/nerfcapture/id6446518379) - that runs on any ARKit device. It allows you to stream images directly from your phone to __instant-ngp__ thus enabling a more interactive experience. It can also collect an offline dataset for later use. 
 
 The following dependencies are needed to run the NeRFCapture script:
 ```
