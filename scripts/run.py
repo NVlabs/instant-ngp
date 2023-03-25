@@ -50,6 +50,7 @@ def parse_args():
 	parser.add_argument("--video_camera_smoothing", action="store_true", help="Applies additional smoothing to the camera trajectory with the caveat that the endpoint of the camera path may not be reached.")
 	parser.add_argument("--video_fps", type=int, default=60, help="Number of frames per second.")
 	parser.add_argument("--video_n_seconds", type=int, default=1, help="Number of seconds the rendered video should be long.")
+	parser.add_argument("--video_render_range", type=int, nargs=2, default=(-1, -1), metavar=("START_FRAME", "END_FRAME"), help="Limit output to frames between START_FRAME and END_FRAME (inclusive)")
 	parser.add_argument("--video_spp", type=int, default=8, help="Number of samples per pixel. A larger number means less noise, but slower rendering.")
 	parser.add_argument("--video_output", type=str, default="video.mp4", help="Filename of the output video (video.mp4) or video frames (video_%04d.png).")
 
@@ -303,12 +304,20 @@ if __name__ == "__main__":
 		resolution = [args.width or 1920, args.height or 1080]
 		n_frames = args.video_n_seconds * args.video_fps
 		save_frames = "%" in args.video_output
+		start_frame, end_frame = args.video_render_range
 
 		if "tmp" in os.listdir():
 			shutil.rmtree("tmp")
 		os.makedirs("tmp")
 
+		if start_frame > 0:
+			# When not rendering from the beginning, first rendered frame will have excessive motion blur, so we discard it
+			testbed.render(resolution[0], resolution[1], args.video_spp, True, 0.0, float(start_frame)/n_frames, args.video_fps, shutter_fraction=0.5)
+
 		for i in tqdm(list(range(min(n_frames, n_frames+1))), unit="frames", desc=f"Rendering video"):
+			if (start_frame >= 0 and i < start_frame) or (end_frame >= 0 and i > end_frame):
+				continue
+
 			testbed.camera_smoothing = args.video_camera_smoothing
 			frame = testbed.render(resolution[0], resolution[1], args.video_spp, True, float(i)/n_frames, float(i + 1)/n_frames, args.video_fps, shutter_fraction=0.5)
 			if save_frames:
