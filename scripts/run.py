@@ -310,15 +310,19 @@ if __name__ == "__main__":
 			shutil.rmtree("tmp")
 		os.makedirs("tmp")
 
-		if start_frame > 0:
-			# When not rendering from the beginning, first rendered frame will have excessive motion blur, so we discard it
-			testbed.render(resolution[0], resolution[1], args.video_spp, True, 0.0, float(start_frame)/n_frames, args.video_fps, shutter_fraction=0.5)
-
 		for i in tqdm(list(range(min(n_frames, n_frames+1))), unit="frames", desc=f"Rendering video"):
-			if (start_frame >= 0 and i < start_frame) or (end_frame >= 0 and i > end_frame):
+			testbed.camera_smoothing = args.video_camera_smoothing
+
+			if start_frame >= 0 and i < start_frame:
+				# For camera smoothing and motion blur to work, we cannot just start rendering
+				# from middle of the sequence. Instead we render a very small image and discard it
+				# for these initial frames.
+				# TODO Replace this with a no-op render method once it's available
+				frame = testbed.render(32, 32, 1, True, float(i)/n_frames, float(i + 1)/n_frames, args.video_fps, shutter_fraction=0.5)
+				continue
+			elif end_frame >= 0 and i > end_frame:
 				continue
 
-			testbed.camera_smoothing = args.video_camera_smoothing
 			frame = testbed.render(resolution[0], resolution[1], args.video_spp, True, float(i)/n_frames, float(i + 1)/n_frames, args.video_fps, shutter_fraction=0.5)
 			if save_frames:
 				write_image(args.video_output % i, np.clip(frame * 2**args.exposure, 0.0, 1.0), quality=100)
