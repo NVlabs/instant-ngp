@@ -42,6 +42,7 @@ def parse_args():
 	parser.add_argument("--save_snapshot", default="", help="Save this snapshot after training. recommended extension: .msgpack")
 
 	parser.add_argument("--nerf_compatibility", action="store_true", help="Matches parameters with original NeRF. Can cause slowness and worse results on some scenes.")
+	parser.add_argument("--andrewg_hack", action="store_true", help="Hack to switch to random background 75 percent through training.")
 	parser.add_argument("--test_transforms", default="", help="Path to a nerf style transforms json from which we will compute PSNR.")
 	parser.add_argument("--near_distance", default=-1, type=float, help="Set the distance from the camera at which training rays start for nerf. <0 means use ngp default")
 	parser.add_argument("--exposure", default=0.0, type=float, help="Controls the brightness of the image. Positive numbers increase brightness, negative numbers decrease it.")
@@ -68,8 +69,9 @@ def parse_args():
 	parser.add_argument("--gui", action="store_true", help="Run the testbed GUI interactively.")
 	parser.add_argument("--depth", action="store_true", help="Write depth.")
 	parser.add_argument("--train", action="store_true", help="If the GUI is enabled, controls whether training starts immediately.")
-	parser.add_argument("--n_steps", type=int, default=-1, help="Number of steps to train for before quitting.")
+	parser.add_argument("--n_steps", type=int, default=7500, help="Number of steps to train for before quitting.")
 	parser.add_argument("--second_window", action="store_true", help="Open a second window containing a copy of the main output.")
+	parser.add_argument("--no_train_extrinsics", action="store_true", help="Do not train extrinics ")
 
 	parser.add_argument("--sharpen", default=0, help="Set amount of sharpening applied to NeRF training images. Range 0.0 to 1.0.")
 
@@ -111,7 +113,8 @@ if __name__ == "__main__":
 		network = os.path.join(configs_dir, network)
 
 	testbed = ngp.Testbed(mode)
-	testbed.nerf.training.optimize_extrinsics = True
+
+	testbed.nerf.training.optimize_extrinsics = True if not args.no_train_extrinsics else False 
 	testbed.nerf.sharpen = float(args.sharpen)
 	testbed.exposure = args.exposure
 	if mode == ngp.TestbedMode.Sdf:
@@ -192,7 +195,10 @@ if __name__ == "__main__":
 		# Optionally match nerf paper behaviour and train on a
 		# fixed white bg. We prefer training on random BG colors.
 		# testbed.background_color = [1.0, 1.0, 1.0, 1.0]
-		# testbed.nerf.training.random_bg_color = False
+		testbed.nerf.training.random_bg_color = False
+
+	if args.andrewg_hack: 
+		testbed.nerf.training.random_bg_color = False
 
 	old_training_step = 0
 	n_steps = args.n_steps
@@ -229,6 +235,9 @@ if __name__ == "__main__":
 					t.set_postfix(loss=testbed.loss)
 					old_training_step = testbed.training_step
 					tqdm_last_update = now
+
+				if args.andrewg_hack and testbed.training_step >= n_steps * 0.75:
+					testbed.nerf.training.random_bg_color = True
 
 	if args.save_snapshot:
 		print("Saving snapshot ", args.save_snapshot)
@@ -381,5 +390,3 @@ if __name__ == "__main__":
 		os.system(f"ffmpeg -y -framerate {args.video_fps} -i tmp/%04d.jpg -c:v libx264 -pix_fmt yuv420p {args.video_output}")
 		shutil.rmtree("tmp")
 
-	while True:
-		pass 

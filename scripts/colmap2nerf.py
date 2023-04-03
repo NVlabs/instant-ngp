@@ -27,6 +27,7 @@ def parse_args():
 	parser.add_argument("--video_fps", default=2)
 	parser.add_argument("--time_slice", default="", help="time (in seconds) in the format t1,t2 within which the images should be generated from the video. eg: \"--time_slice '10,300'\" will generate images only from 10th second to 300th second of the video")
 	parser.add_argument("--run_colmap", action="store_true", help="run colmap first on the image folder")
+	parser.add_argument("--overwrite", action="store_true", help="overwrite db")
 	parser.add_argument("--colmap_matcher", default="sequential", choices=["exhaustive","sequential","spatial","transitive","vocab_tree"], help="select which matcher colmap should use. sequential for videos, exhaustive for adhoc images")
 	parser.add_argument("--colmap_db", default="colmap.db", help="colmap database filename")
 	parser.add_argument("--colmap_camera_model", default="OPENCV", choices=["SIMPLE_PINHOLE", "PINHOLE", "SIMPLE_RADIAL", "RADIAL","OPENCV"], help="camera model")
@@ -38,6 +39,20 @@ def parse_args():
 	parser.add_argument("--keep_colmap_coords", action="store_true", help="keep transforms.json in COLMAP's original frame of reference (this will avoid reorienting and repositioning the scene for preview and rendering)")
 	parser.add_argument("--out", default="transforms.json", help="output path")
 	parser.add_argument("--vocab_path", default="", help="vocabulary tree path")
+	parser.add_argument(
+		"--sharpness_threshold",
+		"--st",
+		default=0,
+		type=int,
+		help="threshold to filter out blurry images",
+	)
+	parser.add_argument(
+		"--sharpness_filter_window",
+		"--sw",
+		default=1,
+		type=int,
+		help="the window size for the sharpness filter",
+	)
 	args = parser.parse_args()
 	return args
 
@@ -55,8 +70,9 @@ def run_ffmpeg(args):
 	video =  "\"" + args.video_in + "\""
 	fps = float(args.video_fps) or 1.0
 	print(f"running ffmpeg with input video file={video}, output image folder={images}, fps={fps}.")
-	if (input(f"warning! folder '{images}' will be deleted/replaced. continue? (Y/n)").lower().strip()+"y")[:1] != "y":
-		sys.exit(1)
+	if not args.overwrite:
+		if (input(f"warning! folder '{images}' will be deleted/replaced. continue? (Y/n)").lower().strip()+"y")[:1] != "y":
+			sys.exit(1)
 	try:
 		# Passing Images' Path Without Double Quotes
 		shutil.rmtree(args.images)
@@ -81,12 +97,13 @@ def run_colmap(args):
 	text=args.text
 	sparse=db_noext+"_sparse"
 	print(f"running colmap with:\n\tdb={db}\n\timages={images}\n\tsparse={sparse}\n\ttext={text}")
-	if (input(f"warning! folders '{sparse}' and '{text}' will be deleted/replaced. continue? (Y/n)").lower().strip()+"y")[:1] != "y":
-		sys.exit(1)
+	if not args.overwrite:
+		if (input(f"warning! folders '{sparse}' and '{text}' will be deleted/replaced. continue? (Y/n)").lower().strip()+"y")[:1] != "y":
+			sys.exit(1)
 	if os.path.exists(db):
 		os.remove(db)
 	do_system(f"colmap feature_extractor --ImageReader.camera_model {args.colmap_camera_model} --ImageReader.camera_params \"{args.colmap_camera_params}\" --SiftExtraction.estimate_affine_shape=true --SiftExtraction.domain_size_pooling=true --ImageReader.single_camera 1 --database_path {db} --image_path {images}")
-	match_cmd = f"colmap {args.colmap_matcher}_matcher --SiftMatching.guided_matching=true --database_path {db}"
+	match_cmd = f"colmap {args.colmap_matcher}_matcher --SiftMatching.guided_matching=true --database_path {db} "
 	if args.vocab_path:
 		match_cmd += f" --VocabTreeMatching.vocab_tree_path {args.vocab_path}"
 	do_system(match_cmd)
@@ -108,7 +125,9 @@ def variance_of_laplacian(image):
 	return cv2.Laplacian(image, cv2.CV_64F).var()
 
 def sharpness(imagePath):
+	print("sharpness imagePath: ", imagePath)
 	image = cv2.imread(imagePath)
+	
 	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 	fm = variance_of_laplacian(gray)
 	return fm
@@ -241,6 +260,9 @@ if __name__ == "__main__":
 		}
 
 		up = np.zeros(3)
+		
+		buffer = [] 
+
 		for line in f:
 			line = line.strip()
 			if line[0] == "#":
@@ -252,9 +274,10 @@ if __name__ == "__main__":
 				elems=line.split(" ") # 1-4 is quat, 5-7 is trans, 9ff is filename (9, if filename contains no spaces)
 				#name = str(PurePosixPath(Path(IMAGE_FOLDER, elems[9])))
 				# why is this requireing a relitive path while using ^
-				image_rel = os.path.relpath(IMAGE_FOLDER)
+				image_rel = os.path.relpath(IMAGE_FOLDER, start=os.path.dirname(OUT_PATH))
 				name = str(f"./{image_rel}/{'_'.join(elems[9:])}")
-				b=sharpness(name)
+				abs_image_path = os.path.abspath(IMAGE_FOLDER)
+				b=sharpness(os.path.join(abs_image_path, '_'.join(elems[9:])))
 				print(name, "sharpness=",b)
 				image_id = int(elems[0])
 				qvec = np.array(tuple(map(float, elems[1:5])))
