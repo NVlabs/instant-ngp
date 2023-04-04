@@ -19,24 +19,24 @@ jobs:
             cuda: "11.7"
             arch: 86
             python: "3.11"
-          - os: ubuntu-18.04
-            cuda: "10.2"
+          - os: ubuntu-22.04
+            cuda: "11.7"
             arch: 75
             python: "3.10"
-          - os: ubuntu-18.04
-            cuda: "10.2"
+          - os: ubuntu-22.04
+            cuda: "11.7"
             arch: 70
             python: "3.9"
-          - os: ubuntu-18.04
-            cuda: "10.2"
+          - os: ubuntu-22.04
+            cuda: "11.7"
             arch: 61
             python: "3.8"
-          - os: ubuntu-18.04
-            cuda: "10.2"
+          - os: ubuntu-22.04
+            cuda: "11.7"
             arch: 53
             python: "3.7"
-          - os: ubuntu-18.04
-            cuda: "10.2"
+          - os: ubuntu-22.04
+            cuda: "11.7"
             arch: 37
             python: "3.7"
             cmake_flags: "-DNGP_BUILD_WITH_GUI=OFF -DNGP_BUILD_WITH_VULKAN=OFF -DNGP_BUILD_WITH_OPTIX=OFF"
