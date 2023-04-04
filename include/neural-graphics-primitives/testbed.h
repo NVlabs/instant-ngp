@@ -396,6 +396,7 @@ public:
 	void last_training_view();
 	void previous_training_view();
 	void next_training_view();
+    void add_cameras_from_training_views();
 	void set_camera_to_training_view(int trainview);
 	void reset_camera();
 	bool keyboard_event();
