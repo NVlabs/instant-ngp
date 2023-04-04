@@ -1397,6 +1397,10 @@ void Testbed::imgui() {
 			}
 
 			if (m_testbed_mode == ETestbedMode::Nerf) {
+				if (ImGui::Button("Add training views to camera path")) {
+					add_training_views_to_camera_path();
+				}
+
 				if (ImGui::Button("First")) {
 					first_training_view();
 				}
@@ -1742,13 +1746,6 @@ void Testbed::imgui() {
 
 	if (ImGui::Button("Go to python REPL")) {
 		m_want_repl = true;
-	}
-
-	if (m_testbed_mode == ETestbedMode::Nerf) {
-		ImGui::SameLine();
-		if (ImGui::Button("Add training views to camera path")) {
-			add_training_views_to_camera_path();
-		}
 	}
 
 	ImGui::End();
