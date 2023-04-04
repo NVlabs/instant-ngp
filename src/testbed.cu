@@ -443,17 +443,17 @@ void Testbed::next_training_view() {
 	set_camera_to_training_view(m_nerf.training.view);
 }
 
-void Testbed::add_cameras_from_training_views() {
-    for (int i = 0; i < m_nerf.training.dataset.n_images; ++i) {
-        int n=std::max(0,int(m_camera_path.keyframes.size())-1);
-        auto camera = get_xform_given_rolling_shutter(m_nerf.training.transforms[i], m_nerf.training.dataset.metadata[i].rolling_shutter, vec2{0.5f, 0.5f}, 0.0f);
-        int j=(int)ceil(m_camera_path.play_time*(float)n+0.001f);
-        if (j>m_camera_path.keyframes.size()) j=m_camera_path.keyframes.size();
-        if (j<0) j=0;
-        m_camera_path.keyframes.insert(m_camera_path.keyframes.begin()+j, CameraKeyframe(camera, m_slice_plane_z, m_scale, fov(), m_aperture_size, m_nerf.glow_mode, m_nerf.glow_y_cutoff));
-        n=std::max(0,int(m_camera_path.keyframes.size())-1);
-        m_camera_path.play_time = n ? float(j)/float(n) : 1.f;
-    }
+void Testbed::add_training_views_to_camera_path() {
+	for (int i = 0; i < m_nerf.training.dataset.n_images; ++i) {
+		int n = std::max(0, int(m_camera_path.keyframes.size()) - 1);
+		auto camera = get_xform_given_rolling_shutter(m_nerf.training.transforms[i], m_nerf.training.dataset.metadata[i].rolling_shutter, vec2{0.5f, 0.5f}, 0.0f);
+		int j = (int) ceil(m_camera_path.play_time * (float) n + 0.001f);
+		if (j > m_camera_path.keyframes.size()) j = m_camera_path.keyframes.size();
+		if (j < 0) j = 0;
+		m_camera_path.keyframes.insert(m_camera_path.keyframes.begin() + j, CameraKeyframe(camera, m_slice_plane_z, m_scale, fov(), m_aperture_size, m_nerf.glow_mode, m_nerf.glow_y_cutoff));
+		n = std::max(0, int(m_camera_path.keyframes.size()) - 1);
+		m_camera_path.play_time = n ? float(j) / float(n) : 1.f;
+	}
 }
 
 void Testbed::set_camera_to_training_view(int trainview) {
@@ -1744,12 +1744,12 @@ void Testbed::imgui() {
 		m_want_repl = true;
 	}
 
-    if (m_testbed_mode == ETestbedMode::Nerf) {
-        ImGui::SameLine();
-        if (ImGui::Button("Add training views to camera path")) {
-            add_cameras_from_training_views();
-        }
-    }
+	if (m_testbed_mode == ETestbedMode::Nerf) {
+		ImGui::SameLine();
+		if (ImGui::Button("Add training views to camera path")) {
+			add_training_views_to_camera_path();
+		}
+	}
 
 	ImGui::End();
 }
