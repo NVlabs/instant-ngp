@@ -179,7 +179,7 @@ if __name__ == "__main__":
 
 	tqdm_last_update = 0
 	if n_steps > 0:
-		with tqdm(desc="Training", total=n_steps, unit="step") as t:
+		with tqdm(desc="Training", total=n_steps, unit="steps") as t:
 			while testbed.frame():
 				if testbed.want_repl():
 					repl(testbed)

@@ -158,6 +158,7 @@ jobs:
             scripts/convert_image.py
             scripts/download_colmap.bat
             scripts/download_ffmpeg.bat
+            scripts/mask_images.py
             scripts/nerfcapture2nerf.py
             scripts/nsvf2nerf.py
             scripts/record3d2nerf.py
