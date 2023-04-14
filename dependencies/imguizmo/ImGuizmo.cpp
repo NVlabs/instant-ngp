@@ -24,10 +24,10 @@
 // SOFTWARE.
 //
 
-#include "imgui.h"
 #ifndef IMGUI_DEFINE_MATH_OPERATORS
 #define IMGUI_DEFINE_MATH_OPERATORS
 #endif
+#include "imgui.h"
 #include "imgui_internal.h"
 #include "ImGuizmo.h"
 
@@ -1215,7 +1215,7 @@ namespace IMGUIZMO_NAMESPACE
          }
          const bool usingAxis = (gContext.mbUsing && type == MT_ROTATE_Z - axis);
          const int circleMul = (hasRSC && !usingAxis ) ? 1 : 2;
-         
+
          ImVec2* circlePos = (ImVec2*)alloca(sizeof(ImVec2) * (circleMul * halfCircleSegmentCount + 1));
 
          float angleStart = atan2f(cameraToModelNormalized[(4 - axis) % 3], cameraToModelNormalized[(3 - axis) % 3]) + ZPI * 0.5f;
