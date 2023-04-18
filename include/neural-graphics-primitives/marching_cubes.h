@@ -15,6 +15,7 @@
 #pragma once
 
 #include <neural-graphics-primitives/bounding_box.cuh>
+#include <neural-graphics-primitives/opengl_utils.h>
 
 #include <tiny-cuda-nn/common.h>
 
@@ -64,10 +65,6 @@ void draw_mesh_gl(
 	const vec2& screen_center,
 	int mesh_render_mode
 );
-
-void glCheckError(const char* file, unsigned int line);
-uint32_t compile_shader(bool pixel, const char* code);
-bool check_shader(uint32_t handle, const char* desc, bool program);
 #endif
 
 void save_density_grid_to_png(const tcnn::GPUMemory<float>& density, const fs::path& path, ivec3 res3d, float thresh, bool swap_y_z = true, float density_range = 4.f);
