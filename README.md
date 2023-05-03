@@ -47,7 +47,7 @@ __instant-ngp__ comes with an interactive GUI that includes many features:
 Simply start `instant-ngp` and drag the `data/nerf/fox` folder into the window. Or, alternatively, use the command line:
 
 ```sh
-instant-ngp$ ./instant-ngp data/nerf/fox
+./instant-ngp data/nerf/fox
 ```
 
 <img src="docs/assets_readme/fox.png"/>
@@ -59,7 +59,7 @@ You can use __any__ NeRF-compatible dataset, e.g. from [original NeRF](https://d
 Drag `data/sdf/armadillo.obj` into the window or use the command:
 
 ```sh
-instant-ngp$ ./instant-ngp data/sdf/armadillo.obj
+./instant-ngp data/sdf/armadillo.obj
 ```
 
 <img src="docs/assets_readme/armadillo.png"/>
@@ -69,7 +69,7 @@ instant-ngp$ ./instant-ngp data/sdf/armadillo.obj
 Drag `data/image/albert.exr` into the window or use the command:
 
 ```sh
-instant-ngp$ ./instant-ngp data/image/albert.exr
+./instant-ngp data/image/albert.exr
 ```
 
 <img src="docs/assets_readme/albert.png"/>
@@ -77,7 +77,7 @@ instant-ngp$ ./instant-ngp data/image/albert.exr
 To reproduce the gigapixel results, download, for example, [the Tokyo image](https://www.flickr.com/photos/trevor_dobson_inefekt69/29314390837) and convert it to `.bin` using the `scripts/convert_image.py` script. This custom format improves compatibility and loading speed when resolution is high. Now you can run:
 
 ```sh
-instant-ngp$ ./instant-ngp data/image/tokyo.bin
+./instant-ngp data/image/tokyo.bin
 ```
 
 
@@ -86,7 +86,7 @@ instant-ngp$ ./instant-ngp data/image/tokyo.bin
 Download the [nanovdb volume for the Disney cloud](https://drive.google.com/drive/folders/1SuycSAOSG64k2KLV7oWgyNWyCvZAkafK?usp=sharing), which is derived [from here](https://disneyanimation.com/data-sets/?drawer=/resources/clouds/) ([CC BY-SA 3.0](https://media.disneyanimation.com/uploads/production/data_set_asset/6/asset/License_Cloud.pdf)). Then drag `wdas_cloud_quarter.nvdb` into the window or use the command:
 
 ```sh
-instant-ngp$ ./instant-ngp wdas_cloud_quarter.nvdb
+./instant-ngp wdas_cloud_quarter.nvdb
 ```
 <img src="docs/assets_readme/cloud.png"/>
 
@@ -196,8 +196,8 @@ $ cd instant-ngp
 
 Then, use CMake to build the project: (on Windows, this must be in a [developer command prompt](https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line?view=msvc-160#developer_command_prompt))
 ```sh
-instant-ngp$ cmake . -B build
-instant-ngp$ cmake --build build --config RelWithDebInfo -j
+cmake . -B build
+cmake --build build --config RelWithDebInfo -j
 ```
 
 If compilation fails inexplicably or takes longer than an hour, you might be running out of memory. Try running the above command without `-j` in that case.
@@ -298,8 +298,8 @@ __A:__ For any training image `xyz.*` with dynamic objects, you can provide a `d
 
 Before investigating further, make sure all submodules are up-to-date and try compiling again.
 ```sh
-instant-ngp$ git submodule sync --recursive
-instant-ngp$ git submodule update --init --recursive
+git submodule sync --recursive
+git submodule update --init --recursive
 ```
 If __instant-ngp__ still fails to compile, update CUDA as well as your compiler to the latest versions you can install on your system. It is crucial that you update _both_, as newer CUDA versions are not always compatible with earlier compilers and vice versa.
 If your problem persists, consult the following table of known issues.
