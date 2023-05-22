@@ -349,7 +349,7 @@ if __name__ == "__main__":
 
 				frame = {"file_path":name,"sharpness":b,"transform_matrix": c2w}
 				if len(cameras) != 1:
-					camera = camera[int(elems[8])]
+					camera = cameras[int(elems[8])]
 					frame["camera_angle_x"] = camera["angle_x"]
 					frame["camera_angle_y"] = camera["angle_y"]
 					frame["fl_x"] = camera["fl_x"]
