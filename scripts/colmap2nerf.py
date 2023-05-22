@@ -349,22 +349,22 @@ if __name__ == "__main__":
 
 				frame = {"file_path":name,"sharpness":b,"transform_matrix": c2w}
 				if len(cameras) != 1:
-					camera_id = int(elems[8])
-					frame["camera_angle_x"] = cameras[camera_id]["angle_x"]
-					frame["camera_angle_y"] = cameras[camera_id]["angle_y"]
-					frame["fl_x"] = cameras[camera_id]["fl_x"]
-					frame["fl_y"] = cameras[camera_id]["fl_y"]
-					frame["k1"] = cameras[camera_id]["k1"]
-					frame["k2"] = cameras[camera_id]["k2"]
-					frame["k3"] = cameras[camera_id]["k3"]
-					frame["k4"] = cameras[camera_id]["k4"]
-					frame["p1"] = cameras[camera_id]["p1"]
-					frame["p2"] = cameras[camera_id]["p2"]
-					frame["is_fisheye"] = cameras[camera_id]["is_fisheye"]
-					frame["cx"] = cameras[camera_id]["cx"]
-					frame["cy"] = cameras[camera_id]["cy"]
-					frame["w"] = cameras[camera_id]["w"]
-					frame["h"] = cameras[camera_id]["h"]
+					camera = camera[int(elems[8])]
+					frame["camera_angle_x"] = camera["angle_x"]
+					frame["camera_angle_y"] = camera["angle_y"]
+					frame["fl_x"] = camera["fl_x"]
+					frame["fl_y"] = camera["fl_y"]
+					frame["k1"] = camera["k1"]
+					frame["k2"] = camera["k2"]
+					frame["k3"] = camera["k3"]
+					frame["k4"] = camera["k4"]
+					frame["p1"] = camera["p1"]
+					frame["p2"] = camera["p2"]
+					frame["is_fisheye"] = camera["is_fisheye"]
+					frame["cx"] = camera["cx"]
+					frame["cy"] = camera["cy"]
+					frame["w"] = camera["w"]
+					frame["h"] = camera["h"]
 				out["frames"].append(frame)
 	nframes = len(out["frames"])
 
