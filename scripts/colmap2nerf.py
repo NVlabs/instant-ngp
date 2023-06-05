@@ -37,7 +37,7 @@ def parse_args():
 	parser.add_argument("--colmap_camera_params", default="", help="Intrinsic parameters, depending on the chosen model. Format: fx,fy,cx,cy,dist")
 	parser.add_argument("--images", default="images", help="Input path to the images.")
 	parser.add_argument("--text", default="colmap_text", help="Input path to the colmap text files (set automatically if --run_colmap is used).")
-	parser.add_argument("--aabb_scale", default=64, choices=["1", "2", "4", "8", "16", "32", "64", "128"], help="Large scene scale factor. 1=scene fits in unit cube; power of 2 up to 128")
+	parser.add_argument("--aabb_scale", default=32, choices=["1", "2", "4", "8", "16", "32", "64", "128"], help="Large scene scale factor. 1=scene fits in unit cube; power of 2 up to 128")
 	parser.add_argument("--skip_early", default=0, help="Skip this many images from the start.")
 	parser.add_argument("--keep_colmap_coords", action="store_true", help="Keep transforms.json in COLMAP's original frame of reference (this will avoid reorienting and repositioning the scene for preview and rendering).")
 	parser.add_argument("--out", default="transforms.json", help="Output path.")
@@ -349,7 +349,7 @@ if __name__ == "__main__":
 
 				frame = {"file_path":name,"sharpness":b,"transform_matrix": c2w}
 				if len(cameras) != 1:
-                                        frame |= cameras[int(elems[8])]
+					frame.update(cameras[int(elems[8])])
 				out["frames"].append(frame)
 	nframes = len(out["frames"])
 
