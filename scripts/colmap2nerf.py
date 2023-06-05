@@ -37,7 +37,7 @@ def parse_args():
 	parser.add_argument("--colmap_camera_params", default="", help="Intrinsic parameters, depending on the chosen model. Format: fx,fy,cx,cy,dist")
 	parser.add_argument("--images", default="images", help="Input path to the images.")
 	parser.add_argument("--text", default="colmap_text", help="Input path to the colmap text files (set automatically if --run_colmap is used).")
-	parser.add_argument("--aabb_scale", default=32, choices=["1", "2", "4", "8", "16", "32", "64", "128"], help="Large scene scale factor. 1=scene fits in unit cube; power of 2 up to 128")
+	parser.add_argument("--aabb_scale", default=64, choices=["1", "2", "4", "8", "16", "32", "64", "128"], help="Large scene scale factor. 1=scene fits in unit cube; power of 2 up to 128")
 	parser.add_argument("--skip_early", default=0, help="Skip this many images from the start.")
 	parser.add_argument("--keep_colmap_coords", action="store_true", help="Keep transforms.json in COLMAP's original frame of reference (this will avoid reorienting and repositioning the scene for preview and rendering).")
 	parser.add_argument("--out", default="transforms.json", help="Output path.")
@@ -204,7 +204,7 @@ if __name__ == "__main__":
 	print(f"outputting to {OUT_PATH}...")
 	cameras = {}
 	with open(os.path.join(TEXT_FOLDER,"cameras.txt"), "r") as f:
-		angle_x = math.pi / 2
+		camera_angle_x = math.pi / 2
 		for line in f:
 			# 1 SIMPLE_RADIAL 2048 1536 1580.46 1024 768 0.0045691
 			# 1 OPENCV 3840 2160 3178.27 3182.09 1920 1080 0.159668 -0.231286 -0.00123982 0.00272224
@@ -214,70 +214,70 @@ if __name__ == "__main__":
 			els = line.split(" ")
 			camera = {}
 			camera_id = int(els[0])
-			camera['w'] = float(els[2])
-			camera['h'] = float(els[3])
-			camera['fl_x'] = float(els[4])
-			camera['fl_y'] = float(els[4])
-			camera['k1'] = 0
-			camera['k2'] = 0
-			camera['k3'] = 0
-			camera['k4'] = 0
-			camera['p1'] = 0
-			camera['p2'] = 0
-			camera['cx'] = camera['w'] / 2
-			camera['cy'] = camera['h'] / 2
-			camera['is_fisheye'] = False
+			camera["w"] = float(els[2])
+			camera["h"] = float(els[3])
+			camera["fl_x"] = float(els[4])
+			camera["fl_y"] = float(els[4])
+			camera["k1"] = 0
+			camera["k2"] = 0
+			camera["k3"] = 0
+			camera["k4"] = 0
+			camera["p1"] = 0
+			camera["p2"] = 0
+			camera["cx"] = camera["w"] / 2
+			camera["cy"] = camera["h"] / 2
+			camera["is_fisheye"] = False
 			if els[1] == "SIMPLE_PINHOLE":
-				camera['cx'] = float(els[5])
-				camera['cy'] = float(els[6])
+				camera["cx"] = float(els[5])
+				camera["cy"] = float(els[6])
 			elif els[1] == "PINHOLE":
-				camera['fl_y'] = float(els[5])
-				camera['cx'] = float(els[6])
-				camera['cy'] = float(els[7])
+				camera["fl_y"] = float(els[5])
+				camera["cx"] = float(els[6])
+				camera["cy"] = float(els[7])
 			elif els[1] == "SIMPLE_RADIAL":
-				camera['cx'] = float(els[5])
-				camera['cy'] = float(els[6])
-				camera['k1'] = float(els[7])
+				camera["cx"] = float(els[5])
+				camera["cy"] = float(els[6])
+				camera["k1"] = float(els[7])
 			elif els[1] == "RADIAL":
-				camera['cx'] = float(els[5])
-				camera['cy'] = float(els[6])
-				camera['k1'] = float(els[7])
-				camera['k2'] = float(els[8])
+				camera["cx"] = float(els[5])
+				camera["cy"] = float(els[6])
+				camera["k1"] = float(els[7])
+				camera["k2"] = float(els[8])
 			elif els[1] == "OPENCV":
-				camera['fl_y'] = float(els[5])
-				camera['cx'] = float(els[6])
-				camera['cy'] = float(els[7])
-				camera['k1'] = float(els[8])
-				camera['k2'] = float(els[9])
-				camera['p1'] = float(els[10])
-				camera['p2'] = float(els[11])
+				camera["fl_y"] = float(els[5])
+				camera["cx"] = float(els[6])
+				camera["cy"] = float(els[7])
+				camera["k1"] = float(els[8])
+				camera["k2"] = float(els[9])
+				camera["p1"] = float(els[10])
+				camera["p2"] = float(els[11])
 			elif els[1] == "SIMPLE_RADIAL_FISHEYE":
-				camera['is_fisheye'] = True
-				camera['cx'] = float(els[5])
-				camera['cy'] = float(els[6])
-				camera['k1'] = float(els[7])
+				camera["is_fisheye"] = True
+				camera["cx"] = float(els[5])
+				camera["cy"] = float(els[6])
+				camera["k1"] = float(els[7])
 			elif els[1] == "RADIAL_FISHEYE":
-				camera['is_fisheye'] = True
-				camera['cx'] = float(els[5])
-				camera['cy'] = float(els[6])
-				camera['k1'] = float(els[7])
-				camera['k2'] = float(els[8])
+				camera["is_fisheye"] = True
+				camera["cx"] = float(els[5])
+				camera["cy"] = float(els[6])
+				camera["k1"] = float(els[7])
+				camera["k2"] = float(els[8])
 			elif els[1] == "OPENCV_FISHEYE":
-				camera['is_fisheye'] = True
-				camera['fl_y'] = float(els[5])
-				camera['cx'] = float(els[6])
-				camera['cy'] = float(els[7])
-				camera['k1'] = float(els[8])
-				camera['k2'] = float(els[9])
-				camera['k3'] = float(els[10])
-				camera['k4'] = float(els[11])
+				camera["is_fisheye"] = True
+				camera["fl_y"] = float(els[5])
+				camera["cx"] = float(els[6])
+				camera["cy"] = float(els[7])
+				camera["k1"] = float(els[8])
+				camera["k2"] = float(els[9])
+				camera["k3"] = float(els[10])
+				camera["k4"] = float(els[11])
 			else:
 				print("Unknown camera model ", els[1])
 			# fl = 0.5 * w / tan(0.5 * angle_x);
-			camera['angle_x'] = math.atan(camera['w'] / (camera['fl_x'] * 2)) * 2
-			camera['angle_y'] = math.atan(camera['h'] / (camera['fl_y'] * 2)) * 2
-			camera['fovx'] = camera['angle_x'] * 180 / math.pi
-			camera['fovy'] = camera['angle_y'] * 180 / math.pi
+			camera["camera_angle_x"] = math.atan(camera["w"] / (camera["fl_x"] * 2)) * 2
+			camera["camera_angle_y"] = math.atan(camera["h"] / (camera["fl_y"] * 2)) * 2
+			camera["fovx"] = camera["camera_angle_x"] * 180 / math.pi
+			camera["fovy"] = camera["camera_angle_y"] * 180 / math.pi
 
 			print(f"camera {camera_id}:\n\tres={camera['w'],camera['h']}\n\tcenter={camera['cx'],camera['cy']}\n\tfocal={camera['fl_x'],camera['fl_y']}\n\tfov={camera['fovx'],camera['fovy']}\n\tk={camera['k1'],camera['k2']} p={camera['p1'],camera['p2']} ")
 			cameras[camera_id] = camera
@@ -292,8 +292,8 @@ if __name__ == "__main__":
 		if len(cameras) == 1:
 			camera = cameras[camera_id]
 			out = {
-				"camera_angle_x": camera["angle_x"],
-				"camera_angle_y": camera["angle_y"],
+				"camera_angle_x": camera["camera_angle_x"],
+				"camera_angle_y": camera["camera_angle_y"],
 				"fl_x": camera["fl_x"],
 				"fl_y": camera["fl_y"],
 				"k1": camera["k1"],
@@ -349,22 +349,7 @@ if __name__ == "__main__":
 
 				frame = {"file_path":name,"sharpness":b,"transform_matrix": c2w}
 				if len(cameras) != 1:
-					camera = cameras[int(elems[8])]
-					frame["camera_angle_x"] = camera["angle_x"]
-					frame["camera_angle_y"] = camera["angle_y"]
-					frame["fl_x"] = camera["fl_x"]
-					frame["fl_y"] = camera["fl_y"]
-					frame["k1"] = camera["k1"]
-					frame["k2"] = camera["k2"]
-					frame["k3"] = camera["k3"]
-					frame["k4"] = camera["k4"]
-					frame["p1"] = camera["p1"]
-					frame["p2"] = camera["p2"]
-					frame["is_fisheye"] = camera["is_fisheye"]
-					frame["cx"] = camera["cx"]
-					frame["cy"] = camera["cy"]
-					frame["w"] = camera["w"]
-					frame["h"] = camera["h"]
+                                        frame |= cameras[int(elems[8])]
 				out["frames"].append(frame)
 	nframes = len(out["frames"])
 
@@ -457,16 +442,16 @@ if __name__ == "__main__":
 		cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
 		predictor = DefaultPredictor(cfg)
 
-		for frame in out['frames']:
-			img = cv2.imread(frame['file_path'])
+		for frame in out["frames"]:
+			img = cv2.imread(frame["file_path"])
 			outputs = predictor(img)
 
 			output_mask = np.zeros((img.shape[0], img.shape[1]))
-			for i in range(len(outputs['instances'])):
-				if outputs['instances'][i].pred_classes.cpu().numpy()[0] in mask_ids:
-					pred_mask = outputs['instances'][i].pred_masks.cpu().numpy()[0]
+			for i in range(len(outputs["instances"])):
+				if outputs["instances"][i].pred_classes.cpu().numpy()[0] in mask_ids:
+					pred_mask = outputs["instances"][i].pred_masks.cpu().numpy()[0]
 					output_mask = np.logical_or(output_mask, pred_mask)
 
-			rgb_path = Path(frame['file_path'])
-			mask_name = str(rgb_path.parents[0] / Path('dynamic_mask_' + rgb_path.name.replace('.jpg', '.png')))
+			rgb_path = Path(frame["file_path"])
+			mask_name = str(rgb_path.parents[0] / Path("dynamic_mask_" + rgb_path.name.replace(".jpg", ".png")))
 			cv2.imwrite(mask_name, (output_mask*255).astype(np.uint8))
