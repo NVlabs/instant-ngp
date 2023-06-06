@@ -60,10 +60,7 @@ jobs:
         run: ./dependencies/cuda-cmake-github-actions/scripts/actions/install_cuda_ubuntu.sh
         shell: bash
       - name: Install Vulkan SDK
-        uses: humbletim/setup-vulkan-sdk@v1.2.0
-        with:
-          vulkan-query-version: latest
-          vulkan-components: Vulkan-Headers, Vulkan-Loader
+        uses: humbletim/install-vulkan-sdk@v1.1.1
       - name: CMake
         run: cmake . -B ${{ env.build_dir }} ${{ matrix.cmake_flags }} -DCMAKE_BUILD_TYPE=${{ env.config }}
       - name: Build
