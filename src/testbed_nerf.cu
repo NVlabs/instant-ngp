@@ -3161,7 +3161,7 @@ void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaS
 
 		if (m_nerf.training.optimize_exposure) {
 			CUDA_CHECK_THROW(cudaMemcpyAsync(m_nerf.training.cam_exposure_gradient.data(), m_nerf.training.cam_exposure_gradient_gpu.data(), m_nerf.training.cam_exposure_gradient_gpu.get_bytes(), cudaMemcpyDeviceToHost, stream));
-
+			CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
 			vec3 mean_exposure = vec3(0.0f);
 
 			// Optimization step
