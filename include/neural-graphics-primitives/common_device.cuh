@@ -395,6 +395,7 @@ inline NGP_HOST_DEVICE Ray pixel_to_ray_pinhole(
 	};
 
 	dir = mat3(camera_matrix) * dir;
+	dir = normalize(dir);
 	return {camera_matrix[3], dir};
 }
 
@@ -504,7 +505,7 @@ inline NGP_HOST_DEVICE Ray uv_to_ray(
 		origin += mat2x3(camera_matrix) * blur;
 		dir = (lookat - origin) / focus_z;
 	}
-
+	dir = normalize(dir);
 	origin += dir * near_distance;
 	return {origin, dir};
 }
