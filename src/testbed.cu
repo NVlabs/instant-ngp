@@ -25,6 +25,7 @@
 #include <neural-graphics-primitives/trainable_buffer.cuh>
 #include <neural-graphics-primitives/triangle_bvh.cuh>
 #include <neural-graphics-primitives/triangle_octree.cuh>
+#include <neural-graphics-primitives/opengl_utils.h>
 
 #include <tiny-cuda-nn/encodings/grid.h>
 #include <tiny-cuda-nn/loss.h>
@@ -3008,8 +3009,8 @@ void Testbed::create_second_window() {
 			void main(){\n\
 				fragColor = texture(screenTex, texCoords.xy);\n\
 			}";
-		vs = compile_shader(false, copy_shader_vert);
-		ps = compile_shader(true, copy_shader_frag);
+		vs = compile_shader(eShaderType::Vertex, copy_shader_vert);
+		ps = compile_shader(eShaderType::Fragment, copy_shader_frag);
 	}
 	m_second_window.window = glfwCreateWindow(win_w, win_h, "Fullscreen Output", NULL, m_glfw_window);
 	if (win_x!=0x40000000) glfwSetWindowPos(m_second_window.window, win_x, win_y);
