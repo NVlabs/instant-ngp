@@ -180,6 +180,10 @@ inline void to_json(nlohmann::json& j, const Lens& lens) {
 		j["ftheta_p4"] = lens.params[4];
 		j["w"] = lens.params[5];
 		j["h"] = lens.params[6];
+	} else if (lens.mode == ELensMode::LatLong) {
+		j["latlong"] = true;
+	} else if (lens.mode == ELensMode::Equirectangular) {
+		j["equirectangular"] = true;
 	}
 }
 
@@ -207,6 +211,10 @@ inline void from_json(const nlohmann::json& j, Lens& lens) {
 		lens.params[4] = j.at("ftheta_p4");
 		lens.params[5] = j.at("w");
 		lens.params[6] = j.at("h");
+	} else if (j.contains("latlong")) {
+		lens.mode = ELensMode::LatLong;
+	} else if (j.contains("equirectangular")) {
+		lens.mode = ELensMode::Equirectangular;
 	} else {
 		lens.mode = ELensMode::Perspective;
 	}
