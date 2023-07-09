@@ -18,7 +18,7 @@
 
 #include <tiny-cuda-nn/gpu_memory.h>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 struct SdfPayload {
 	vec3 dir;
@@ -28,7 +28,7 @@ struct SdfPayload {
 };
 
 struct RaysSdfSoa {
-#if defined(__NVCC__) || (defined(__clang__) && defined(__CUDA__))
+#if defined(__CUDACC__) || (defined(__clang__) && defined(__CUDA__))
 	void copy_from_other_async(uint32_t n_elements, const RaysSdfSoa& other, cudaStream_t stream) {
 		CUDA_CHECK_THROW(cudaMemcpyAsync(pos, other.pos, n_elements * sizeof(vec3), cudaMemcpyDeviceToDevice, stream));
 		CUDA_CHECK_THROW(cudaMemcpyAsync(normal, other.normal, n_elements * sizeof(vec3), cudaMemcpyDeviceToDevice, stream));
@@ -67,8 +67,8 @@ struct BRDFParams {
 	float sheen=0.f;
 	float clearcoat=0.f;
 	float clearcoat_gloss=0.f;
-	vec3 basecolor=vec3(0.8f,0.8f,0.8f);
-	vec3 ambientcolor=vec3(0.f,0.f,0.f);
+	vec3 basecolor = {0.8f, 0.8f, 0.8f};
+	vec3 ambientcolor = {0.0f, 0.0f, 0.0f};
 };
 
-NGP_NAMESPACE_END
+}

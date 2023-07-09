@@ -23,19 +23,19 @@
 #include <tiny-cuda-nn/encoding.h>
 #include <tiny-cuda-nn/random.h>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 template <typename T, uint32_t N_FEATURES_PER_LEVEL>
 __global__ void kernel_takikawa(
 	const uint32_t num_elements,
 	const uint32_t n_levels,
 	const uint32_t starting_level,
-	const tcnn::InterpolationType interpolation_type,
+	const InterpolationType interpolation_type,
 	const TriangleOctreeNode* octree_nodes,
 	const TriangleOctreeDualNode* octree_dual_nodes,
 	const T* __restrict__ grid,
-	const tcnn::MatrixView<const float> data_in,
-	tcnn::MatrixView<T> data_out,
+	const MatrixView<const float> data_in,
+	MatrixView<T> data_out,
 	float* __restrict__ dy_dx
 ) {
 	uint32_t n_features = N_FEATURES_PER_LEVEL * n_levels;
@@ -61,7 +61,7 @@ __global__ void kernel_takikawa(
 
 			vec3 pos_derivative;
 
-			if (interpolation_type == tcnn::InterpolationType::Linear) {
+			if (interpolation_type == InterpolationType::Linear) {
 				NGP_PRAGMA_UNROLL
 				for (uint32_t dim = 0; dim < 3; ++dim) {
 					pos_derivative[dim] = 1.0f;
@@ -69,14 +69,14 @@ __global__ void kernel_takikawa(
 			} else {
 				NGP_PRAGMA_UNROLL
 				for (uint32_t dim = 0; dim < 3; ++dim) {
-					pos_derivative[dim] = tcnn::smoothstep_derivative(pos[dim]);
-					pos[dim] = tcnn::smoothstep(pos[dim]);
+					pos_derivative[dim] = smoothstep_derivative(pos[dim]);
+					pos[dim] = smoothstep(pos[dim]);
 				}
 			}
 
 			if (data_out) {
 				// Tri-linear interpolation
-				tcnn::vector_t<T, N_FEATURES_PER_LEVEL, true> result = {(T)0.0f};
+				tvec<T, N_FEATURES_PER_LEVEL, sizeof(T) * N_FEATURES_PER_LEVEL> result = {(T)0.0f};
 
 				NGP_PRAGMA_UNROLL
 				for (uint32_t idx = 0; idx < 8; ++idx) {
@@ -92,7 +92,7 @@ __global__ void kernel_takikawa(
 					}
 
 					int param_idx = node.vertices[idx] * N_FEATURES_PER_LEVEL;
-					result = fma((T)weight, *(tcnn::vector_t<T, N_FEATURES_PER_LEVEL, true>*)&grid[param_idx], result);
+					result = fma((T)weight, *(tvec<T, N_FEATURES_PER_LEVEL, sizeof(T) * N_FEATURES_PER_LEVEL>*)&grid[param_idx], result);
 				}
 
 				NGP_PRAGMA_UNROLL
@@ -107,7 +107,7 @@ __global__ void kernel_takikawa(
 
 				NGP_PRAGMA_UNROLL
 				for (uint32_t grad_dim = 0; grad_dim < 3; ++grad_dim) {
-					tcnn::vector_fullp_t<N_FEATURES_PER_LEVEL> grad = {0.0f};
+					vec<N_FEATURES_PER_LEVEL> grad = {0.0f};
 
 					NGP_PRAGMA_UNROLL
 					for (uint32_t idx = 0; idx < 4; ++idx) {
@@ -127,11 +127,11 @@ __global__ void kernel_takikawa(
 						}
 
 						int param_idx = node.vertices[child_idx] * N_FEATURES_PER_LEVEL;
-						auto val_left = *(tcnn::vector_t<T, N_FEATURES_PER_LEVEL>*)&grid[param_idx];
+						auto val_left = *(tvec<T, N_FEATURES_PER_LEVEL>*)&grid[param_idx];
 
 						child_idx |= 1 << grad_dim;
 						param_idx = node.vertices[child_idx] * N_FEATURES_PER_LEVEL;
-						auto val_right = *(tcnn::vector_t<T, N_FEATURES_PER_LEVEL>*)&grid[param_idx];
+						auto val_right = *(tvec<T, N_FEATURES_PER_LEVEL>*)&grid[param_idx];
 
 						NGP_PRAGMA_UNROLL
 						for (uint32_t feature = 0; feature < N_FEATURES_PER_LEVEL; ++feature) {
@@ -140,7 +140,7 @@ __global__ void kernel_takikawa(
 					}
 
 					const uint32_t fan_out_grad = n_features * 3;
-					*(tcnn::vector_fullp_t<N_FEATURES_PER_LEVEL>*)&dy_dx[i * fan_out_grad + level * N_FEATURES_PER_LEVEL + grad_dim * n_features] = grad;
+					*(vec<N_FEATURES_PER_LEVEL>*)&dy_dx[i * fan_out_grad + level * N_FEATURES_PER_LEVEL + grad_dim * n_features] = grad;
 				}
 			}
 		}
@@ -162,9 +162,9 @@ template <typename T>
 __global__ void kernel_takikawa_backward_input(
 	const uint32_t num_elements,
 	const uint32_t num_grid_features,
-	const tcnn::MatrixView<const T> dL_dy,
+	const MatrixView<const T> dL_dy,
 	const float* __restrict__ dy_dx,
-	tcnn::MatrixView<float> dL_dx
+	MatrixView<float> dL_dx
 ) {
 	const uint32_t input_index = threadIdx.x + blockIdx.x * blockDim.x;
 	if (input_index >= num_elements) return;
@@ -186,12 +186,12 @@ __global__ void kernel_takikawa_backward(
 	const uint32_t num_elements,
 	const uint32_t n_levels,
 	const uint32_t starting_level,
-	const tcnn::InterpolationType interpolation_type,
+	const InterpolationType interpolation_type,
 	const TriangleOctreeNode* octree_nodes,
 	const TriangleOctreeDualNode* octree_dual_nodes,
-	GRAD_T* __restrict__ params_gradient,
-	const tcnn::MatrixView<const float> data_in,
-	const tcnn::MatrixView<const T> dL_dy
+	GRAD_T* __restrict__ param_gradients,
+	const MatrixView<const float> data_in,
+	const MatrixView<const T> dL_dy
 ) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	const uint32_t encoded_index = i * N_FEATURES_PER_LEVEL * n_levels;
@@ -212,14 +212,14 @@ __global__ void kernel_takikawa_backward(
 			}
 			level -= starting_level;
 
-			if (interpolation_type == tcnn::InterpolationType::Smoothstep) {
+			if (interpolation_type == InterpolationType::Smoothstep) {
 				NGP_PRAGMA_UNROLL
 				for (uint32_t dim = 0; dim < 3; ++dim) {
-					pos[dim] = tcnn::smoothstep(pos[dim]);
+					pos[dim] = smoothstep(pos[dim]);
 				}
 			}
 
-			tcnn::vector_t<T, N_FEATURES_PER_LEVEL> grad;
+			tvec<T, N_FEATURES_PER_LEVEL> grad;
 
 			NGP_PRAGMA_UNROLL
 			for (uint32_t f = 0; f < N_FEATURES_PER_LEVEL; ++f) {
@@ -248,7 +248,7 @@ __global__ void kernel_takikawa_backward(
 					NGP_PRAGMA_UNROLL
 					for (uint32_t feature = 0; feature < N_FEATURES_PER_LEVEL; feature += 2) {
 						__half2 v = {(__half)((float)grad[feature] * weight), (__half)((float)grad[feature+1] * weight)};
-						atomicAdd((__half2*)&params_gradient[param_idx + feature], v);
+						atomicAdd((__half2*)&param_gradients[param_idx + feature], v);
 					}
 				} else
 #endif
@@ -259,7 +259,7 @@ __global__ void kernel_takikawa_backward(
 					} else {
 						NGP_PRAGMA_UNROLL
 						for (uint32_t f = 0; f < N_FEATURES_PER_LEVEL; ++f) {
-							atomicAdd((float*)&params_gradient[param_idx], (float)grad[f] * weight);
+							atomicAdd((float*)&param_gradients[param_idx], (float)grad[f] * weight);
 						}
 					}
 				}
@@ -269,7 +269,7 @@ __global__ void kernel_takikawa_backward(
 }
 
 template <typename T, uint32_t N_FEATURES_PER_LEVEL=8>
-class TakikawaEncoding : public tcnn::Encoding<T> {
+class TakikawaEncoding : public Encoding<T> {
 public:
 #if TCNN_MIN_GPU_ARCH >= 60
 	// The GPUs that we tested this on do not have an efficient 1D fp16
@@ -284,7 +284,7 @@ public:
 	using grad_t = float;
 #endif
 
-	TakikawaEncoding(uint32_t starting_level, std::shared_ptr<TriangleOctree> octree, tcnn::InterpolationType interpolation_type)
+	TakikawaEncoding(uint32_t starting_level, std::shared_ptr<TriangleOctree> octree, InterpolationType interpolation_type)
 		: m_starting_level{starting_level}, m_octree{octree}, m_interpolation_type{interpolation_type} {
 
 		if (m_starting_level >= m_octree->depth()) {
@@ -300,10 +300,10 @@ public:
 
 	virtual ~TakikawaEncoding() { }
 
-	std::unique_ptr<tcnn::Context> forward_impl(
+	std::unique_ptr<Context> forward_impl(
 		cudaStream_t stream,
-		const tcnn::GPUMatrixDynamic<float>& input,
-		tcnn::GPUMatrixDynamic<T>* output = nullptr,
+		const GPUMatrixDynamic<float>& input,
+		GPUMatrixDynamic<T>* output = nullptr,
 		bool use_inference_params = false,
 		bool prepare_input_gradients = false
 	) override {
@@ -314,10 +314,10 @@ public:
 		}
 
 		if (prepare_input_gradients) {
-			forward->dy_dx = tcnn::GPUMatrix<float>{3 * N_FEATURES_PER_LEVEL * n_levels(), input.n(), stream};
+			forward->dy_dx = GPUMatrix<float>{3 * N_FEATURES_PER_LEVEL * n_levels(), input.n(), stream};
 		}
 
-		tcnn::linear_kernel(kernel_takikawa<T, N_FEATURES_PER_LEVEL>, 0, stream,
+		linear_kernel(kernel_takikawa<T, N_FEATURES_PER_LEVEL>, 0, stream,
 			input.n(),
 			n_levels(),
 			m_starting_level,
@@ -326,7 +326,7 @@ public:
 			m_octree->dual_nodes_gpu(),
 			use_inference_params ? this->inference_params() : this->params(),
 			input.view(),
-			output ? output->view() : tcnn::MatrixView<T>{},
+			output ? output->view() : MatrixView<T>{},
 			forward->dy_dx.data()
 		);
 
@@ -335,13 +335,13 @@ public:
 
 	void backward_impl(
 		cudaStream_t stream,
-		const tcnn::Context& ctx,
-		const tcnn::GPUMatrixDynamic<float>& input,
-		const tcnn::GPUMatrixDynamic<T>& output,
-		const tcnn::GPUMatrixDynamic<T>& dL_doutput,
-		tcnn::GPUMatrixDynamic<float>* dL_dinput = nullptr,
+		const Context& ctx,
+		const GPUMatrixDynamic<float>& input,
+		const GPUMatrixDynamic<T>& output,
+		const GPUMatrixDynamic<T>& dL_doutput,
+		GPUMatrixDynamic<float>* dL_dinput = nullptr,
 		bool use_inference_params = false,
-		tcnn::EGradientMode param_gradients_mode = tcnn::EGradientMode::Overwrite
+		GradientMode param_gradients_mode = GradientMode::Overwrite
 	) override {
 		const uint32_t num_elements = input.n();
 		if (padded_output_width() == 0 || num_elements == 0) {
@@ -350,37 +350,37 @@ public:
 
 		const auto& forward = dynamic_cast<const ForwardContext&>(ctx);
 
-		if (param_gradients_mode != tcnn::EGradientMode::Ignore) {
+		if (param_gradients_mode != GradientMode::Ignore) {
 			// We accumulate gradients with grad_t precision, which, for performance reasons, is not always T.
 			// If not, accumulate in a temporary buffer and cast later.
-			grad_t* params_gradient;
-			tcnn::GPUMemoryArena::Allocation params_gradient_tmp;
+			grad_t* param_gradients;
+			GPUMemoryArena::Allocation param_gradients_tmp;
 
 			if (!std::is_same<grad_t, T>::value) {
-				params_gradient_tmp = tcnn::allocate_workspace(stream, n_params() * sizeof(grad_t));
-				params_gradient = (grad_t*)params_gradient_tmp.data();
+				param_gradients_tmp = allocate_workspace(stream, n_params() * sizeof(grad_t));
+				param_gradients = (grad_t*)param_gradients_tmp.data();
 			} else {
-				params_gradient = (grad_t*)this->gradients();
+				param_gradients = (grad_t*)this->gradients();
 			}
 
-			if (param_gradients_mode == tcnn::EGradientMode::Overwrite) {
-				CUDA_CHECK_THROW(cudaMemsetAsync(params_gradient, 0, n_params() * sizeof(grad_t), stream));
+			if (param_gradients_mode == GradientMode::Overwrite) {
+				CUDA_CHECK_THROW(cudaMemsetAsync(param_gradients, 0, n_params() * sizeof(grad_t), stream));
 			}
 
-			tcnn::linear_kernel(kernel_takikawa_backward<T, grad_t, N_FEATURES_PER_LEVEL>, 0, stream,
+			linear_kernel(kernel_takikawa_backward<T, grad_t, N_FEATURES_PER_LEVEL>, 0, stream,
 				num_elements,
 				n_levels(),
 				m_starting_level,
 				m_interpolation_type,
 				m_octree->nodes_gpu(),
 				m_octree->dual_nodes_gpu(),
-				params_gradient,
+				param_gradients,
 				input.view(),
 				dL_doutput.view()
 			);
 
 			if (!std::is_same<grad_t, T>::value) {
-				parallel_for_gpu(stream, n_params(), [grad=this->gradients(), grad_tmp=params_gradient] __device__ (size_t i) {
+				parallel_for_gpu(stream, n_params(), [grad=this->gradients(), grad_tmp=param_gradients] __device__ (size_t i) {
 					grad[i] = (T)grad_tmp[i];
 				});
 			}
@@ -388,7 +388,7 @@ public:
 
 		// Gradient computation w.r.t. input
 		if (dL_dinput) {
-			tcnn::linear_kernel(kernel_takikawa_backward_input<T>, 0, stream,
+			linear_kernel(kernel_takikawa_backward_input<T>, 0, stream,
 				num_elements * input_width(),
 				N_FEATURES_PER_LEVEL * n_levels(),
 				dL_doutput.view(),
@@ -424,9 +424,9 @@ public:
 
 	void set_params_impl(T* params, T* inference_params, T* gradients) override { }
 
-	void initialize_params(tcnn::pcg32& rnd, float* params_full_precision, float scale = 1) override {
+	void initialize_params(pcg32& rnd, float* params_full_precision, float scale = 1) override {
 		// Initialize the encoding from the GPU, because the number of parameters can be quite large.
-		tcnn::generate_random_uniform<float>(rnd, n_params(), params_full_precision, -1e-4f * scale, 1e-4f * scale);
+		generate_random_uniform<float>(rnd, n_params(), params_full_precision, -1e-4f * scale, 1e-4f * scale);
 	}
 
 	size_t n_params() const override {
@@ -437,11 +437,11 @@ public:
 		return m_octree->depth() - m_starting_level;
 	}
 
-	tcnn::MatrixLayout preferred_output_layout() const override {
-		return tcnn::AoS;
+	MatrixLayout preferred_output_layout() const override {
+		return AoS;
 	}
 
-	tcnn::json hyperparams() const override {
+	json hyperparams() const override {
 		return {
 			{"otype", "Takikawa"},
 			{"starting_level", m_starting_level},
@@ -450,8 +450,8 @@ public:
 	}
 
 private:
-	struct ForwardContext : public tcnn::Context {
-		tcnn::GPUMatrix<float> dy_dx;
+	struct ForwardContext : public Context {
+		GPUMatrix<float> dy_dx;
 	};
 
 	uint32_t m_starting_level;
@@ -462,7 +462,7 @@ private:
 	uint32_t m_n_to_pad = 0;
 
 	std::shared_ptr<TriangleOctree> m_octree;
-	tcnn::InterpolationType m_interpolation_type;
+	InterpolationType m_interpolation_type;
 };
 
-NGP_NAMESPACE_END
+}

@@ -31,14 +31,12 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
-#include <iostream>
 #include <string>
 #include <vector>
 
-using namespace tcnn;
 using namespace std::literals;
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 __global__ void convert_rgba32(const uint64_t num_pixels, const uint8_t* __restrict__ pixels, uint8_t* __restrict__ out, bool white_2_transparent = false, bool black_2_transparent = false, uint32_t mask_color = 0) {
 	const uint64_t i = threadIdx.x + blockIdx.x * blockDim.x;
@@ -168,8 +166,8 @@ NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale, bool is_h
 	result.is_hdr = is_hdr;
 	result.paths = std::vector<std::string>(n_images, "");
 	for (size_t i = 0; i < n_images; ++i) {
-		result.xforms[i].start = mat4x3(1.0f);
-		result.xforms[i].end = mat4x3(1.0f);
+		result.xforms[i].start = mat4x3::identity();
+		result.xforms[i].end = mat4x3::identity();
 	}
 	return result;
 }
@@ -353,6 +351,9 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 		for (auto&& frame : frames) {
 			// Compatibility with Windows paths on Linux. (Breaks linux filenames with "\\" in them, which is acceptable for us.)
 			frame["file_path"] = replace_all(frame["file_path"], "\\", "/");
+			if (frame.contains("depth_path")) {
+				frame["depth_path"] = replace_all(frame["depth_path"], "\\", "/");
+			}
 		}
 
 		if (json.contains("n_frames")) {
@@ -527,7 +528,7 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 			result.up[2] = float(json["up"][0]);
 		}
 
-		if (json.contains("envmap") && !any(equal(result.envmap_resolution, ivec2(0)))) {
+		if (json.contains("envmap") && product(result.envmap_resolution) > 0) {
 			fs::path envmap_path = resolve_path(base_path, json["envmap"]);
 			if (!envmap_path.exists()) {
 				throw std::runtime_error{fmt::format("Environment map {} does not exist.", envmap_path.str())};
@@ -587,7 +588,7 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 					}
 
 					tlog::success() << "Alpha loaded from " << alphapath;
-					for (int i = 0; i < compMul(dst.res); ++i) {
+					for (int i = 0; i < product(dst.res); ++i) {
 						img[i*4+3] = (uint8_t)(255.0f*srgb_to_linear(alpha_img[i*4]*(1.f/255.f))); // copy red channel of alpha to alpha.png to our alpha channel
 					}
 				}
@@ -606,7 +607,7 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 					}
 
 					dst.mask_color = 0x00FF00FF; // HOT PINK
-					for (int i = 0; i < compMul(dst.res); ++i) {
+					for (int i = 0; i < product(dst.res); ++i) {
 						if (mask_img[i*4] != 0 || mask_img[i*4+1] != 0 || mask_img[i*4+2] != 0) {
 							*(uint32_t*)&img[i*4] = dst.mask_color;
 						}
@@ -638,7 +639,7 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 
 			fs::path rayspath = path.parent_path() / fmt::format("rays_{}.dat", path.basename());
 			if (enable_ray_loading && rayspath.exists()) {
-				uint32_t n_pixels = compMul(dst.res);
+				uint32_t n_pixels = product(dst.res);
 				dst.rays = (Ray*)malloc(n_pixels * sizeof(Ray));
 
 				std::ifstream rays_file{native_string(rayspath), std::ios::binary};
@@ -664,11 +665,11 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 			nlohmann::json& jsonmatrix_end = frame.contains("transform_matrix_end") ? frame["transform_matrix_end"] : jsonmatrix_start;
 
 			if (frame.contains("driver_parameters")) {
-				vec3 light_dir(
+				vec3 light_dir{
 					frame["driver_parameters"].value("LightX", 0.f),
 					frame["driver_parameters"].value("LightY", 0.f),
 					frame["driver_parameters"].value("LightZ", 0.f)
-				);
+				};
 				result.metadata[i_img].light_dir = result.nerf_direction_to_ngp(normalize(light_dir));
 				result.has_light_dirs = true;
 				result.n_extra_learnable_dims = 0;
@@ -746,7 +747,7 @@ void NerfDataset::set_training_image(int frame_idx, const ivec2& image_resolutio
 		throw std::runtime_error{"NerfDataset::set_training_image: invalid frame index"};
 	}
 
-	size_t n_pixels = compMul(image_resolution);
+	size_t n_pixels = product(image_resolution);
 	size_t img_size = n_pixels * 4; // 4 channels
 	size_t image_type_stride = image_type_size(image_type);
 	// copy to gpu if we need to do a conversion
@@ -800,7 +801,7 @@ void NerfDataset::set_training_image(int frame_idx, const ivec2& image_resolutio
 	// apply requested sharpening
 	if (sharpen_amount > 0.f) {
 		if (image_type == EImageDataType::Byte) {
-			tcnn::GPUMemory<uint8_t> images_data_half(img_size * sizeof(__half));
+			GPUMemory<uint8_t> images_data_half(img_size * sizeof(__half));
 			linear_kernel(from_rgba32<__half>, 0, nullptr, n_pixels, (uint8_t*)pixels, (__half*)images_data_half.data(), white_transparent, black_transparent, mask_color);
 			pixelmemory[frame_idx] = std::move(images_data_half);
 			dst = pixelmemory[frame_idx].data();
@@ -809,7 +810,7 @@ void NerfDataset::set_training_image(int frame_idx, const ivec2& image_resolutio
 
 		assert(image_type == EImageDataType::Half || image_type == EImageDataType::Float);
 
-		tcnn::GPUMemory<uint8_t> images_data_sharpened(img_size * image_type_size(image_type));
+		GPUMemory<uint8_t> images_data_sharpened(img_size * image_type_size(image_type));
 
 		float center_w = 4.f + 1.f / sharpen_amount; // center_w ranges from 5 (strong sharpening) to infinite (no sharpening)
 		if (image_type == EImageDataType::Half) {
@@ -862,4 +863,4 @@ void NerfDataset::update_metadata(int first, int last) {
 	CUDA_CHECK_THROW(cudaMemcpy(metadata_gpu.data() + first, metadata.data() + first, n * sizeof(TrainingImageMetadata), cudaMemcpyHostToDevice));
 }
 
-NGP_NAMESPACE_END
+}

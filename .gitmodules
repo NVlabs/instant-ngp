@@ -28,6 +28,3 @@
 [submodule "dependencies/OpenXR-SDK"]
 	path = dependencies/OpenXR-SDK
 	url = https://github.com/KhronosGroup/OpenXR-SDK.git
-[submodule "dependencies/glm"]
-	path = dependencies/glm
-	url = https://github.com/g-truc/glm

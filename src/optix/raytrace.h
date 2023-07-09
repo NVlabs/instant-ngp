@@ -20,7 +20,7 @@
 
 #include <optix.h>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 struct Raytrace {
 	struct Params {
@@ -35,4 +35,4 @@ struct Raytrace {
 	struct HitGroupData {};
 };
 
-NGP_NAMESPACE_END
+}

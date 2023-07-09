@@ -10,7 +10,7 @@
 
 /** @file   json_binding.h
  *  @author Thomas Müller, NVIDIA
- *  @brief  Conversion between eigen
+ *  @brief  Conversion between some ngp types and nlohmann::json.
  */
 
 #pragma once
@@ -18,136 +18,11 @@
 #include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/nerf_loader.h>
 
+#include <tiny-cuda-nn/vec_json.h>
+
 #include <json/json.hpp>
 
-// Conversion between glm and json
-namespace glm {
-	template <typename T>
-	void to_json(nlohmann::json& j, const tmat3x3<T>& mat) {
-		for (int row = 0; row < 3; ++row) {
-			nlohmann::json column = nlohmann::json::array();
-			for (int col = 0; col < 3; ++col) {
-				column.push_back(mat[col][row]);
-			}
-			j.push_back(column);
-		}
-	}
-
-	template <typename T>
-	void from_json(const nlohmann::json& j, tmat3x3<T>& mat) {
-		for (std::size_t row = 0; row < 3; ++row) {
-			const auto& jrow = j.at(row);
-			for (std::size_t col = 0; col < 3; ++col) {
-				const auto& value = jrow.at(col);
-				mat[col][row] = value.get<T>();
-			}
-		}
-	}
-
-	template <typename T>
-	void to_json(nlohmann::json& j, const tmat4x3<T>& mat) {
-		for (int row = 0; row < 3; ++row) {
-			nlohmann::json column = nlohmann::json::array();
-			for (int col = 0; col < 4; ++col) {
-				column.push_back(mat[col][row]);
-			}
-			j.push_back(column);
-		}
-	}
-
-	template <typename T>
-	void from_json(const nlohmann::json& j, tmat4x3<T>& mat) {
-		for (std::size_t row = 0; row < 3; ++row) {
-			const auto& jrow = j.at(row);
-			for (std::size_t col = 0; col < 4; ++col) {
-				const auto& value = jrow.at(col);
-				mat[col][row] = value.get<T>();
-			}
-		}
-	}
-
-	template <typename T>
-	void to_json(nlohmann::json& j, const tmat4x4<T>& mat) {
-		for (int row = 0; row < 4; ++row) {
-			nlohmann::json column = nlohmann::json::array();
-			for (int col = 0; col < 4; ++col) {
-				column.push_back(mat[col][row]);
-			}
-			j.push_back(column);
-		}
-	}
-
-	template <typename T>
-	void from_json(const nlohmann::json& j, tmat4x4<T>& mat) {
-		for (std::size_t row = 0; row < 4; ++row) {
-			const auto& jrow = j.at(row);
-			for (std::size_t col = 0; col < 4; ++col) {
-				const auto& value = jrow.at(col);
-				mat[col][row] = value.get<T>();
-			}
-		}
-	}
-
-	template <typename T>
-	void to_json(nlohmann::json& j, const tvec2<T>& v) {
-		j.push_back(v.x);
-		j.push_back(v.y);
-	}
-
-	template <typename T>
-	void from_json(const nlohmann::json& j, tvec2<T>& v) {
-		v.x = j.at(0).get<T>();
-		v.y = j.at(1).get<T>();
-	}
-
-	template <typename T>
-	void to_json(nlohmann::json& j, const tvec3<T>& v) {
-		j.push_back(v.x);
-		j.push_back(v.y);
-		j.push_back(v.z);
-	}
-
-	template <typename T>
-	void from_json(const nlohmann::json& j, tvec3<T>& v) {
-		v.x = j.at(0).get<T>();
-		v.y = j.at(1).get<T>();
-		v.z = j.at(2).get<T>();
-	}
-
-	template <typename T>
-	void to_json(nlohmann::json& j, const tvec4<T>& v) {
-		j.push_back(v.x);
-		j.push_back(v.y);
-		j.push_back(v.z);
-		j.push_back(v.w);
-	}
-
-	template <typename T>
-	void from_json(const nlohmann::json& j, tvec4<T>& v) {
-		v.x = j.at(0).get<T>();
-		v.y = j.at(1).get<T>();
-		v.z = j.at(2).get<T>();
-		v.w = j.at(3).get<T>();
-	}
-
-	template <typename T>
-	void to_json(nlohmann::json& j, const tquat<T>& q) {
-		j.push_back(q.x);
-		j.push_back(q.y);
-		j.push_back(q.z);
-		j.push_back(q.w);
-	}
-
-	template <typename T>
-	void from_json(const nlohmann::json& j, tquat<T>& q) {
-		q.x = j.at(0).get<T>();
-		q.y = j.at(1).get<T>();
-		q.z = j.at(2).get<T>();
-		q.w = j.at(3).get<T>();
-	}
-}
-
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 inline void to_json(nlohmann::json& j, const BoundingBox& box) {
 	j["min"] = box.min;
@@ -287,7 +162,7 @@ inline void from_json(const nlohmann::json& j, NerfDataset& dataset) {
 	}
 
 	dataset.render_aabb = j.at("render_aabb");
-	dataset.render_aabb_to_local = mat3(1.0f);
+	dataset.render_aabb_to_local = mat3::identity();
 	if (j.contains("render_aabb_to_local")) dataset.render_aabb_to_local = j.at("render_aabb_to_local");
 
 	dataset.up = j.at("up");
@@ -307,4 +182,4 @@ inline void from_json(const nlohmann::json& j, NerfDataset& dataset) {
 	dataset.n_extra_learnable_dims = j.value("n_extra_learnable_dims", 0);
 }
 
-NGP_NAMESPACE_END
+}

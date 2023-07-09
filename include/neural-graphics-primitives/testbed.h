@@ -44,16 +44,16 @@
 
 struct GLFWwindow;
 
-TCNN_NAMESPACE_BEGIN
+namespace tcnn {
 template <typename T> class Loss;
 template <typename T> class Optimizer;
 template <typename T> class Encoding;
 template <typename T, typename PARAMS_T> class Network;
 template <typename T, typename PARAMS_T, typename COMPUTE_T> class Trainer;
 template <uint32_t N_DIMS, uint32_t RANK, typename T> class TrainableBuffer;
-TCNN_NAMESPACE_END
+}
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 template <typename T> class NerfNetwork;
 class TriangleOctree;
@@ -137,7 +137,7 @@ public:
 		float m_shadow_sharpness = 2048.f;
 		bool m_trace_shadow_rays = false;
 
-		tcnn::GPUMemoryArena::Allocation m_scratch_alloc;
+		GPUMemoryArena::Allocation m_scratch_alloc;
 	};
 
 	class NerfTracer {
@@ -177,7 +177,7 @@ public:
 		);
 
 		uint32_t trace(
-			NerfNetwork<precision_t>& network,
+			const std::shared_ptr<NerfNetwork<network_precision_t>>& network,
 			const BoundingBox& render_aabb,
 			const mat3& render_aabb_to_local,
 			const BoundingBox& train_aabb,
@@ -208,12 +208,12 @@ public:
 	private:
 		RaysNerfSoa m_rays[2];
 		RaysNerfSoa m_rays_hit;
-		precision_t* m_network_output;
+		network_precision_t* m_network_output;
 		float* m_network_input;
 		uint32_t* m_hit_counter;
 		uint32_t* m_alive_counter;
 		uint32_t m_n_rays_initialized = 0;
-		tcnn::GPUMemoryArena::Allocation m_scratch_alloc;
+		GPUMemoryArena::Allocation m_scratch_alloc;
 	};
 
 	class FiniteDifferenceNormalsApproximator {
@@ -234,7 +234,7 @@ public:
 		float* dist_dy_neg;
 		float* dist_dz_neg;
 
-		tcnn::GPUMemoryArena::Allocation m_scratch_alloc;
+		GPUMemoryArena::Allocation m_scratch_alloc;
 	};
 
 	struct LevelStats {
@@ -257,7 +257,7 @@ public:
 	// underflow (round to zero) in the gradient computations. Hence,
 	// scale the loss (and thereby gradients) up by this factor and
 	// divide it out in the optimizer later on.
-	static constexpr float LOSS_SCALE = 128.0f;
+	static constexpr float LOSS_SCALE() { return default_loss_scale<network_precision_t>(); }
 
 	struct NetworkDims {
 		uint32_t n_input;
@@ -278,11 +278,11 @@ public:
 
 	class CudaDevice;
 
-	const float* get_inference_extra_dims(cudaStream_t stream) const;
 	void render_nerf(
 		cudaStream_t stream,
+		CudaDevice& device,
 		const CudaRenderBufferView& render_buffer,
-		NerfNetwork<precision_t>& nerf_network,
+		const std::shared_ptr<NerfNetwork<network_precision_t>>& nerf_network,
 		const uint8_t* density_grid_bitfield,
 		const vec2& focal_length,
 		const mat4x3& camera_matrix0,
@@ -396,7 +396,6 @@ public:
 	void last_training_view();
 	void previous_training_view();
 	void next_training_view();
-	void add_training_views_to_camera_path();
 	void set_camera_to_training_view(int trainview);
 	void reset_camera();
 	bool keyboard_event();
@@ -406,9 +405,9 @@ public:
 	void mark_density_grid_in_sphere_empty(const vec3& pos, float radius, cudaStream_t stream);
 
 	struct NerfCounters {
-		tcnn::GPUMemory<uint32_t> numsteps_counter; // number of steps each ray took
-		tcnn::GPUMemory<uint32_t> numsteps_counter_compacted; // number of steps each ray took
-		tcnn::GPUMemory<float> loss;
+		GPUMemory<uint32_t> numsteps_counter; // number of steps each ray took
+		GPUMemory<uint32_t> numsteps_counter_compacted; // number of steps each ray took
+		GPUMemory<float> loss;
 
 		uint32_t rays_per_batch = 1<<12;
 		uint32_t n_rays_total = 0;
@@ -438,13 +437,13 @@ public:
 	vec2 render_screen_center(const vec2& screen_center) const;
 	void optimise_mesh_step(uint32_t N_STEPS);
 	void compute_mesh_vertex_colors();
-	tcnn::GPUMemory<float> get_density_on_grid(ivec3 res3d, const BoundingBox& aabb, const mat3& render_aabb_to_local); // network version (nerf or sdf)
-	tcnn::GPUMemory<float> get_sdf_gt_on_grid(ivec3 res3d, const BoundingBox& aabb, const mat3& render_aabb_to_local); // sdf gt version (sdf only)
-	tcnn::GPUMemory<vec4> get_rgba_on_grid(ivec3 res3d, vec3 ray_dir, bool voxel_centers, float depth, bool density_as_alpha = false);
+	GPUMemory<float> get_density_on_grid(ivec3 res3d, const BoundingBox& aabb, const mat3& render_aabb_to_local); // network version (nerf or sdf)
+	GPUMemory<float> get_sdf_gt_on_grid(ivec3 res3d, const BoundingBox& aabb, const mat3& render_aabb_to_local); // sdf gt version (sdf only)
+	GPUMemory<vec4> get_rgba_on_grid(ivec3 res3d, vec3 ray_dir, bool voxel_centers, float depth, bool density_as_alpha = false);
 	int marching_cubes(ivec3 res3d, const BoundingBox& render_aabb, const mat3& render_aabb_to_local, float thresh);
 
 	float get_depth_from_renderbuffer(const CudaRenderBuffer& render_buffer, const vec2& uv);
-	vec3 get_3d_pos_from_pixel(const CudaRenderBuffer& render_buffer, const ivec2& focus_pixel);
+	vec3 get_3d_pos_from_pixel(const CudaRenderBuffer& render_buffer, const vec2& focus_pixel);
 	void autofocus();
 	size_t n_params();
 	size_t first_encoder_param();
@@ -467,7 +466,6 @@ public:
 	void init_vr();
 	void update_vr_performance_settings();
 	void apply_camera_smoothing(float elapsed_ms);
-	int find_best_training_view(int default_view);
 	bool begin_frame();
 	void handle_user_input();
 	vec3 vr_to_world(const vec3& pos) const;
@@ -501,6 +499,7 @@ public:
 	ivec3 compute_and_save_png_slices(const fs::path& filename, int res, BoundingBox aabb = {}, float thresh = 2.5f, float density_range = 4.f, bool flip_y_and_z_axes = false);
 
 	fs::path root_dir();
+	void set_root_dir(const fs::path& dir);
 
 	////////////////////////////////////////////////////////////////
 	// marching cubes related state
@@ -512,14 +511,14 @@ public:
 		float density_amount = 128.f;
 		float inflate_amount = 1.f;
 		bool optimize_mesh = false;
-		tcnn::GPUMemory<vec3> verts;
-		tcnn::GPUMemory<vec3> vert_normals;
-		tcnn::GPUMemory<vec3> vert_colors;
-		tcnn::GPUMemory<vec4> verts_smoothed; // homogenous
-		tcnn::GPUMemory<uint32_t> indices;
-		tcnn::GPUMemory<vec3> verts_gradient;
+		GPUMemory<vec3> verts;
+		GPUMemory<vec3> vert_normals;
+		GPUMemory<vec3> vert_colors;
+		GPUMemory<vec4> verts_smoothed; // homogenous
+		GPUMemory<uint32_t> indices;
+		GPUMemory<vec3> verts_gradient;
 		std::shared_ptr<TrainableBuffer<3, 1, float>> trainable_verts;
-		std::shared_ptr<tcnn::Optimizer<float>> verts_optimizer;
+		std::shared_ptr<Optimizer<float>> verts_optimizer;
 
 		void clear() {
 			indices={};
@@ -566,8 +565,8 @@ public:
 	float m_ndc_znear = 1.0f / 32.0f;
 	float m_ndc_zfar = 128.0f;
 
-	mat4x3 m_camera = mat4x3(1.0f);
-	mat4x3 m_smoothed_camera = mat4x3(1.0f);
+	mat4x3 m_camera = mat4x3::identity();
+	mat4x3 m_smoothed_camera = mat4x3::identity();
 	size_t m_render_skip_due_to_lack_of_camera_movement_counter = 0;
 
 	bool m_fps_camera = false;
@@ -639,10 +638,10 @@ public:
 			int n_images_for_training_prev = 0; // how many images we saw last time we updated the density grid
 
 			struct ErrorMap {
-				tcnn::GPUMemory<float> data;
-				tcnn::GPUMemory<float> cdf_x_cond_y;
-				tcnn::GPUMemory<float> cdf_y;
-				tcnn::GPUMemory<float> cdf_img;
+				GPUMemory<float> data;
+				GPUMemory<float> cdf_x_cond_y;
+				GPUMemory<float> cdf_y;
+				GPUMemory<float> cdf_img;
 				std::vector<float> pmf_img_cpu;
 				ivec2 resolution = {16, 16};
 				ivec2 cdf_resolution = {16, 16};
@@ -650,31 +649,31 @@ public:
 			} error_map;
 
 			std::vector<TrainingXForm> transforms;
-			tcnn::GPUMemory<TrainingXForm> transforms_gpu;
+			GPUMemory<TrainingXForm> transforms_gpu;
 
 			std::vector<vec3> cam_pos_gradient;
-			tcnn::GPUMemory<vec3> cam_pos_gradient_gpu;
+			GPUMemory<vec3> cam_pos_gradient_gpu;
 
 			std::vector<vec3> cam_rot_gradient;
-			tcnn::GPUMemory<vec3> cam_rot_gradient_gpu;
+			GPUMemory<vec3> cam_rot_gradient_gpu;
 
-			tcnn::GPUMemory<vec3> cam_exposure_gpu;
+			GPUMemory<vec3> cam_exposure_gpu;
 			std::vector<vec3> cam_exposure_gradient;
-			tcnn::GPUMemory<vec3> cam_exposure_gradient_gpu;
+			GPUMemory<vec3> cam_exposure_gradient_gpu;
 
 			vec2 cam_focal_length_gradient = vec2(0.0f);
-			tcnn::GPUMemory<vec2> cam_focal_length_gradient_gpu;
+			GPUMemory<vec2> cam_focal_length_gradient_gpu;
 
 			std::vector<AdamOptimizer<vec3>> cam_exposure;
 			std::vector<AdamOptimizer<vec3>> cam_pos_offset;
 			std::vector<RotationAdamOptimizer> cam_rot_offset;
 			AdamOptimizer<vec2> cam_focal_length_offset = AdamOptimizer<vec2>(0.0f);
 
-			tcnn::GPUMemory<float> extra_dims_gpu; // if the model demands a latent code per training image, we put them in here.
-			tcnn::GPUMemory<float> extra_dims_gradient_gpu;
+			GPUMemory<float> extra_dims_gpu; // if the model demands a latent code per training image, we put them in here.
+			GPUMemory<float> extra_dims_gradient_gpu;
 			std::vector<VarAdamOptimizer> extra_dims_opt;
 
-			void reset_extra_dims(default_rng_t &rng);
+			std::vector<float> get_extra_dims_cpu(int trainview) const;
 
 			float extrinsic_l2_reg = 1e-4f;
 			float extrinsic_learning_rate = 1e-3f;
@@ -715,7 +714,7 @@ public:
 
 			float depth_supervision_lambda = 0.f;
 
-			tcnn::GPUMemory<float> sharpness_grid;
+			GPUMemory<float> sharpness_grid;
 
 			void set_camera_intrinsics(int frame_idx, float fx, float fy = 0.0f, float cx = -0.5f, float cy = -0.5f, float k1 = 0.0f, float k2 = 0.0f, float p1 = 0.0f, float p2 = 0.0f, float k3 = 0.0f, float k4 = 0.0f, bool is_fisheye = false);
 			void set_camera_extrinsics_rolling_shutter(int frame_idx, mat4x3 camera_to_world_start, mat4x3 camera_to_world_end, const vec4& rolling_shutter, bool convert_to_ngp = true);
@@ -732,10 +731,10 @@ public:
 			void export_camera_extrinsics(const fs::path& path, bool export_extrinsics_in_quat_format = true);
 		} training = {};
 
-		tcnn::GPUMemory<float> density_grid; // NERF_GRIDSIZE()^3 grid of EMA smoothed densities from the network
-		tcnn::GPUMemory<uint8_t> density_grid_bitfield;
+		GPUMemory<float> density_grid; // NERF_GRIDSIZE()^3 grid of EMA smoothed densities from the network
+		GPUMemory<uint8_t> density_grid_bitfield;
 		uint8_t* get_density_grid_bitfield_mip(uint32_t mip);
-		tcnn::GPUMemory<float> density_grid_mean;
+		GPUMemory<float> density_grid_mean;
 		uint32_t density_grid_ema_step = 0;
 
 		uint32_t max_cascade = 0;
@@ -744,7 +743,12 @@ public:
 		ENerfActivation density_activation = ENerfActivation::Exponential;
 
 		vec3 light_dir = vec3(0.5f);
-		uint32_t extra_dim_idx_for_inference = 0; // which training image's latent code should be presented at inference time
+		// which training image's latent code should be used for rendering
+		int rendering_extra_dims_from_training_view = 0;
+		GPUMemory<float> rendering_extra_dims;
+
+		void reset_extra_dims(default_rng_t &rng);
+		const float* get_rendering_extra_dims(cudaStream_t stream) const;
 
 		int show_accel = -1;
 
@@ -757,10 +761,15 @@ public:
 		Lens render_lens = {};
 
 		float render_min_transmittance = 0.01f;
+		bool render_gbuffer_hard_edges = false;
 
 		float glow_y_cutoff = 0.f;
 		int glow_mode = 0;
 
+		int find_closest_training_view(mat4x3 pose) const;
+		void set_rendering_extra_dims_from_training_view(int trainview);
+		void set_rendering_extra_dims(const std::vector<float>& vals);
+		std::vector<float> get_rendering_extra_dims_cpu() const;
 	} m_nerf;
 
 	struct Sdf {
@@ -776,11 +785,11 @@ public:
 		EMeshSdfMode mesh_sdf_mode = EMeshSdfMode::Raystab;
 		float mesh_scale;
 
-		tcnn::GPUMemory<Triangle> triangles_gpu;
+		GPUMemory<Triangle> triangles_gpu;
 		std::vector<Triangle> triangles_cpu;
 		std::vector<float> triangle_weights;
 		DiscreteDistribution triangle_distribution;
-		tcnn::GPUMemory<float> triangle_cdf;
+		GPUMemory<float> triangle_cdf;
 		std::shared_ptr<TriangleBvh> triangle_bvh; // unique_ptr
 
 		bool uses_takikawa_encoding = false;
@@ -788,7 +797,7 @@ public:
 		int octree_depth_target = 0; // we duplicate this state so that you can waggle the slider without triggering it immediately
 		std::shared_ptr<TriangleOctree> triangle_octree;
 
-		tcnn::GPUMemory<float> brick_data;
+		GPUMemory<float> brick_data;
 		uint32_t brick_res = 0;
 		uint32_t brick_level = 10;
 		uint32_t brick_quantise_bits = 0;
@@ -801,7 +810,7 @@ public:
 		double iou = 0.0;
 		float iou_decay = 0.0f;
 		bool calculate_iou_online = false;
-		tcnn::GPUMemory<uint32_t> iou_counter;
+		GPUMemory<uint32_t> iou_counter;
 		struct Training {
 			size_t idx = 0;
 			size_t size = 0;
@@ -809,11 +818,11 @@ public:
 			bool did_generate_more_training_data = false;
 			bool generate_sdf_data_online = true;
 			float surface_offset_scale = 1.0f;
-			tcnn::GPUMemory<vec3> positions;
-			tcnn::GPUMemory<vec3> positions_shuffled;
-			tcnn::GPUMemory<float> distances;
-			tcnn::GPUMemory<float> distances_shuffled;
-			tcnn::GPUMemory<vec3> perturbations;
+			GPUMemory<vec3> positions;
+			GPUMemory<vec3> positions_shuffled;
+			GPUMemory<float> distances;
+			GPUMemory<float> distances_shuffled;
+			GPUMemory<vec3> perturbations;
 		} training = {};
 	} m_sdf;
 
@@ -823,18 +832,18 @@ public:
 	};
 
 	struct Image {
-		tcnn::GPUMemory<char> data;
+		GPUMemory<char> data;
 
 		EDataType type = EDataType::Float;
 		ivec2 resolution = ivec2(0);
 
-		tcnn::GPUMemory<vec2> render_coords;
-		tcnn::GPUMemory<vec3> render_out;
+		GPUMemory<vec2> render_coords;
+		GPUMemory<vec3> render_out;
 
 		struct Training {
-			tcnn::GPUMemory<float> positions_tmp;
-			tcnn::GPUMemory<vec2> positions;
-			tcnn::GPUMemory<vec3> targets;
+			GPUMemory<float> positions_tmp;
+			GPUMemory<vec2> positions;
+			GPUMemory<vec3> targets;
 
 			bool snap_to_pixel_centers = true;
 			bool linear_colors = false;
@@ -853,22 +862,22 @@ public:
 		float albedo = 0.95f;
 		float scattering = 0.f;
 		float inv_distance_scale = 100.f;
-		tcnn::GPUMemory<char> nanovdb_grid;
-		tcnn::GPUMemory<uint8_t> bitgrid;
+		GPUMemory<char> nanovdb_grid;
+		GPUMemory<uint8_t> bitgrid;
 		float global_majorant = 1.f;
-		vec3 world2index_offset = {0, 0, 0};
+		vec3 world2index_offset = {0.0f, 0.0f, 0.0f};
 		float world2index_scale = 1.f;
 
 		struct Training {
-			tcnn::GPUMemory<vec3> positions = {};
-			tcnn::GPUMemory<vec4> targets = {};
+			GPUMemory<vec3> positions = {};
+			GPUMemory<vec4> targets = {};
 		} training = {};
 
 		// tracing state
-		tcnn::GPUMemory<vec3> pos[2] = {};
-		tcnn::GPUMemory<VolPayload> payload[2] = {};
-		tcnn::GPUMemory<uint32_t> hit_counter = {};
-		tcnn::GPUMemory<vec4> radiance_and_density;
+		GPUMemory<vec3> pos[2] = {};
+		GPUMemory<VolPayload> payload[2] = {};
+		GPUMemory<uint32_t> hit_counter = {};
+		GPUMemory<vec4> radiance_and_density;
 	} m_volume;
 
 	float m_camera_velocity = 1.0f;
@@ -886,7 +895,7 @@ public:
 	BoundingBox m_raw_aabb;
 	BoundingBox m_aabb;
 	BoundingBox m_render_aabb;
-	mat3 m_render_aabb_to_local = mat3(1.0f);
+	mat3 m_render_aabb_to_local = mat3::identity();
 
 	mat4x3 crop_box(bool nerf_space) const;
 	std::vector<vec3> crop_box_corners(bool nerf_space) const;
@@ -915,9 +924,9 @@ public:
 		ivec2 full_resolution = {1, 1};
 		int visualized_dimension = 0;
 
-		mat4x3 camera0 = mat4x3(1.0f);
-		mat4x3 camera1 = mat4x3(1.0f);
-		mat4x3 prev_camera = mat4x3(1.0f);
+		mat4x3 camera0 = mat4x3::identity();
+		mat4x3 camera1 = mat4x3::identity();
+		mat4x3 prev_camera = mat4x3::identity();
 
 		Foveation foveation;
 		Foveation prev_foveation;
@@ -957,15 +966,15 @@ public:
 	vec3 m_parallax_shift = {0.0f, 0.0f, 0.0f}; // to shift the viewer's origin by some amount in camera space
 
 	// CUDA stuff
-	tcnn::StreamAndEvent m_stream;
+	StreamAndEvent m_stream;
 
 	// Hashgrid encoding analysis
 	float m_quant_percent = 0.f;
 	std::vector<LevelStats> m_level_stats;
 	std::vector<LevelStats> m_first_layer_column_stats;
-	int m_n_levels = 0;
+	uint32_t m_n_levels = 0;
 	uint32_t m_n_features_per_level = 0;
-	int m_histo_level = 0; // collect a histogram for this level
+	uint32_t m_histo_level = 0; // collect a histogram for this level
 	uint32_t m_base_grid_resolution;
 	float m_per_level_scale;
 	float m_histo[257] = {};
@@ -983,19 +992,14 @@ public:
 	class CudaDevice {
 	public:
 		struct Data {
-			tcnn::GPUMemory<uint8_t> density_grid_bitfield;
+			GPUMemory<uint8_t> density_grid_bitfield;
 			uint8_t* density_grid_bitfield_ptr;
 
-			tcnn::GPUMemory<precision_t> params;
+			GPUMemory<network_precision_t> params;
 			std::shared_ptr<Buffer2D<uint8_t>> hidden_area_mask;
 		};
 
-		CudaDevice(int id, bool is_primary) : m_id{id}, m_is_primary{is_primary} {
-			auto guard = device_guard();
-			m_stream = std::make_unique<tcnn::StreamAndEvent>();
-			m_data = std::make_unique<Data>();
-			m_render_worker = std::make_unique<ThreadPool>(is_primary ? 0u : 1u);
-		}
+		CudaDevice(int id, bool is_primary);
 
 		CudaDevice(const CudaDevice&) = delete;
 		CudaDevice& operator=(const CudaDevice&) = delete;
@@ -1003,17 +1007,7 @@ public:
 		CudaDevice(CudaDevice&&) = default;
 		CudaDevice& operator=(CudaDevice&&) = default;
 
-		tcnn::ScopeGuard device_guard() {
-			int prev_device = tcnn::cuda_device();
-			if (prev_device == m_id) {
-				return {};
-			}
-
-			tcnn::set_cuda_device(m_id);
-			return tcnn::ScopeGuard{[prev_device]() {
-				tcnn::set_cuda_device(prev_device);
-			}};
-		}
+		ScopeGuard device_guard();
 
 		int id() const {
 			return m_id;
@@ -1024,11 +1018,11 @@ public:
 		}
 
 		std::string name() const {
-			return tcnn::cuda_device_name(m_id);
+			return cuda_device_name(m_id);
 		}
 
 		int compute_capability() const {
-			return tcnn::cuda_compute_capability(m_id);
+			return cuda_compute_capability(m_id);
 		}
 
 		cudaStream_t stream() const {
@@ -1064,17 +1058,14 @@ public:
 			m_dirty = value;
 		}
 
-		void set_network(const std::shared_ptr<tcnn::Network<float, precision_t>>& network) {
-			m_network = network;
-		}
+		void set_network(const std::shared_ptr<Network<float, network_precision_t>>& network);
+		void set_nerf_network(const std::shared_ptr<NerfNetwork<network_precision_t>>& nerf_network);
 
-		void set_nerf_network(const std::shared_ptr<NerfNetwork<precision_t>>& nerf_network);
-
-		const std::shared_ptr<tcnn::Network<float, precision_t>>& network() const {
+		const std::shared_ptr<Network<float, network_precision_t>>& network() const {
 			return m_network;
 		}
 
-		const std::shared_ptr<NerfNetwork<precision_t>>& nerf_network() const {
+		const std::shared_ptr<NerfNetwork<network_precision_t>>& nerf_network() const {
 			return m_nerf_network;
 		}
 
@@ -1087,7 +1078,7 @@ public:
 		}
 
 		template <class F>
-		auto enqueue_task(F&& f) -> std::future<std::result_of_t <F()>> {
+		auto enqueue_task(F&& f) -> std::future<std::result_of_t<F()>> {
 			if (is_primary()) {
 				return std::async(std::launch::deferred, std::forward<F>(f));
 			} else {
@@ -1098,7 +1089,7 @@ public:
 	private:
 		int m_id;
 		bool m_is_primary;
-		std::unique_ptr<tcnn::StreamAndEvent> m_stream;
+		std::unique_ptr<StreamAndEvent> m_stream;
 		struct Event {
 			Event() {
 				CUDA_CHECK_THROW(cudaEventCreate(&event));
@@ -1122,8 +1113,8 @@ public:
 		std::unique_ptr<Data> m_data;
 		CudaRenderBufferView m_render_buffer_view = {};
 
-		std::shared_ptr<tcnn::Network<float, precision_t>> m_network;
-		std::shared_ptr<NerfNetwork<precision_t>> m_nerf_network;
+		std::shared_ptr<Network<float, network_precision_t>> m_network;
+		std::shared_ptr<NerfNetwork<network_precision_t>> m_nerf_network;
 
 		bool m_dirty = true;
 
@@ -1131,7 +1122,7 @@ public:
 	};
 
 	void sync_device(CudaRenderBuffer& render_buffer, CudaDevice& device);
-	tcnn::ScopeGuard use_device(cudaStream_t stream, CudaRenderBuffer& render_buffer, CudaDevice& device);
+	ScopeGuard use_device(cudaStream_t stream, CudaRenderBuffer& render_buffer, CudaDevice& device);
 	void set_all_devices_dirty();
 
 	std::vector<CudaDevice> m_devices;
@@ -1155,7 +1146,6 @@ public:
 
 	nlohmann::json m_network_config;
 
-
 	default_rng_t m_rng;
 
 	CudaRenderBuffer m_windowless_render_surface{std::make_shared<CudaSurface2D>()};
@@ -1164,16 +1154,16 @@ public:
 	uint32_t network_num_forward_activations() const;
 
 	// Network & training stuff
-	std::shared_ptr<tcnn::Loss<precision_t>> m_loss;
-	std::shared_ptr<tcnn::Optimizer<precision_t>> m_optimizer;
-	std::shared_ptr<tcnn::Encoding<precision_t>> m_encoding;
-	std::shared_ptr<tcnn::Network<float, precision_t>> m_network;
-	std::shared_ptr<tcnn::Trainer<float, precision_t, precision_t>> m_trainer;
+	std::shared_ptr<Loss<network_precision_t>> m_loss;
+	std::shared_ptr<Optimizer<network_precision_t>> m_optimizer;
+	std::shared_ptr<Encoding<network_precision_t>> m_encoding;
+	std::shared_ptr<Network<float, network_precision_t>> m_network;
+	std::shared_ptr<Trainer<float, network_precision_t, network_precision_t>> m_trainer;
 
 	struct TrainableEnvmap {
-		std::shared_ptr<tcnn::Optimizer<float>> optimizer;
+		std::shared_ptr<Optimizer<float>> optimizer;
 		std::shared_ptr<TrainableBuffer<4, 2, float>> envmap;
-		std::shared_ptr<tcnn::Trainer<float, float, float>> trainer;
+		std::shared_ptr<Trainer<float, float, float>> trainer;
 
 		ivec2 resolution;
 		ELossType loss_type;
@@ -1196,9 +1186,9 @@ public:
 	} m_envmap;
 
 	struct TrainableDistortionMap {
-		std::shared_ptr<tcnn::Optimizer<float>> optimizer;
+		std::shared_ptr<Optimizer<float>> optimizer;
 		std::shared_ptr<TrainableBuffer<2, 2, float>> map;
-		std::shared_ptr<tcnn::Trainer<float, float, float>> trainer;
+		std::shared_ptr<Trainer<float, float, float>> trainer;
 		ivec2 resolution;
 
 		Buffer2DView<const vec2> inference_view() const {
@@ -1217,7 +1207,8 @@ public:
 			return {(const vec2*)map->params(), resolution};
 		}
 	} m_distortion;
-	std::shared_ptr<NerfNetwork<precision_t>> m_nerf_network;
+
+	std::shared_ptr<NerfNetwork<network_precision_t>> m_nerf_network;
 };
 
-NGP_NAMESPACE_END
+}

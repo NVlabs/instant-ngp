@@ -14,7 +14,7 @@
  *          interface to load OBJ-based meshes.
  */
 
-#include <neural-graphics-primitives/common.h>
+#include <neural-graphics-primitives/common_host.h>
 #include <neural-graphics-primitives/tinyobj_loader_wrapper.h>
 
 #include <fmt/core.h>
@@ -22,10 +22,9 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tinyobjloader/tiny_obj_loader.h>
 
-#include <iostream>
 #include <vector>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 std::vector<vec3> load_obj(const fs::path& path) {
 	tinyobj::attrib_t attrib;
@@ -81,4 +80,4 @@ std::vector<vec3> load_obj(const fs::path& path) {
 	return result;
 }
 
-NGP_NAMESPACE_END
+}

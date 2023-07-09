@@ -20,9 +20,7 @@
 
 #include "raystab.h"
 
-using namespace tcnn;
-
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 extern "C" {
 	__constant__ Raystab::Params params;
@@ -78,4 +76,4 @@ extern "C" __global__ void __closesthit__ch() {
 	optixSetPayload_0(1);
 }
 
-NGP_NAMESPACE_END
+}

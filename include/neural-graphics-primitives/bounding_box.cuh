@@ -19,7 +19,7 @@
 #include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/triangle.cuh>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 template <int N_POINTS>
 NGP_HOST_DEVICE inline void project(vec3 points[N_POINTS], const vec3& axis, float& min, float& max) {
@@ -51,7 +51,7 @@ struct BoundingBox {
 		enlarge(tri.c);
 	}
 
-	BoundingBox(std::vector<Triangle>::iterator begin, std::vector<Triangle>::iterator end) {
+	NGP_HOST_DEVICE BoundingBox(Triangle* begin, Triangle* end) {
 		min = max = begin->a;
 		for (auto it = begin; it != end; ++it) {
 			enlarge(*it);
@@ -59,8 +59,8 @@ struct BoundingBox {
 	}
 
 	NGP_HOST_DEVICE void enlarge(const BoundingBox& other) {
-		min = glm::min(min, other.min);
-		max = glm::max(max, other.max);
+		min = tcnn::min(min, other.min);
+		max = tcnn::max(max, other.max);
 	}
 
 	NGP_HOST_DEVICE void enlarge(const Triangle& tri) {
@@ -70,8 +70,8 @@ struct BoundingBox {
 	}
 
 	NGP_HOST_DEVICE void enlarge(const vec3& point) {
-		min = glm::min(min, point);
-		max = glm::max(max, point);
+		min = tcnn::min(min, point);
+		max = tcnn::max(max, point);
 	}
 
 	NGP_HOST_DEVICE void inflate(float amount) {
@@ -93,8 +93,8 @@ struct BoundingBox {
 
 	NGP_HOST_DEVICE BoundingBox intersection(const BoundingBox& other) const {
 		BoundingBox result = *this;
-		result.min = glm::max(result.min, other.min);
-		result.max = glm::min(result.max, other.max);
+		result.min = tcnn::max(result.min, other.min);
+		result.max = tcnn::min(result.max, other.max);
 		return result;
 	}
 
@@ -165,14 +165,14 @@ struct BoundingBox {
 		float tmax = (max.x - pos.x) / dir.x;
 
 		if (tmin > tmax) {
-			tcnn::host_device_swap(tmin, tmax);
+			host_device_swap(tmin, tmax);
 		}
 
 		float tymin = (min.y - pos.y) / dir.y;
 		float tymax = (max.y - pos.y) / dir.y;
 
 		if (tymin > tymax) {
-			tcnn::host_device_swap(tymin, tymax);
+			host_device_swap(tymin, tymax);
 		}
 
 		if (tmin > tymax || tymin > tmax) {
@@ -191,7 +191,7 @@ struct BoundingBox {
 		float tzmax = (max.z - pos.z) / dir.z;
 
 		if (tzmin > tzmax) {
-			tcnn::host_device_swap(tzmin, tzmax);
+			host_device_swap(tzmin, tzmax);
 		}
 
 		if (tmin > tzmax || tzmin > tmax) {
@@ -210,7 +210,7 @@ struct BoundingBox {
 	}
 
 	NGP_HOST_DEVICE bool is_empty() const {
-		return any(lessThan(max, min));
+		return max.x < min.x || max.y < min.y || max.z < min.z;
 	}
 
 	NGP_HOST_DEVICE bool contains(const vec3& p) const {
@@ -226,12 +226,12 @@ struct BoundingBox {
 	}
 
 	NGP_HOST_DEVICE float distance_sq(const vec3& p) const {
-		return length2(glm::max(glm::max(min - p, p - max), vec3(0.0f)));
+		return length2(tcnn::max(tcnn::max(min - p, p - max), vec3(0.0f)));
 	}
 
 	NGP_HOST_DEVICE float signed_distance(const vec3& p) const {
 		vec3 q = abs(p - min) - diag();
-		return length(glm::max(q, vec3(0.0f))) + std::min(compMax(q), 0.0f);
+		return length(tcnn::max(q, vec3(0.0f))) + std::min(tcnn::max(q), 0.0f);
 	}
 
 	NGP_HOST_DEVICE void get_vertices(vec3 v[8]) const {
@@ -249,12 +249,4 @@ struct BoundingBox {
 	vec3 max = vec3(-std::numeric_limits<float>::infinity());
 };
 
-inline std::ostream& operator<<(std::ostream& os, const ngp::BoundingBox& bb) {
-	os << "[";
-	os << "min=[" << bb.min.x << "," << bb.min.y << "," << bb.min.z << "], ";
-	os << "max=[" << bb.max.x << "," << bb.max.y << "," << bb.max.z << "]";
-	os << "]";
-	return os;
 }
-
-NGP_NAMESPACE_END

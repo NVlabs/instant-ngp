@@ -24,45 +24,45 @@
 #include <tiny-cuda-nn/gpu_memory.h>
 #include <tiny-cuda-nn/network.h>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 template <uint32_t N_DIMS, uint32_t RANK, typename T>
-class TrainableBuffer : public tcnn::DifferentiableObject<float, T, T> {
+class TrainableBuffer : public DifferentiableObject<float, T, T> {
 public:
 	template <typename RES>
 	TrainableBuffer(const RES& resolution) {
 		for (uint32_t i = 0; i < RANK; ++i) {
 			m_resolution[i] = resolution[i];
 		}
-		m_params_gradient_weight.resize(n_params());
+		m_param_gradients_weight.resize(n_params());
 	}
 
 	virtual ~TrainableBuffer() { }
 
-	void inference_mixed_precision_impl(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<T>& output, bool use_inference_matrices = true) override {
+	void inference_mixed_precision_impl(cudaStream_t stream, const GPUMatrixDynamic<float>& input, GPUMatrixDynamic<T>& output, bool use_inference_matrices = true) override {
 		throw std::runtime_error{"The trainable buffer does not support inference(). Its content is meant to be used externally."};
 	}
 
-	std::unique_ptr<tcnn::Context> forward_impl(cudaStream_t stream, const tcnn::GPUMatrixDynamic<float>& input, tcnn::GPUMatrixDynamic<T>* output = nullptr, bool use_inference_matrices = false, bool prepare_input_gradients = false) override {
+	std::unique_ptr<Context> forward_impl(cudaStream_t stream, const GPUMatrixDynamic<float>& input, GPUMatrixDynamic<T>* output = nullptr, bool use_inference_matrices = false, bool prepare_input_gradients = false) override {
 		throw std::runtime_error{"The trainable buffer does not support forward(). Its content is meant to be used externally."};
 	}
 
 	void backward_impl(
 		cudaStream_t stream,
-		const tcnn::Context& ctx,
-		const tcnn::GPUMatrixDynamic<float>& input,
-		const tcnn::GPUMatrixDynamic<T>& output,
-		const tcnn::GPUMatrixDynamic<T>& dL_doutput,
-		tcnn::GPUMatrixDynamic<float>* dL_dinput = nullptr,
+		const Context& ctx,
+		const GPUMatrixDynamic<float>& input,
+		const GPUMatrixDynamic<T>& output,
+		const GPUMatrixDynamic<T>& dL_doutput,
+		GPUMatrixDynamic<float>* dL_dinput = nullptr,
 		bool use_inference_matrices = false,
-		tcnn::EGradientMode param_gradients_mode = tcnn::EGradientMode::Overwrite
+		GradientMode param_gradients_mode = GradientMode::Overwrite
 	) override {
 		throw std::runtime_error{"The trainable buffer does not support backward(). Its content is meant to be used externally."};
 	}
 
 	void set_params_impl(T* params, T* inference_params, T* gradients) override { }
 
-	void initialize_params(tcnn::pcg32& rnd, float* params_full_precision, float scale = 1) override {
+	void initialize_params(pcg32& rnd, float* params_full_precision, float scale = 1) override {
 		// Initialize the buffer to zero from the GPU
 		CUDA_CHECK_THROW(cudaMemset(params_full_precision, 0, n_params()*sizeof(float)));
 	}
@@ -96,10 +96,10 @@ public:
 	}
 
 	T* gradient_weights() const {
-		return m_params_gradient_weight.data();
+		return m_param_gradients_weight.data();
 	}
 
-	tcnn::json hyperparams() const override {
+	json hyperparams() const override {
 		return {
 			{"otype", "TrainableBuffer"},
 		};
@@ -107,7 +107,7 @@ public:
 
 private:
 	uint32_t m_resolution[RANK];
-	tcnn::GPUMemory<T> m_params_gradient_weight;
+	GPUMemory<T> m_param_gradients_weight;
 };
 
-NGP_NAMESPACE_END
+}

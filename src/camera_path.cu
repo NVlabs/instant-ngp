@@ -26,7 +26,7 @@
 
 using namespace nlohmann;
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 CameraKeyframe lerp(const CameraKeyframe& p0, const CameraKeyframe& p1, float t, float t0, float t1) {
 	t = (t - t0) / (t1 - t0);
@@ -157,7 +157,7 @@ int CameraPath::imgui(char path_filename_buf[1024], float frame_milliseconds, ma
 	if (ImGui::Button("Load")) {
 		try {
 			load(path_filename_buf, first_xform);
-		} catch (std::exception& e) {
+		} catch (const std::exception& e) {
 			ImGui::OpenPopup("Camera path load error");
 			camera_path_load_error_string = std::string{"Failed to load camera path: "} + e.what();
 		}
@@ -259,7 +259,7 @@ int CameraPath::imgui(char path_filename_buf[1024], float frame_milliseconds, ma
 }
 
 bool debug_project(const mat4& proj, vec3 p, ImVec2& o) {
-	vec4 ph(p, 1.0f);
+	vec4 ph{p.x, p.y, p.z, 1.0f};
 	vec4 pa = proj * ph;
 	if (pa.w <= 0.f) {
 		return false;
@@ -323,12 +323,12 @@ bool CameraPath::imgui_viz(ImDrawList* list, mat4 &view2proj, mat4 &world2proj, 
 	bool changed = false;
 	// float flx = focal.x;
 	float fly = focal.y;
-	mat4 view2proj_guizmo = transpose(mat4(
+	mat4 view2proj_guizmo = transpose(mat4{
 		fly * 2.0f / aspect, 0.0f, 0.0f, 0.0f,
 		0.0f, -fly * 2.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, (zfar + znear) / (zfar - znear), -(2.0f * zfar * znear) / (zfar - znear),
-		0.0f, 0.0f, 1.0f, 0.0f
-	));
+		0.0f, 0.0f, 1.0f, 0.0f,
+	});
 
 	if (!update_cam_from_path) {
 		ImDrawList* list = ImGui::GetForegroundDrawList();
@@ -350,7 +350,7 @@ bool CameraPath::imgui_viz(ImDrawList* list, mat4 &view2proj, mat4 &world2proj, 
 				int i0 = cur_cam_i; while (i0 > 0 && keyframes[cur_cam_i].same_pos_as(keyframes[i0 - 1])) i0--;
 				int i1 = cur_cam_i; while (i1 < keyframes.size() - 1 && keyframes[cur_cam_i].same_pos_as(keyframes[i1 + 1])) i1++;
 				for (int i = i0; i <= i1; ++i) {
-					keyframes[i].T = matrix[3].xyz;
+					keyframes[i].T = matrix[3].xyz();
 					keyframes[i].R = quat(mat3(matrix));
 				}
 				changed=true;
@@ -375,4 +375,4 @@ bool CameraPath::imgui_viz(ImDrawList* list, mat4 &view2proj, mat4 &world2proj, 
 }
 #endif //NGP_GUI
 
-NGP_NAMESPACE_END
+}

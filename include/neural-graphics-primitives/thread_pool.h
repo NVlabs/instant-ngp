@@ -22,7 +22,7 @@
 #include <thread>
 #include <vector>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 template <typename T>
 void wait_all(T&& futures) {
@@ -106,4 +106,4 @@ private:
 	std::condition_variable m_task_queue_completed_condition;
 };
 
-NGP_NAMESPACE_END
+}

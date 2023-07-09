@@ -17,7 +17,7 @@
 #include <deque>
 #include <mutex>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 class ICallable {
 public:
@@ -117,4 +117,4 @@ private:
 	std::condition_variable mDataCondition;
 };
 
-NGP_NAMESPACE_END
+}

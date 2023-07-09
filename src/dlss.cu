@@ -12,10 +12,10 @@
  *  @author Thomas Müller, NVIDIA
  */
 
-#include <neural-graphics-primitives/common.h>
+#include <neural-graphics-primitives/common_host.h>
 #include <neural-graphics-primitives/dlss.h>
 
-#include <tiny-cuda-nn/common.h>
+#include <tiny-cuda-nn/common_host.h>
 
 #include <filesystem/path.h>
 
@@ -36,7 +36,7 @@ static_assert(false, "DLSS can only be compiled when both Vulkan and GUI support
 
 // NGX's macro `NVSDK_NGX_FAILED` results in a change of sign, which does not affect correctness.
 // Thus, suppress the corresponding warning.
-#ifdef __NVCC__
+#ifdef __CUDACC__
 #  ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
 #    pragma nv_diag_suppress = integer_sign_change
 #  else
@@ -51,9 +51,7 @@ static_assert(false, "DLSS can only be compiled when both Vulkan and GUI support
 #include <codecvt>
 #include <locale>
 
-using namespace tcnn;
-
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 extern std::atomic<size_t> g_total_n_bytes_allocated;
 
@@ -314,7 +312,7 @@ public:
 		};
 
 		cudaDeviceProp cuda_device_prop;
-		CUDA_CHECK_THROW(cudaGetDeviceProperties(&cuda_device_prop, tcnn::cuda_device()));
+		CUDA_CHECK_THROW(cudaGetDeviceProperties(&cuda_device_prop, cuda_device()));
 
 		auto is_same_as_cuda_device = [&](VkPhysicalDevice device) {
 			VkPhysicalDeviceIDProperties physical_device_id_properties = {};
@@ -1222,4 +1220,4 @@ std::unique_ptr<IDlss> VulkanAndNgx::init_dlss(const ivec2& out_resolution) {
 	return std::make_unique<Dlss>(shared_from_this(), out_resolution);
 }
 
-NGP_NAMESPACE_END
+}

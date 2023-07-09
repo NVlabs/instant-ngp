@@ -16,12 +16,12 @@
 
 #pragma once
 
-#include <neural-graphics-primitives/common.h>
+#include <neural-graphics-primitives/common_host.h>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 void save_exr(const float* data, int width, int height, int nChannels, int channelStride, const fs::path& path);
 void load_exr(float** data, int* width, int* height, const fs::path& path);
 __half* load_exr_to_gpu(int* width, int* height, const fs::path& path, bool fix_premult);
 
-NGP_NAMESPACE_END
+}

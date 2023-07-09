@@ -8,11 +8,15 @@
  * license agreement from NVIDIA CORPORATION is strictly prohibited.
  */
 
-/** @file   common_device.cu
+/** @file   common_host.cu
  *  @author Thomas Müller, NVIDIA
  */
 
-#include <neural-graphics-primitives/common.h>
+#include <neural-graphics-primitives/bounding_box.cuh>
+#include <neural-graphics-primitives/common_device.cuh>
+#include <neural-graphics-primitives/common_host.h>
+#include <neural-graphics-primitives/tinyexr_wrapper.h>
+#include <neural-graphics-primitives/triangle.cuh>
 
 #include <tiny-cuda-nn/common.h>
 
@@ -21,7 +25,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 
-#ifdef __NVCC__
+#ifdef __CUDACC__
 #  ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
 #    pragma nv_diag_suppress 550
 #  else
@@ -30,7 +34,7 @@
 #endif
 #include <stb_image/stb_image.h>
 #include <stb_image/stb_image_write.h>
-#ifdef __NVCC__
+#ifdef __CUDACC__
 #  ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
 #    pragma nv_diag_default 550
 #  else
@@ -39,7 +43,7 @@
 #endif
 
 #ifdef _WIN32
-#  include <windows.h>
+#  include <Windows.h>
 #else
 #  include <unistd.h>
 #  include <linux/limits.h>
@@ -50,9 +54,7 @@
 #undef near
 #undef far
 
-using namespace tcnn;
-
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 bool is_wsl() {
 #ifdef _WIN32
@@ -95,7 +97,7 @@ std::wstring native_string(const fs::path& path) { return path.wstr(); }
 std::string native_string(const fs::path& path) { return path.str(); }
 #endif
 
-fs::path get_executable_dir() {
+fs::path discover_executable_dir() {
 #ifdef _WIN32
 	WCHAR path[1024];
 	if (GetModuleFileNameW(NULL, path, 1024) == 0) {
@@ -112,8 +114,8 @@ fs::path get_executable_dir() {
 #endif
 }
 
-fs::path get_root_dir() {
-	auto executable_dir = get_executable_dir();
+fs::path discover_root_dir() {
+	auto executable_dir = discover_executable_dir();
 	fs::path exists_in_root_dir = "scripts";
 	for (const auto& candidate : {
 		fs::path{"."}/exists_in_root_dir,
@@ -248,4 +250,64 @@ FILE* native_fopen(const fs::path& path, const char* mode) {
 #endif
 }
 
-NGP_NAMESPACE_END
+GPUMemory<float> load_exr_gpu(const fs::path& path, int* width, int* height) {
+	float* out; // width * height * RGBA
+	load_exr(&out, width, height, path.str().c_str());
+	ScopeGuard mem_guard{[&]() { free(out); }};
+
+	GPUMemory<float> result((*width) * (*height) * 4);
+	result.copy_from_host(out);
+	return result;
+}
+
+GPUMemory<float> load_stbi_gpu(const fs::path& path, int* width, int* height) {
+	bool is_hdr = is_hdr_stbi(path);
+
+	void* data; // width * height * RGBA
+	int comp;
+	if (is_hdr) {
+		data = load_stbi_float(path, width, height, &comp, 4);
+	} else {
+		data = load_stbi(path, width, height, &comp, 4);
+	}
+
+	if (!data) {
+		throw std::runtime_error{std::string{stbi_failure_reason()}};
+	}
+
+	ScopeGuard mem_guard{[&]() { stbi_image_free(data); }};
+
+	if (*width == 0 || *height == 0) {
+		throw std::runtime_error{"Image has zero pixels."};
+	}
+
+	GPUMemory<float> result((*width) * (*height) * 4);
+	if (is_hdr) {
+		result.copy_from_host((float*)data);
+	} else {
+		GPUMemory<uint8_t> bytes((*width) * (*height) * 4);
+		bytes.copy_from_host((uint8_t*)data);
+		linear_kernel(from_rgba32<float>, 0, nullptr, (*width) * (*height), bytes.data(), result.data(), false, false, 0);
+	}
+
+	return result;
+}
+
+std::ostream& operator<<(std::ostream& os, const BoundingBox& bb) {
+	os << "[";
+	os << "min=[" << bb.min.x << "," << bb.min.y << "," << bb.min.z << "], ";
+	os << "max=[" << bb.max.x << "," << bb.max.y << "," << bb.max.z << "]";
+	os << "]";
+	return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const Triangle& triangle) {
+	os << "[";
+	os << "a=[" << triangle.a.x << "," << triangle.a.y << "," << triangle.a.z << "], ";
+	os << "b=[" << triangle.b.x << "," << triangle.b.y << "," << triangle.b.z << "], ";
+	os << "c=[" << triangle.c.x << "," << triangle.c.y << "," << triangle.c.z << "]";
+	os << "]";
+	return os;
+}
+
+}

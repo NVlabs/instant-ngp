@@ -18,7 +18,7 @@
 
 #include <memory>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 class IDlss {
 public:
@@ -64,4 +64,4 @@ public:
 std::shared_ptr<IDlssProvider> init_vulkan_and_ngx();
 #endif
 
-NGP_NAMESPACE_END
+}

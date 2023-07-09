@@ -30,9 +30,7 @@
 #include <tiny-cuda-nn/network_with_input_encoding.h>
 #include <tiny-cuda-nn/trainer.h>
 
-using namespace tcnn;
-
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 static constexpr uint32_t MARCH_ITER = 10000;
 
@@ -108,12 +106,12 @@ __device__ vec3 evaluate_shading(
 		return amb;
 	}
 
-	float luminance = dot(base_color, vec3(0.3f, 0.6f, 0.1f));
+	float luminance = dot(base_color, vec3{0.3f, 0.6f, 0.1f});
 
 	// normalize luminance to isolate hue and saturation components
 	vec3 Ctint = base_color * (1.f/(luminance+0.00001f));
-	vec3 Cspec0 = mix(mix(vec3(1.0f,1.0f,1.0f), Ctint, specular_tint) * specular * 0.08f, base_color, metallic);
-	vec3 Csheen = mix(vec3(1.0f,1.0f,1.0f), Ctint, sheen_tint);
+	vec3 Cspec0 = mix(mix(vec3(1.0f), Ctint, specular_tint) * specular * 0.08f, base_color, metallic);
+	vec3 Csheen = mix(vec3(1.0f), Ctint, sheen_tint);
 
 	float Fd90 = 0.5f + 2.0f * LdotH * LdotH * roughness;
 	float Fd = mix(1, Fd90, FL) * mix(1.f, Fd90, FV);
@@ -129,7 +127,7 @@ __device__ vec3 evaluate_shading(
 	float a= std::max(0.001f, square(roughness));
 	float Ds = G2(NdotH, a);
 	float FH = SchlickFresnel(LdotH);
-	vec3 Fs = mix(Cspec0, vec3(1.0f,1.0f,1.0f), FH);
+	vec3 Fs = mix(Cspec0, vec3(1.0f), FH);
 	float Gs = SmithG_GGX(NdotL, a) * SmithG_GGX(NdotV, a);
 
 	// sheen
@@ -142,7 +140,7 @@ __device__ vec3 evaluate_shading(
 
 	float CCs=0.25f * clearcoat * Gr * Fr * Dr;
 	vec3 brdf = (float(1.0f / PI()) * mix(Fd, ss, subsurface) * base_color + Fsheen) * (1.0f - metallic) +
-		Gs * Fs * Ds + vec3(CCs,CCs,CCs);
+		Gs * Fs * Ds + vec3{CCs, CCs, CCs};
 	return vec3(brdf * light_color) * NdotL + amb;
 }
 
@@ -324,7 +322,7 @@ __global__ void shade_kernel_sdf(
 	vec3 pos = positions[i];
 	bool floor = false;
 	if (pos.y < floor_y + 0.001f && payload.dir.y < 0.f) {
-		normal = vec3(0.f, 1.f, 0.f);
+		normal = vec3{0.0f, 1.0f, 0.0f};
 		floor = true;
 	}
 
@@ -361,14 +359,14 @@ __global__ void shade_kernel_sdf(
 		} break;
 		case ERenderMode::Depth: color = vec3(dot(cam_fwd, pos - cam_pos)); break;
 		case ERenderMode::Positions: {
-			color = (pos - vec3(0.5f)) / 2.0f + vec3(0.5f);
+			color = (pos - 0.5f) / 2.0f + 0.5f;
 		} break;
-		case ERenderMode::Normals: color = 0.5f * normal + vec3(0.5f); break;
+		case ERenderMode::Normals: color = 0.5f * normal + 0.5f; break;
 		case ERenderMode::Cost: color = vec3((float)payload.n_steps / 30); break;
 		case ERenderMode::EncodingVis: color = normals[i]; break;
 	}
 
-	frame_buffer[payload.idx] = {color.rgb, 1.0f};
+	frame_buffer[payload.idx] = {color.r, color.g, color.b, 1.0f};
 	depth_buffer[payload.idx] = dot(cam_fwd, pos - cam_pos);
 }
 
@@ -543,7 +541,7 @@ __global__ void init_rays_with_payload_kernel_sdf(
 
 	Ray ray = pixel_to_ray(
 		sample_index,
-		{x, y},
+		{(int)x, (int)y},
 		resolution,
 		focal_length,
 		camera_matrix,
@@ -798,7 +796,7 @@ uint32_t Testbed::SphereTracer::trace(
 }
 
 void Testbed::SphereTracer::enlarge(size_t n_elements, cudaStream_t stream) {
-	n_elements = next_multiple(n_elements, size_t(tcnn::batch_size_granularity));
+	n_elements = next_multiple(n_elements, size_t(BATCH_SIZE_GRANULARITY));
 	auto scratch = allocate_workspace_and_distribute<
 		vec3, vec3, float, float, float, float, SdfPayload, // m_rays[0]
 		vec3, vec3, float, float, float, float, SdfPayload, // m_rays[1]
@@ -824,7 +822,7 @@ void Testbed::SphereTracer::enlarge(size_t n_elements, cudaStream_t stream) {
 }
 
 void Testbed::FiniteDifferenceNormalsApproximator::enlarge(uint32_t n_elements, cudaStream_t stream) {
-	n_elements = next_multiple(n_elements, tcnn::batch_size_granularity);
+	n_elements = next_multiple(n_elements, BATCH_SIZE_GRANULARITY);
 	auto scratch = allocate_workspace_and_distribute<
 		vec3, vec3, vec3,
 		float, float, float,
@@ -960,10 +958,10 @@ void Testbed::render_sdf(
 	if (m_render_mode == ERenderMode::Slice) {
 		if (visualized_dimension == -1) {
 			distance_function(n_hit, rays_hit.pos, rays_hit.distance, stream);
-			extract_dimension_pos_neg_kernel<float><<<n_blocks_linear(n_hit*3), n_threads_linear, 0, stream>>>(n_hit*3, 0, 1, 3, rays_hit.distance, CM, (float*)rays_hit.normal);
+			extract_dimension_pos_neg_kernel<float><<<n_blocks_linear(n_hit*3), N_THREADS_LINEAR, 0, stream>>>(n_hit*3, 0, 1, 3, rays_hit.distance, CM, (float*)rays_hit.normal);
 		} else {
 			// Store colors in the normal buffer
-			uint32_t n_elements = next_multiple(n_hit, tcnn::batch_size_granularity);
+			uint32_t n_elements = next_multiple(n_hit, BATCH_SIZE_GRANULARITY);
 
 			GPUMatrix<float> positions_matrix((float*)rays_hit.pos, 3, n_elements);
 			GPUMatrix<float> colors_matrix((float*)rays_hit.normal, 3, n_elements);
@@ -1024,7 +1022,7 @@ void Testbed::render_sdf(
 		}
 	} else if (render_mode == ERenderMode::EncodingVis && m_render_mode != ERenderMode::Slice) {
 		// HACK: Store colors temporarily in the normal buffer
-		uint32_t n_elements = next_multiple(n_hit, tcnn::batch_size_granularity);
+		uint32_t n_elements = next_multiple(n_hit, BATCH_SIZE_GRANULARITY);
 
 		GPUMatrix<float> positions_matrix((float*)rays_hit.pos, 3, n_elements);
 		GPUMatrix<float> colors_matrix((float*)rays_hit.normal, 3, n_elements);
@@ -1124,13 +1122,13 @@ void Testbed::load_mesh(const fs::path& data_path) {
 	const float inflation = 0.005f;
 
 	m_raw_aabb.inflate(length(m_raw_aabb.diag()) * inflation);
-	m_sdf.mesh_scale = compMax(m_raw_aabb.diag());
+	m_sdf.mesh_scale = max(m_raw_aabb.diag());
 
 	// Normalize vertex coordinates to lie within [0,1]^3.
 	// This way, none of the constants need to carry around
 	// bounding box factors.
 	for (size_t i = 0; i < n_vertices; ++i) {
-		vertices[i] = (vertices[i] - m_raw_aabb.min - 0.5f * m_raw_aabb.diag()) / m_sdf.mesh_scale + vec3(0.5f);
+		vertices[i] = (vertices[i] - m_raw_aabb.min - 0.5f * m_raw_aabb.diag()) / m_sdf.mesh_scale + 0.5f;
 	}
 
 	m_aabb = {};
@@ -1141,7 +1139,7 @@ void Testbed::load_mesh(const fs::path& data_path) {
 	m_aabb.inflate(length(m_aabb.diag()) * inflation);
 	m_aabb = m_aabb.intersection(BoundingBox{vec3(0.0f), vec3(1.0f)});
 	m_render_aabb = m_aabb;
-	m_render_aabb_to_local = mat3(1.0f);
+	m_render_aabb_to_local = mat3::identity();
 	m_mesh.thresh = 0.f;
 
 	m_sdf.triangles_cpu.resize(n_triangles);
@@ -1397,4 +1395,4 @@ double Testbed::calculate_iou(uint32_t n_samples, float scale_existing_results_f
 	return countercpu[4]/double(countercpu[5]);
 }
 
-NGP_NAMESPACE_END
+}

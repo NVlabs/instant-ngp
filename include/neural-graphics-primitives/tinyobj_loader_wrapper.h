@@ -21,8 +21,8 @@
 #include <string>
 #include <vector>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 std::vector<vec3> load_obj(const fs::path& path);
 
-NGP_NAMESPACE_END
+}

@@ -19,7 +19,7 @@
 
 #include <optix.h>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 struct Raystab {
 	struct Params {
@@ -33,4 +33,4 @@ struct Raystab {
 	struct HitGroupData {};
 };
 
-NGP_NAMESPACE_END
+}

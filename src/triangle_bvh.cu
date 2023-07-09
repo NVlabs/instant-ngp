@@ -12,8 +12,9 @@
  *  @author Thomas Müller & Alex Evans, NVIDIA
  */
 
-#include <neural-graphics-primitives/common.h>
+#include <neural-graphics-primitives/common_host.h>
 #include <neural-graphics-primitives/triangle_bvh.cuh>
+
 #include <tiny-cuda-nn/gpu_memory.h>
 
 #include <stack>
@@ -38,9 +39,7 @@ namespace optix_ptx {
 }
 #endif //NGP_OPTIX
 
-using namespace tcnn;
-
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 constexpr float MAX_DIST = 10.0f;
 
@@ -409,7 +408,7 @@ public:
 		vec3 closest_point = tri.closest_point(point);
 		vec3 avg_normal = avg_normal_around_point(closest_point, bvhnodes, triangles);
 
-		return std::copysignf(p.second, dot(avg_normal, point - closest_point));
+		return copysign(p.second, dot(avg_normal, point - closest_point));
 	}
 
 	__host__ __device__ static float signed_distance_raystab(const vec3& point, const TriangleBvhNode* __restrict__ bvhnodes, const Triangle* __restrict__ triangles, float max_distance_sq, default_rng_t rng={}) {
@@ -543,7 +542,7 @@ public:
 
 		// Root
 		m_nodes.emplace_back();
-		m_nodes.front().bb = BoundingBox(std::begin(triangles), std::end(triangles));
+		m_nodes.front().bb = BoundingBox(triangles.data(), triangles.data() + triangles.size());
 
 		struct BuildNode {
 			int node_idx;
@@ -584,7 +583,7 @@ public:
 					}
 					var /= (float)std::distance(child.begin, child.end);
 
-					float max_val = compMax(var);
+					float max_val = max(var);
 					int axis = var.x == max_val ? 0 : (var.y == max_val ? 1 : 2);
 
 					auto m = child.begin + std::distance(child.begin, child.end)/2;
@@ -606,7 +605,7 @@ public:
 				child.node_idx = (int)m_nodes.size();
 
 				m_nodes.emplace_back();
-				m_nodes.back().bb = BoundingBox(child.begin, child.end);
+				m_nodes.back().bb = BoundingBox(&*child.begin, &*child.end);
 
 				if (std::distance(child.begin, child.end) <= n_primitives_per_leaf) {
 					m_nodes.back().left_idx = -(int)std::distance(std::begin(triangles), child.begin)-1;
@@ -721,6 +720,6 @@ __global__ void raytrace_kernel(uint32_t n_elements, vec3* __restrict__ position
 	}
 }
 
-NGP_NAMESPACE_END
+}
 
 
