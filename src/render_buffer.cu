@@ -33,9 +33,7 @@
 
 #include <stb_image/stb_image.h>
 
-using namespace tcnn;
-
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 extern std::atomic<size_t> g_total_n_bytes_allocated;
 
@@ -46,7 +44,7 @@ void CudaSurface2D::free() {
 	m_surface = 0;
 	if (m_array) {
 		cudaFreeArray(m_array);
-		g_total_n_bytes_allocated -= compMul(m_size) * sizeof(float) * m_n_channels;
+		g_total_n_bytes_allocated -= product(m_size) * sizeof(float) * m_n_channels;
 	}
 	m_array = nullptr;
 	m_size = ivec2(0);
@@ -70,7 +68,7 @@ void CudaSurface2D::resize(const ivec2& size, int n_channels) {
 	}
 	CUDA_CHECK_THROW(cudaMallocArray(&m_array, &desc, size.x, size.y, cudaArraySurfaceLoadStore));
 
-	g_total_n_bytes_allocated += compMul(m_size) * sizeof(float) * n_channels;
+	g_total_n_bytes_allocated += product(m_size) * sizeof(float) * n_channels;
 
 	struct cudaResourceDesc resource_desc;
 	memset(&resource_desc, 0, sizeof(resource_desc));
@@ -198,7 +196,7 @@ GLTexture::CUDAMapping::CUDAMapping(GLuint texture_id, const ivec2& size, int n_
 		// falling back to a regular cuda surface + CPU copy of data
 		m_cuda_surface = std::make_unique<CudaSurface2D>();
 		m_cuda_surface->resize(size, n_channels);
-		m_data_cpu.resize(compMul(m_size) * n_channels);
+		m_data_cpu.resize(product(m_size) * n_channels);
 		return;
 	}
 
@@ -253,10 +251,10 @@ __global__ void accumulate_kernel(ivec2 resolution, vec4* frame_buffer, vec4* ac
 				break;
 			}
 		case EColorSpace::SRGB:
-			color.rgb = linear_to_srgb(color.rgb);
+			color.rgb() = linear_to_srgb(color.rgb());
 			// fallthrough is intended!
 		case EColorSpace::Linear:
-			tmp.rgb = (tmp.rgb * sample_count + color.rgb) / (sample_count+1); break;
+			tmp.rgb() = (tmp.rgb() * sample_count + color.rgb()) / (sample_count+1); break;
 	}
 
 	tmp.a = (tmp.a * sample_count + color.a) / (sample_count+1);
@@ -307,7 +305,7 @@ __device__ vec3 tonemap(vec3 x, ETonemapCurve curve) {
 		k3 = 4.0f * k3;
 		k4 = 2.0f * k4;
 	} else { //if (curve == ETonemapCurve::Reinhard)
-		const vec3 luminance_coefficients = vec3(0.2126f, 0.7152f, 0.0722f);
+		const vec3 luminance_coefficients = {0.2126f, 0.7152f, 0.0722f};
 		float Y = dot(luminance_coefficients, x);
 
 		return x * (1.f / (Y + 1.0f));
@@ -392,20 +390,20 @@ __global__ void overlay_image_kernel(
 	// The background color is represented in SRGB, so convert
 	// to linear if that's not the space in which we're rendering.
 	if (color_space != EColorSpace::SRGB) {
-		background_color.xyz = srgb_to_linear(background_color.xyz);
+		background_color.xyz() = srgb_to_linear(background_color.xyz());
 	} else {
 		if (color.a > 0) {
-			color.rgb = linear_to_srgb(color.rgb() / color.a) * color.a;
+			color.rgb() = linear_to_srgb(color.rgb() / color.a) * color.a;
 		} else {
-			color.rgb = vec3(0.0f);
+			color.rgb() = vec3(0.0f);
 		}
 	}
 
 	float weight = (1 - color.a) * background_color.a;
-	color.rgb += background_color.rgb * weight;
+	color.rgb() += background_color.rgb() * weight;
 	color.a += weight;
 
-	color.rgb = tonemap(color.rgb, exposure, tonemap_curve, color_space, output_color_space);
+	color.rgb() = tonemap(color.rgb(), exposure, tonemap_curve, color_space, output_color_space);
 
 	vec4 prev_color;
 	surf2Dread((float4*)&prev_color, surface, x * sizeof(float4), y);
@@ -414,20 +412,20 @@ __global__ void overlay_image_kernel(
 }
 
 __device__ vec3 colormap_turbo(float x) {
-	const vec4 kRedVec4 =   vec4(0.13572138f, 4.61539260f, -42.66032258f, 132.13108234f);
-	const vec4 kGreenVec4 = vec4(0.09140261f, 2.19418839f, 4.84296658f, -14.18503333f);
-	const vec4 kBlueVec4 =  vec4(0.10667330f, 12.64194608f, -60.58204836f, 110.36276771f);
-	const vec2 kRedVec2 =   vec2(-152.94239396f, 59.28637943f);
-	const vec2 kGreenVec2 = vec2(4.27729857f, 2.82956604f);
-	const vec2 kBlueVec2 =  vec2(-89.90310912f, 27.34824973f);
+	const vec4 kRedVec4 =   {0.13572138f, 4.61539260f, -42.66032258f, 132.13108234f};
+	const vec4 kGreenVec4 = {0.09140261f, 2.19418839f, 4.84296658f, -14.18503333f};
+	const vec4 kBlueVec4 =  {0.10667330f, 12.64194608f, -60.58204836f, 110.36276771f};
+	const vec2 kRedVec2 =   {-152.94239396f, 59.28637943f};
+	const vec2 kGreenVec2 = {4.27729857f, 2.82956604f};
+	const vec2 kBlueVec2 =  {-89.90310912f, 27.34824973f};
 
 	x = __saturatef(x);
-	vec4 v4 = vec4{ 1.0f, x, x * x, x * x * x };
-	vec2 v2 = vec2{ v4.w * x, v4.w * v4.z };
-	return vec3{
+	vec4 v4 = { 1.0f, x, x * x, x * x * x };
+	vec2 v2 = { v4.w * x, v4.w * v4.z };
+	return {
 		dot(v4, kRedVec4)   + dot(v2, kRedVec2),
 		dot(v4, kGreenVec4) + dot(v2, kGreenVec2),
-		dot(v4, kBlueVec4)  + dot(v2, kBlueVec2)
+		dot(v4, kBlueVec4)  + dot(v2, kBlueVec2),
 	};
 }
 
@@ -504,8 +502,8 @@ __global__ void overlay_false_color_kernel(ivec2 resolution, ivec2 training_reso
 	float scale = training_resolution[fov_axis] / float(resolution[fov_axis]);
 	float u = (x+0.5f-resolution.x*0.5f) * scale + training_resolution.x*0.5f;
 	float v = (y+0.5f-resolution.y*0.5f) * scale + training_resolution.y*0.5f;
-	int srcx = floorf(u * error_map_resolution.x / float(max(1.f, (float)training_resolution.x)));
-	int srcy = floorf(v * error_map_resolution.y / float(max(1.f, (float)training_resolution.y)));
+	int srcx = floor(u * error_map_resolution.x / float(max(1.f, (float)training_resolution.x)));
+	int srcy = floor(v * error_map_resolution.y / float(max(1.f, (float)training_resolution.y)));
 
 	uint32_t srcidx = srcx + error_map_resolution.x * srcy;
 
@@ -541,18 +539,18 @@ __global__ void tonemap_kernel(ivec2 resolution, float exposure, vec4 background
 	// The background color is represented in SRGB, so convert
 	// to linear if that's not the space in which we're rendering.
 	if (color_space != EColorSpace::SRGB) {
-		background_color.rgb = srgb_to_linear(background_color.rgb);
+		background_color.rgb() = srgb_to_linear(background_color.rgb());
 	}
 
 	vec4 color = accumulate_buffer[idx];
 	float weight = (1 - color.a) * background_color.a;
-	color.rgb += background_color.rgb * weight;
+	color.rgb() += background_color.rgb() * weight;
 	color.a += weight;
 
-	color.rgb = tonemap(color.rgb, vec3(exposure), tonemap_curve, color_space, output_color_space);
+	color.rgb() = tonemap(color.rgb(), vec3(exposure), tonemap_curve, color_space, output_color_space);
 
 	if (unmultiply_alpha && color.a > 0.0f) {
-		color.rgb = color.rgb() / color.a;
+		color.rgb() = color.rgb() / color.a;
 	}
 
 	if (clamp_output_color) {
@@ -603,7 +601,7 @@ __global__ void depth_splat_kernel(
 }
 
 void CudaRenderBufferView::clear(cudaStream_t stream) const {
-	size_t n_pixels = compMul(resolution);
+	size_t n_pixels = product(resolution);
 	CUDA_CHECK_THROW(cudaMemsetAsync(frame_buffer, 0, n_pixels * sizeof(vec4), stream));
 	CUDA_CHECK_THROW(cudaMemsetAsync(depth_buffer, 0, n_pixels * sizeof(float), stream));
 }
@@ -791,4 +789,4 @@ void CudaRenderBuffer::disable_dlss() {
 	m_dlss = nullptr;
 }
 
-NGP_NAMESPACE_END
+}

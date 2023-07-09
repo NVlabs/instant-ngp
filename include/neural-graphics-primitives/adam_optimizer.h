@@ -20,7 +20,7 @@
 
 #include <json/json.hpp>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 class VarAdamOptimizer {
 public:
@@ -241,7 +241,7 @@ public:
 		float actual_learning_rate = m_hparams.learning_rate * std::sqrt(1 - std::pow(m_hparams.beta2, m_state.iter)) / (1 - std::pow(m_hparams.beta1, m_state.iter));
 		m_state.first_moment = m_hparams.beta1 * m_state.first_moment + (1 - m_hparams.beta1) * gradient;
 		m_state.second_moment = m_hparams.beta2 * m_state.second_moment + (1 - m_hparams.beta2) * gradient * gradient;
-		vec3 rot = actual_learning_rate * m_state.first_moment / (sqrt(m_state.second_moment) + vec3(m_hparams.epsilon));
+		vec3 rot = actual_learning_rate * m_state.first_moment / (sqrt(m_state.second_moment) + m_hparams.epsilon);
 
 		m_state.variable = rotvec(rotmat(-rot) * rotmat(variable()));
 	}
@@ -308,4 +308,4 @@ inline void from_json(const nlohmann::json& j, RotationAdamOptimizer& opt) {
 	opt.from_json(j);
 }
 
-NGP_NAMESPACE_END
+}

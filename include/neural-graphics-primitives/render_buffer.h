@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <neural-graphics-primitives/common.h>
+#include <neural-graphics-primitives/common_host.h>
 #include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/dlss.h>
 
@@ -23,7 +23,7 @@
 #include <memory>
 #include <vector>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 typedef unsigned int GLenum;
 typedef int          GLint;
@@ -306,9 +306,9 @@ private:
 
 	ivec2 m_in_resolution = ivec2(0);
 
-	tcnn::GPUMemory<vec4> m_frame_buffer;
-	tcnn::GPUMemory<float> m_depth_buffer;
-	tcnn::GPUMemory<vec4> m_accumulate_buffer;
+	GPUMemory<vec4> m_frame_buffer;
+	GPUMemory<float> m_depth_buffer;
+	GPUMemory<vec4> m_accumulate_buffer;
 
 	std::shared_ptr<Buffer2D<uint8_t>> m_hidden_area_mask = nullptr;
 
@@ -316,4 +316,4 @@ private:
 	std::shared_ptr<SurfaceProvider> m_depth_target;
 };
 
-NGP_NAMESPACE_END
+}

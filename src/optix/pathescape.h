@@ -20,7 +20,7 @@
 
 #include <optix.h>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 struct PathEscape {
 	struct Params {
@@ -35,4 +35,4 @@ struct PathEscape {
 	struct HitGroupData {};
 };
 
-NGP_NAMESPACE_END
+}

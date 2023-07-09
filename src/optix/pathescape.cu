@@ -15,13 +15,12 @@
 
 #include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/random_val.cuh>
+
 #include <optix.h>
 
 #include "pathescape.h"
 
-using namespace tcnn;
-
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 extern "C" {
 	__constant__ PathEscape::Params params;
@@ -121,4 +120,4 @@ extern "C" __global__ void __closesthit__ch() {
 	optixSetPayload_0(optixGetPrimitiveIndex());
 }
 
-NGP_NAMESPACE_END
+}

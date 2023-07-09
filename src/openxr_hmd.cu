@@ -15,8 +15,6 @@
  *          view, hand, and eye poses, as well as controller inputs.
  */
 
-#define NOMINMAX
-
 #include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/marching_cubes.h>
 #include <neural-graphics-primitives/openxr_hmd.h>
@@ -38,9 +36,7 @@
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers" //TODO: XR struct are uninitiaized apart from their type
 #endif
 
-using namespace tcnn;
-
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 // function XrEnumStr turns enum into string for printing
 // uses expansion macro and data provided in openxr_reflection.h
@@ -1254,7 +1250,7 @@ void OpenXRHMD::end_frame(FrameInfoPtr frame_info, float znear, float zfar, bool
 	XR_CHECK_THROW(xrEndFrame(m_session, &frame_end_info));
 }
 
-NGP_NAMESPACE_END
+}
 
 #ifdef __GNUC__
 #pragma GCC diagnostic pop

@@ -20,7 +20,7 @@
 
 #include <tiny-cuda-nn/gpu_memory.h>
 
-#ifdef __NVCC__
+#ifdef __CUDACC__
 #  ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
 #    pragma nv_diag_suppress 174
 #    pragma nv_diag_suppress 550
@@ -33,9 +33,7 @@
 #define TINYEXR_IMPLEMENTATION
 #include <tinyexr/tinyexr.h>
 
-using namespace tcnn;
-
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 template <typename T>
 __global__ void interleave_and_cast_kernel(const uint32_t num_pixels, bool has_alpha, const T* __restrict__ in, __half* __restrict__ out, bool fix_pre_mult) {
@@ -257,4 +255,4 @@ __half* load_exr_to_gpu(int* width, int* height, const fs::path& path, bool fix_
 	return result;
 }
 
-NGP_NAMESPACE_END
+}

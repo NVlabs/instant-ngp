@@ -22,7 +22,7 @@
 #include <pybind11/functional.h>
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
-#include <pybind11_glm/pybind11_glm.hpp>
+#include <tiny-cuda-nn/vec_pybind11.h>
 #include <pybind11_json/pybind11_json.hpp>
 
 #include <filesystem/path.h>
@@ -37,14 +37,10 @@
 #  include <GLFW/glfw3.h>
 #endif
 
-using namespace tcnn;
 using namespace nlohmann;
 namespace py = pybind11;
 
-using namespace pybind11::literals; // to bring in the `_a` literal
-
-NGP_NAMESPACE_BEGIN
-
+namespace ngp {
 
 void Testbed::Nerf::Training::set_image(int frame_idx, pybind11::array_t<float> img, pybind11::array_t<float> depth_img, float depth_scale) {
 	if (frame_idx < 0 || frame_idx >= dataset.n_images) {
@@ -63,7 +59,7 @@ void Testbed::Nerf::Training::set_image(int frame_idx, pybind11::array_t<float> 
 
 	py::buffer_info depth_buf = depth_img.request();
 
-	dataset.set_training_image(frame_idx, {img_buf.shape[1], img_buf.shape[0]}, (const void*)img_buf.ptr, (const float*)depth_buf.ptr, depth_scale, false, EImageDataType::Float, EDepthDataType::Float);
+	dataset.set_training_image(frame_idx, {(int)img_buf.shape[1], (int)img_buf.shape[0]}, (const void*)img_buf.ptr, (const float*)depth_buf.ptr, depth_scale, false, EImageDataType::Float, EDepthDataType::Float);
 }
 
 void Testbed::override_sdf_training_data(py::array_t<float> points, py::array_t<float> distances) {
@@ -99,7 +95,7 @@ void Testbed::override_sdf_training_data(py::array_t<float> points, py::array_t<
 }
 
 pybind11::dict Testbed::compute_marching_cubes_mesh(ivec3 res3d, BoundingBox aabb, float thresh) {
-	mat3 render_aabb_to_local = mat3(1.0f);
+	mat3 render_aabb_to_local = mat3::identity();
 	if (aabb.is_empty()) {
 		aabb = m_testbed_mode == ETestbedMode::Nerf ? m_render_aabb : m_aabb;
 		render_aabb_to_local = m_render_aabb_to_local;
@@ -121,7 +117,7 @@ pybind11::dict Testbed::compute_marching_cubes_mesh(ivec3 res3d, BoundingBox aab
 		ns[i] = normalize(ns[i]);
 	}
 
-	return py::dict("V"_a=cpuverts, "N"_a=cpunormals, "C"_a=cpucolors, "F"_a=cpuindices);
+	return py::dict(py::arg("V")=cpuverts, py::arg("N")=cpunormals, py::arg("C")=cpucolors, py::arg("F")=cpuindices);
 }
 
 py::array_t<float> Testbed::render_to_cpu(int width, int height, int spp, bool linear, float start_time, float end_time, float fps, float shutter_fraction) {
@@ -237,7 +233,7 @@ py::array_t<float> Testbed::view(bool linear, size_t view_idx) const {
 
 #ifdef NGP_GUI
 py::array_t<float> Testbed::screenshot(bool linear, bool front_buffer) const {
-	std::vector<float> tmp(compMul(m_window_res) * 4);
+	std::vector<float> tmp(product(m_window_res) * 4);
 	glReadBuffer(front_buffer ? GL_FRONT : GL_BACK);
 	glReadPixels(0, 0, m_window_res.x, m_window_res.y, GL_RGBA, GL_FLOAT, tmp.data());
 
@@ -266,7 +262,7 @@ py::array_t<float> Testbed::screenshot(bool linear, bool front_buffer) const {
 PYBIND11_MODULE(pyngp, m) {
 	m.doc() = "Instant neural graphics primitives";
 
-	m.def("free_temporary_memory", &tcnn::free_all_gpu_memory_arenas);
+	m.def("free_temporary_memory", &free_all_gpu_memory_arenas);
 
 	py::enum_<ETestbedMode>(m, "TestbedMode")
 		.value("Nerf", ETestbedMode::Nerf)
@@ -514,7 +510,6 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("screen_center", &Testbed::m_screen_center)
 		.def_readwrite("training_batch_size", &Testbed::m_training_batch_size)
 		.def("set_nerf_camera_matrix", &Testbed::set_nerf_camera_matrix)
-		.def("add_training_views_to_camera_path", &Testbed::add_training_views_to_camera_path)
 		.def("set_camera_to_training_view", &Testbed::set_camera_to_training_view)
 		.def("first_training_view", &Testbed::first_training_view)
 		.def("last_training_view", &Testbed::last_training_view)
@@ -566,7 +561,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def("crop_box_corners", &Testbed::crop_box_corners, py::arg("nerf_space") = true)
 		.def_property("root_dir",
 			[](py::object& obj) { return obj.cast<Testbed&>().root_dir().str(); },
-			[](const py::object& obj, const std::string& value) { obj.cast<Testbed&>().m_root_dir = value; }
+			[](const py::object& obj, const std::string& value) { obj.cast<Testbed&>().set_root_dir(value); }
 		)
 		;
 
@@ -578,7 +573,6 @@ PYBIND11_MODULE(pyngp, m) {
 			return py::array{sizeof(o.params)/sizeof(o.params[0]), o.params, obj};
 		})
 		;
-
 
 	py::class_<Testbed::Nerf> nerf(testbed, "Nerf");
 	nerf
@@ -597,6 +591,12 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("visualize_cameras", &Testbed::Nerf::visualize_cameras)
 		.def_readwrite("glow_y_cutoff", &Testbed::Nerf::glow_y_cutoff)
 		.def_readwrite("glow_mode", &Testbed::Nerf::glow_mode)
+		.def_readwrite("render_gbuffer_hard_edges", &Testbed::Nerf::render_gbuffer_hard_edges)
+		.def_readwrite("rendering_extra_dims_from_training_view", &Testbed::Nerf::rendering_extra_dims_from_training_view, "If non-negative, indicates the training view from which the extra dims are used. If -1, uses the values previously set by `set_rendering_extra_dims`.")
+		.def("find_closest_training_view", &Testbed::Nerf::find_closest_training_view, "Obtain the training view that is closest to the current camera.")
+		.def("set_rendering_extra_dims_from_training_view", &Testbed::Nerf::set_rendering_extra_dims_from_training_view, "Set the extra dims that are used for rendering to those that were trained for a given training view.")
+		.def("set_rendering_extra_dims", &Testbed::Nerf::set_rendering_extra_dims, "Set the extra dims that are used for rendering.")
+		.def("get_rendering_extra_dims", &Testbed::Nerf::get_rendering_extra_dims_cpu, "Get the extra dims that are currently used for rendering.")
 		;
 
 	py::class_<BRDFParams> brdfparams(m, "BRDFParams");
@@ -649,6 +649,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("depth_loss_type", &Testbed::Nerf::Training::depth_loss_type)
 		.def_readwrite("snap_to_pixel_centers", &Testbed::Nerf::Training::snap_to_pixel_centers)
 		.def_readwrite("optimize_extrinsics", &Testbed::Nerf::Training::optimize_extrinsics)
+		.def_readwrite("optimize_per_image_latents", &Testbed::Nerf::Training::optimize_extra_dims)
 		.def_readwrite("optimize_extra_dims", &Testbed::Nerf::Training::optimize_extra_dims)
 		.def_readwrite("optimize_exposure", &Testbed::Nerf::Training::optimize_exposure)
 		.def_readwrite("optimize_distortion", &Testbed::Nerf::Training::optimize_distortion)
@@ -667,6 +668,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("exposure_l2_reg", &Testbed::Nerf::Training::exposure_l2_reg)
 		.def_readwrite("depth_supervision_lambda", &Testbed::Nerf::Training::depth_supervision_lambda)
 		.def_readonly("dataset", &Testbed::Nerf::Training::dataset)
+		.def("get_extra_dims", &Testbed::Nerf::Training::get_extra_dims_cpu, "Get the extra dims (including trained latent code) for a specified training view.")
 		.def("set_camera_intrinsics", &Testbed::Nerf::Training::set_camera_intrinsics,
 			py::arg("frame_idx"),
 			py::arg("fx")=0.f, py::arg("fy")=0.f,
@@ -728,4 +730,4 @@ PYBIND11_MODULE(pyngp, m) {
 		;
 }
 
-NGP_NAMESPACE_END
+}

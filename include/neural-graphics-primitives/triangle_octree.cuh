@@ -23,8 +23,8 @@
 
 namespace std {
 	template<>
-	struct less<u16vec4> {
-		bool operator()(const u16vec4& a, const u16vec4& b) const {
+	struct less<tcnn::u16vec4> {
+		bool operator()(const tcnn::u16vec4& a, const tcnn::u16vec4& b) const {
 			for(size_t i = 0; i < 4; ++i) {
 				if (a[i] < b[i]) return true;
 				if (a[i] > b[i]) return false;
@@ -34,14 +34,14 @@ namespace std {
 	};
 
 	template <>
-	struct hash<u16vec4> {
-		size_t operator()(const u16vec4& x) const {
+	struct hash<tcnn::u16vec4> {
+		size_t operator()(const tcnn::u16vec4& x) const {
 			return (size_t)x.x * 73856093 + (size_t)x.y * 19349663 + (size_t)x.z * 83492791 + (size_t)x.w * 25165843;
 		}
 	};
 }
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 struct TriangleOctreeNode {
 	int children[8];
@@ -180,7 +180,7 @@ public:
 			}
 		};
 
-		generate_dual_coords(m_dual_nodes[0], 0, {0, 0, 0});
+		generate_dual_coords(m_dual_nodes[0], 0, {(uint16_t)0, (uint16_t)0, (uint16_t)0});
 		for (auto& node : m_nodes) {
 			for (uint32_t i = 0; i < 8; ++i) {
 				auto child_idx = node.children[i];
@@ -349,11 +349,11 @@ private:
 	std::vector<TriangleOctreeNode> m_nodes;
 	std::vector<TriangleOctreeDualNode> m_dual_nodes;
 
-	tcnn::GPUMemory<TriangleOctreeNode> m_nodes_gpu;
-	tcnn::GPUMemory<TriangleOctreeDualNode> m_dual_nodes_gpu;
+	GPUMemory<TriangleOctreeNode> m_nodes_gpu;
+	GPUMemory<TriangleOctreeDualNode> m_dual_nodes_gpu;
 
 	uint32_t m_n_vertices = 0;
 	uint32_t m_depth = 0;
 };
 
-NGP_NAMESPACE_END
+}

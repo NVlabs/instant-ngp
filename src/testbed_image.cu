@@ -26,9 +26,7 @@
 
 #include <fstream>
 
-using namespace tcnn;
-
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 Testbed::NetworkDims Testbed::network_dims_image() const {
 	NetworkDims dims;
@@ -104,7 +102,7 @@ __global__ void init_image_coords(
 	// Hence: generate rays and intersect that plane.
 	Ray ray = pixel_to_ray(
 		sample_index,
-		{x, y},
+		{(int)x, (int)y},
 		resolution,
 		focal_length,
 		camera_matrix,
@@ -128,11 +126,11 @@ __global__ void init_image_coords(
 		return;
 	}
 
-	vec2 uv = ray(t).xy;
+	vec2 uv = ray(t).xy();
 
 	// Flip from world coordinates where Y goes up to image coordinates where Y goes down.
 	// Also, multiply the x-axis by the image's aspect ratio to make it have the right proportions.
-	uv = (uv - vec2(0.5f)) * vec2(aspect, -1.0f) + vec2(0.5f);
+	uv = (uv - 0.5f) * vec2{aspect, -1.0f} + 0.5f;
 
 	depth_buffer[idx] = t;
 	positions[idx] = uv;
@@ -173,10 +171,10 @@ __global__ void eval_image_kernel_and_snap(uint32_t n_elements, const T* __restr
 	vec2 pos = positions[i];
 
 	auto read_val = [&](int x, int y) {
-		auto val = ((tcnn::vector_t<T, 4>*)texture)[y * resolution.x + x];
-		vec4 result{val[0], val[1], val[2], val[3]};
+		auto val = ((tvec<T, 4>*)texture)[y * resolution.x + x];
+		vec4 result{(float)val[0], (float)val[1], (float)val[2], (float)val[3]};
 		if (!linear_colors) {
-			result.rgb = linear_to_srgb(result.rgb);
+			result.rgb() = linear_to_srgb(result.rgb());
 		}
 		return result;
 	};
@@ -184,16 +182,16 @@ __global__ void eval_image_kernel_and_snap(uint32_t n_elements, const T* __restr
 	vec4 val;
 	if (snap_to_pixel_centers) {
 		ivec2 pos_int = floor(pos * vec2(resolution));
-		positions[i] = (vec2(pos_int) + vec2(0.5f)) / vec2(resolution);
-		pos_int = clamp(pos_int, ivec2(0), resolution - ivec2(1));
+		positions[i] = (vec2(pos_int) + 0.5f) / vec2(resolution);
+		pos_int = clamp(pos_int, 0, resolution - 1);
 		val = read_val(pos_int.x, pos_int.y);
 	} else {
-		pos = clamp(pos * vec2(resolution) - vec2(0.5f), vec2(0.0f), vec2(resolution) - vec2(1.0f + 1e-4f));
+		pos = clamp(pos * vec2(resolution) - 0.5f, 0.0f, vec2(resolution) - (1.0f + 1e-4f));
 
 		const ivec2 pos_int = pos;
 		const vec2 weight = pos - vec2(pos_int);
 
-		const ivec2 idx = clamp(pos_int, ivec2(0), resolution - ivec2(2));
+		const ivec2 idx = clamp(pos_int, 0, resolution - 2);
 
 		val =
 			(1 - weight.x) * (1 - weight.y) * read_val(idx.x, idx.y) +
@@ -215,10 +213,7 @@ void Testbed::train_image(size_t target_batch_size, bool get_loss_scalar, cudaSt
 	const uint32_t n_output_dims = 3;
 	const uint32_t n_input_dims = 2;
 
-	// Auxiliary matrices for training
 	const uint32_t batch_size = (uint32_t)target_batch_size;
-
-	// Permute all training records to de-correlate training data
 
 	const uint32_t n_elements = batch_size;
 	m_image.training.positions.enlarge(n_elements);
@@ -271,16 +266,11 @@ void Testbed::train_image(size_t target_batch_size, bool get_loss_scalar, cudaSt
 	GPUMatrix<float> training_batch_matrix((float*)(m_image.training.positions.data()), n_input_dims, batch_size);
 	GPUMatrix<float> training_target_matrix((float*)(m_image.training.targets.data()), n_output_dims, batch_size);
 
-
-	{
-		auto ctx = m_trainer->training_step(stream, training_batch_matrix, training_target_matrix, nullptr, false);
-		if (get_loss_scalar) {
-			m_loss_scalar.update(m_trainer->loss(stream, *ctx));
-		}
+	auto ctx = m_trainer->training_step(stream, training_batch_matrix, training_target_matrix);
+	if (get_loss_scalar) {
+		m_loss_scalar.update(m_trainer->loss(stream, *ctx));
 	}
 
-
-	m_trainer->optimizer_step(stream, 128);
 	m_training_step++;
 }
 
@@ -297,7 +287,7 @@ void Testbed::render_image(
 
 	// Make sure we have enough memory reserved to render at the requested resolution
 	size_t n_pixels = (size_t)res.x * res.y;
-	uint32_t n_elements = next_multiple((uint32_t)n_pixels, tcnn::batch_size_granularity);
+	uint32_t n_elements = next_multiple((uint32_t)n_pixels, BATCH_SIZE_GRANULARITY);
 	m_image.render_coords.enlarge(n_elements);
 	m_image.render_out.enlarge(n_elements);
 
@@ -379,7 +369,7 @@ void Testbed::load_image(const fs::path& data_path) {
 	}
 
 	m_aabb = m_render_aabb = BoundingBox{vec3(0.0f), vec3(1.0f)};
-	m_render_aabb_to_local = mat3(1.0f);
+	m_render_aabb_to_local = mat3::identity();
 
 	tlog::success()
 		<< "Loaded a " << (m_image.type == EDataType::Half ? "half" : "full") << "-precision image with "
@@ -446,7 +436,7 @@ __global__ void image_coords_from_idx(const uint32_t n_elements, uint32_t offset
 	int x = idx % resolution.x;
 	int y = idx / resolution.x;
 
-	pos[i] = (vec2(clamp(ivec2{x, y}, ivec2(0), resolution - ivec2(1))) + vec2(0.5f)) / vec2(resolution);
+	pos[i] = (vec2(clamp(ivec2{x, y}, 0, resolution - 1)) + 0.5f) / vec2(resolution);
 }
 
 __global__ void image_mse_kernel(const uint32_t n_elements, const vec3* __restrict__ target, const vec3* __restrict__ prediction, float* __restrict__ result, bool quantize_to_byte) {
@@ -455,7 +445,7 @@ __global__ void image_mse_kernel(const uint32_t n_elements, const vec3* __restri
 
 	vec3 pred = prediction[i];
 	if (quantize_to_byte) {
-		pred = vec3(clamp(ivec3(pred * 255.0f + vec3(0.5f)), ivec3(0), ivec3(255))) / 255.0f;
+		pred = vec3(clamp(ivec3(pred * 255.0f + 0.5f), 0, 255)) / 255.0f;
 	}
 
 	const vec3 diff = target[i] - pred;
@@ -467,7 +457,7 @@ float Testbed::compute_image_mse(bool quantize_to_byte) {
 	const uint32_t n_input_dims = 2;
 
 	// Auxiliary matrices for training
-	const uint32_t n_elements = compMul(m_image.resolution);
+	const uint32_t n_elements = product(m_image.resolution);
 	const uint32_t max_batch_size = 1u<<20;
 
 	GPUMemory<float> se(n_elements);
@@ -526,4 +516,4 @@ float Testbed::compute_image_mse(bool quantize_to_byte) {
 	return reduce_sum(se.data(), n_elements, nullptr) / n_elements;
 }
 
-NGP_NAMESPACE_END
+}

@@ -23,7 +23,7 @@
 
 #include <memory>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 struct TriangleBvhNode {
 	BoundingBox bb;
@@ -65,7 +65,7 @@ public:
 	virtual void ray_trace_gpu(uint32_t n_elements, vec3* gpu_positions, vec3* gpu_directions, const Triangle* gpu_triangles, cudaStream_t stream) = 0;
 	virtual bool touches_triangle(const BoundingBox& bb, const Triangle* __restrict__ triangles) const = 0;
 	virtual void build(std::vector<Triangle>& triangles, uint32_t n_primitives_per_leaf) = 0;
-	virtual void build_optix(const tcnn::GPUMemory<Triangle>& triangles, cudaStream_t stream) = 0;
+	virtual void build_optix(const GPUMemory<Triangle>& triangles, cudaStream_t stream) = 0;
 
 	static std::unique_ptr<TriangleBvh> make();
 
@@ -75,8 +75,8 @@ public:
 
 protected:
 	std::vector<TriangleBvhNode> m_nodes;
-	tcnn::GPUMemory<TriangleBvhNode> m_nodes_gpu;
+	GPUMemory<TriangleBvhNode> m_nodes_gpu;
 	TriangleBvh() {};
 };
 
-NGP_NAMESPACE_END
+}

@@ -20,11 +20,11 @@
 
 #include <tiny-cuda-nn/common.h>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 struct Triangle {
 	NGP_HOST_DEVICE vec3 sample_uniform_position(const vec2& sample) const {
-		float sqrt_x = std::sqrt(sample.x);
+		float sqrt_x = sqrt(sample.x);
 		float factor0 = 1.0f - sqrt_x;
 		float factor1 = sqrt_x * (1.0f - sample.y);
 		float factor2 = sqrt_x * sample.y;
@@ -52,7 +52,7 @@ struct Triangle {
 		float v = d *  dot(q, v1v0);
 		float t = d * -dot(n, rov0);
 		if (u < 0.0f || u > 1.0f || v < 0.0f || (u+v) > 1.0f || t < 0.0f) {
-			t = std::numeric_limits<float>::max(); // No intersection
+			t = std::numeric_limits<float>::max();
 		}
 		return t;
 	}
@@ -74,10 +74,10 @@ struct Triangle {
 			(sign(dot(cross(v21, nor), p1)) + sign(dot(cross(v32, nor), p2)) + sign(dot(cross(v13, nor), p3)) < 2.0f)
 			?
 			// 3 edges
-			std::min({
-				length2(v21 * tcnn::clamp(dot(v21, p1) / length2(v21), 0.0f, 1.0f)-p1),
-				length2(v32 * tcnn::clamp(dot(v32, p2) / length2(v32), 0.0f, 1.0f)-p2),
-				length2(v13 * tcnn::clamp(dot(v13, p3) / length2(v13), 0.0f, 1.0f)-p3),
+			min(vec3{
+				length2(v21 * clamp(dot(v21, p1) / length2(v21), 0.0f, 1.0f)-p1),
+				length2(v32 * clamp(dot(v32, p2) / length2(v32), 0.0f, 1.0f)-p2),
+				length2(v13 * clamp(dot(v13, p3) / length2(v13), 0.0f, 1.0f)-p3),
 			})
 			:
 			// 1 face
@@ -85,7 +85,7 @@ struct Triangle {
 	}
 
 	NGP_HOST_DEVICE float distance(const vec3& pos) const {
-		return std::sqrt(distance_sq(pos));
+		return sqrt(distance_sq(pos));
 	}
 
 	NGP_HOST_DEVICE bool point_in_triangle(const vec3& p) const {
@@ -116,7 +116,7 @@ struct Triangle {
 
 	NGP_HOST_DEVICE vec3 closest_point_to_line(const vec3& a, const vec3& b, const vec3& c) const {
 		float t = dot(c - a, b - a) / dot(b - a, b - a);
-		t = std::max(std::min(t, 1.0f), 0.0f);
+		t = max(min(t, 1.0f), 0.0f);
 		return a + t * (b - a);
 	}
 
@@ -135,7 +135,7 @@ struct Triangle {
 		float mag2 = length2(point - c2);
 		float mag3 = length2(point - c3);
 
-		float min = std::min({mag1, mag2, mag3});
+		float min = tcnn::min(vec3{mag1, mag2, mag3});
 
 		if (min == mag1) {
 			return c1;
@@ -163,13 +163,4 @@ struct Triangle {
 	vec3 a, b, c;
 };
 
-inline std::ostream& operator<<(std::ostream& os, const ngp::Triangle& triangle) {
-	os << "[";
-	os << "a=[" << triangle.a.x << "," << triangle.a.y << "," << triangle.a.z << "], ";
-	os << "b=[" << triangle.b.x << "," << triangle.b.y << "," << triangle.b.z << "], ";
-	os << "c=[" << triangle.c.x << "," << triangle.c.y << "," << triangle.c.z << "]";
-	os << "]";
-	return os;
 }
-
-NGP_NAMESPACE_END

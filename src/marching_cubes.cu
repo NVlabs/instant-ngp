@@ -14,7 +14,7 @@
 
 #include <neural-graphics-primitives/bounding_box.cuh>
 #include <neural-graphics-primitives/common_device.cuh>
-#include <neural-graphics-primitives/common.h>
+#include <neural-graphics-primitives/common_host.h>
 #include <neural-graphics-primitives/random_val.cuh> // helpers to generate random values, directions
 #include <neural-graphics-primitives/thread_pool.h>
 
@@ -35,13 +35,11 @@
 
 #include <vector>
 
-using namespace tcnn;
-
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 ivec3 get_marching_cubes_res(uint32_t res_1d, const BoundingBox &aabb) {
-	float scale = res_1d / compMax(aabb.max - aabb.min);
-	ivec3 res3d = (aabb.max - aabb.min) * scale + vec3(0.5f);
+	float scale = res_1d / max(aabb.max - aabb.min);
+	ivec3 res3d = (aabb.max - aabb.min) * scale + 0.5f;
 	res3d.x = next_multiple((unsigned int)res3d.x, 16u);
 	res3d.y = next_multiple((unsigned int)res3d.y, 16u);
 	res3d.z = next_multiple((unsigned int)res3d.z, 16u);
@@ -265,7 +263,7 @@ __global__ void gen_vertices(BoundingBox render_aabb, mat3 render_aabb_to_local,
 	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
 	uint32_t z = blockIdx.z * blockDim.z + threadIdx.z;
 	if (x>=res_3d.x || y>=res_3d.y || z>=res_3d.z) return;
-	vec3 scale = (render_aabb.max - render_aabb.min) / vec3(res_3d - ivec3(1));
+	vec3 scale = (render_aabb.max - render_aabb.min) / vec3(res_3d - 1);
 	vec3 offset=render_aabb.min;
 	uint32_t res2=res_3d.x*res_3d.y;
 	uint32_t res3=res_3d.x*res_3d.y*res_3d.z;
@@ -352,7 +350,7 @@ __global__ void compute_centroids(uint32_t num_verts, vec3* centroids_out, const
 	if (i>=num_verts) return;
 	vec4 p = verts_in[i];
 	if (p.w<=0.f) return;
-	vec3 c = verts_in[i].xyz * (1.f / p.w);
+	vec3 c = verts_in[i].xyz() * (1.f / p.w);
 	centroids_out[i]=c;
 }
 
@@ -699,7 +697,7 @@ __global__ void gen_faces(ivec3 res_3d, const float* __restrict__ density, const
 	}
 }
 
-void compute_mesh_1ring(const tcnn::GPUMemory<vec3> &verts, const tcnn::GPUMemory<uint32_t> &indices, tcnn::GPUMemory<vec4> &output_pos, tcnn::GPUMemory<vec3> &output_normals) { // computes the average of the 1ring of all verts, as homogenous coordinates
+void compute_mesh_1ring(const GPUMemory<vec3> &verts, const GPUMemory<uint32_t> &indices, GPUMemory<vec4> &output_pos, GPUMemory<vec3> &output_normals) { // computes the average of the 1ring of all verts, as homogenous coordinates
 	output_pos.resize(verts.size());
 	output_pos.memset(0);
 	output_normals.resize(verts.size());
@@ -731,7 +729,7 @@ __global__ void compute_mesh_opt_gradients_kernel(
 		p.w = 1.f;
 	}
 
-	vec3 target = p.xyz * (1.0f / p.w);
+	vec3 target = p.xyz() * (1.0f / p.w);
 	vec3 smoothing_grad = src - target; // negative...
 
 	vec3 input_gradient = *(const vec3 *)(input_gradients + i * input_gradient_width);
@@ -743,9 +741,9 @@ __global__ void compute_mesh_opt_gradients_kernel(
 
 void compute_mesh_opt_gradients(
 	float thresh,
-	const tcnn::GPUMemory<vec3>& verts,
-	const tcnn::GPUMemory<vec3>& normals,
-	const tcnn::GPUMemory<vec4>& verts_smoothed,
+	const GPUMemory<vec3>& verts,
+	const GPUMemory<vec3>& normals,
+	const GPUMemory<vec4>& verts_smoothed,
 	const network_precision_t* densities,
 	uint32_t input_gradients_width,
 	const float* input_gradients,
@@ -773,7 +771,7 @@ void compute_mesh_opt_gradients(
 	);
 }
 
-void marching_cubes_gpu(cudaStream_t stream, BoundingBox render_aabb, mat3 render_aabb_to_local, ivec3 res_3d, float thresh, const tcnn::GPUMemory<float>& density, tcnn::GPUMemory<vec3>& verts_out, tcnn::GPUMemory<uint32_t>& indices_out) {
+void marching_cubes_gpu(cudaStream_t stream, BoundingBox render_aabb, mat3 render_aabb_to_local, ivec3 res_3d, float thresh, const GPUMemory<float>& density, GPUMemory<vec3>& verts_out, GPUMemory<uint32_t>& indices_out) {
 	GPUMemory<uint32_t> counters;
 
 	counters.enlarge(4);
@@ -794,10 +792,11 @@ void marching_cubes_gpu(cudaStream_t stream, BoundingBox render_aabb, mat3 rende
 	counters.copy_to_host(cpucounters);
 	tlog::info() << "#vertices=" << cpucounters[0] << " #triangles=" << (cpucounters[1]/3);
 
-	uint32_t n_verts=(cpucounters[0]+127)&~127; // round for later nn stuff
+	uint32_t n_verts = next_multiple(cpucounters[0], BATCH_SIZE_GRANULARITY); // round for later nn stuff
 	verts_out.resize(n_verts);
 	verts_out.memset(0);
 	indices_out.resize(cpucounters[1]);
+
 	// actually generate verts
 	gen_vertices<<<blocks, threads, 0>>>(render_aabb, render_aabb_to_local, res_3d, density.data(), vertex_grid, verts_out.data(), thresh, counters.data()+2);
 	gen_faces<<<blocks, threads, 0>>>(res_3d, density.data(), vertex_grid, indices_out.data(), thresh, counters.data()+2);
@@ -825,7 +824,7 @@ void save_mesh(
 	// Replace invalid values with reasonable defaults
 	for (size_t i = 0; i < cpuverts.size(); ++i) {
 		if (!all(isfinite(cpuverts[i]))) cpuverts[i] = vec3(0.0f);
-		if (!all(isfinite(cpunormals[i]))) cpunormals[i] = vec3(0.0f, 1.0f, 0.0f);
+		if (!all(isfinite(cpunormals[i]))) cpunormals[i] = vec3{0.0f, 1.0f, 0.0f};
 		if (!all(isfinite(cpucolors[i]))) cpucolors[i] = vec3(0.0f);
 	}
 
@@ -895,7 +894,7 @@ void save_mesh(
 			vec3 p = (cpuverts[i]-nerf_offset)/nerf_scale;
 			vec3 c = cpucolors[i];
 			vec3 n = normalize(cpunormals[i]);
-			unsigned char c8[3] = {(unsigned char)tcnn::clamp(c.x*255.f,0.f,255.f),(unsigned char)tcnn::clamp(c.y*255.f,0.f,255.f),(unsigned char)tcnn::clamp(c.z*255.f,0.f,255.f)};
+			unsigned char c8[3] = {(unsigned char)clamp(c.x*255.f,0.f,255.f),(unsigned char)clamp(c.y*255.f,0.f,255.f),(unsigned char)clamp(c.z*255.f,0.f,255.f)};
 			fprintf(f, "%0.5f %0.5f %0.5f %0.3f %0.3f %0.3f %d %d %d\n", p.x, p.y, p.z, n.x, n.y, n.z, c8[0], c8[1], c8[2]);
 		}
 
@@ -911,7 +910,7 @@ void save_mesh(
 		for (size_t i = 0; i < cpuverts.size(); ++i) {
 			vec3 p = (cpuverts[i]-nerf_offset)/nerf_scale;
 			vec3 c = cpucolors[i];
-			fprintf(f, "v %0.5f %0.5f %0.5f %0.3f %0.3f %0.3f\n", p.x, p.y, p.z, tcnn::clamp(c.x, 0.f, 1.f), tcnn::clamp(c.y, 0.f, 1.f), tcnn::clamp(c.z, 0.f, 1.f));
+			fprintf(f, "v %0.5f %0.5f %0.5f %0.3f %0.3f %0.3f\n", p.x, p.y, p.z, clamp(c.x, 0.f, 1.f), clamp(c.y, 0.f, 1.f), clamp(c.z, 0.f, 1.f));
 		}
 
 		for (auto &v: cpunormals) {
@@ -1012,9 +1011,9 @@ void save_density_grid_to_png(const GPUMemory<float>& density, const fs::path& p
 			int z = (u / res3d.x) + (v / res3d.y) * nacross;
 			if (z < res3d.z) {
 				if (swap_y_z) {
-					*dst++ = (uint8_t)tcnn::clamp((density_cpu[x + z*res3d.x + y*res3d.x*res3d.z]-thresh)*density_scale + 128.5f, 0.f, 255.f);
+					*dst++ = (uint8_t)clamp((density_cpu[x + z*res3d.x + y*res3d.x*res3d.z]-thresh)*density_scale + 128.5f, 0.f, 255.f);
 				} else {
-					*dst++ = (uint8_t)tcnn::clamp((density_cpu[x + (res3d.y-1-y)*res3d.x + z*res3d.x*res3d.y]-thresh)*density_scale + 128.5f, 0.f, 255.f);
+					*dst++ = (uint8_t)clamp((density_cpu[x + (res3d.y-1-y)*res3d.x + z*res3d.x*res3d.y]-thresh)*density_scale + 128.5f, 0.f, 255.f);
 				}
 			} else {
 				*dst++ = 0;
@@ -1057,10 +1056,10 @@ void save_rgba_grid_to_png_sequence(const GPUMemory<vec4>& rgba, const fs::path&
 		for (int y = 0; y < h; ++y) {
 			for (int x = 0; x < w; ++x) {
 				size_t i = swap_y_z ? (x + z*res3d.x + y*res3d.x*res3d.z) : (x + (res3d.y-1-y)*res3d.x + z*res3d.x*res3d.y);
-				*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].x * 255.f, 0.f, 255.f);
-				*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].y * 255.f, 0.f, 255.f);
-				*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].z * 255.f, 0.f, 255.f);
-				*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].w * 255.f, 0.f, 255.f);
+				*dst++ = (uint8_t)clamp(rgba_cpu[i].x * 255.f, 0.f, 255.f);
+				*dst++ = (uint8_t)clamp(rgba_cpu[i].y * 255.f, 0.f, 255.f);
+				*dst++ = (uint8_t)clamp(rgba_cpu[i].z * 255.f, 0.f, 255.f);
+				*dst++ = (uint8_t)clamp(rgba_cpu[i].w * 255.f, 0.f, 255.f);
 			}
 		}
 
@@ -1109,4 +1108,4 @@ void save_rgba_grid_to_raw_file(const GPUMemory<vec4>& rgba, const fs::path& pat
 	tlog::success() << "Wrote RGBA raw file to " << actual_path.str();
 }
 
-NGP_NAMESPACE_END
+}

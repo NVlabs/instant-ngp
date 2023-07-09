@@ -54,7 +54,6 @@ if (MSVC)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /D_CRT_SECURE_NO_WARNINGS")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP24")
 else()
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fms-extensions")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
 endif()
 
@@ -76,7 +75,6 @@ if (MSVC)
 else()
 	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-Wno-float-conversion")
 	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-fno-strict-aliasing")
-	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-fms-extensions")
 	list(APPEND CUDA_NVCC_FLAGS "-Xcompiler=-fPIC")
 endif()
 list(APPEND CUDA_NVCC_FLAGS "--extended-lambda")
@@ -203,7 +201,6 @@ endif(NGP_BUILD_WITH_GUI)
 list(APPEND NGP_INCLUDE_DIRECTORIES
 	"dependencies"
 	"dependencies/filesystem"
-	"dependencies/glm"
 	"dependencies/nanovdb"
 	"dependencies/NaturalSort"
 	"dependencies/tinylogger"
@@ -261,8 +258,7 @@ endif()
 list(APPEND NGP_SOURCES
 	${GUI_SOURCES}
 	src/camera_path.cu
-	src/common.cu
-	src/common_device.cu
+	src/common_host.cu
 	src/marching_cubes.cu
 	src/nerf_loader.cu
 	src/render_buffer.cu
@@ -273,7 +269,7 @@ list(APPEND NGP_SOURCES
 	src/testbed_volume.cu
 	src/thread_pool.cpp
 	src/tinyexr_wrapper.cu
-	src/tinyobj_loader_wrapper.cpp
+	src/tinyobj_loader_wrapper.cu
 	src/triangle_bvh.cu
 )
 
@@ -284,6 +280,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR})
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR})
 
 get_filename_component(CUDA_COMPILER_BIN "${CMAKE_CUDA_COMPILER}" DIRECTORY)
+get_filename_component(CUDA_DIR "${CUDA_COMPILER_BIN}" DIRECTORY)
+set(CUDA_INCLUDE "${CUDA_DIR}/include")
 
 if (NGP_OPTIX)
 	add_library(optix_program OBJECT

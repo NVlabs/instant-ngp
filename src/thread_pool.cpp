@@ -16,7 +16,7 @@
 
 #include <chrono>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 ThreadPool::ThreadPool()
 : ThreadPool{std::thread::hardware_concurrency()} {}
@@ -98,4 +98,4 @@ void ThreadPool::flush_queue() {
 	m_task_queue.clear();
 }
 
-NGP_NAMESPACE_END
+}

@@ -43,7 +43,7 @@
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers" //TODO: XR struct are uninitiaized apart from their type
 #endif
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 enum class EEnvironmentBlendMode {
 	Opaque = XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
@@ -284,7 +284,7 @@ private:
 	const bool m_print_reference_spaces = false;
 };
 
-NGP_NAMESPACE_END
+}
 
 #ifdef __GNUC__
 #pragma GCC diagnostic pop

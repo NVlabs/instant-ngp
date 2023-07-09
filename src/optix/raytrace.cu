@@ -14,11 +14,12 @@
  */
 
 #include <neural-graphics-primitives/common_device.cuh>
+
 #include <optix.h>
 
 #include "raytrace.h"
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
 extern "C" {
 	__constant__ Raytrace::Params params;
@@ -70,4 +71,4 @@ extern "C" __global__ void __closesthit__ch() {
 	optixSetPayload_1(__float_as_int(optixGetRayTmax()));
 }
 
-NGP_NAMESPACE_END
+}

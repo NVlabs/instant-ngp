@@ -19,13 +19,13 @@
 
 #include <neural-graphics-primitives/common.h>
 
-#include <tiny-cuda-nn/random.h>
+#include <pcg32/pcg32.h>
 
-NGP_NAMESPACE_BEGIN
+namespace ngp {
 
-using default_rng_t = tcnn::default_rng_t;
+using default_rng_t = pcg32;
 
-inline constexpr float PI() { return 3.14159265358979323846f; }
+inline constexpr NGP_HOST_DEVICE float PI() { return 3.14159265358979323846f; }
 
 template <typename RNG>
 inline __host__ __device__ float random_val(RNG& rng) {
@@ -55,14 +55,14 @@ inline __host__ __device__ vec3 cylindrical_to_dir(const vec2& p) {
 
 inline __host__ __device__ vec2 dir_to_cylindrical(const vec3& d) {
 	const float cos_theta = fminf(fmaxf(-d.z, -1.0f), 1.0f);
-	float phi = std::atan2(d.y, d.x);
+	float phi = atan2(d.y, d.x);
 	return {(cos_theta + 1.0f) / 2.0f, (phi / (2.0f * PI())) + 0.5f};
 }
 
 inline __host__ __device__ vec2 dir_to_spherical(const vec3& d) {
 	const float cos_theta = fminf(fmaxf(d.z, -1.0f), 1.0f);
 	const float theta = acosf(cos_theta);
-	float phi = std::atan2(d.y, d.x);
+	float phi = atan2(d.y, d.x);
 	return {theta, phi};
 }
 
@@ -324,5 +324,5 @@ inline __host__ __device__ vec2 ld_random_pixel_offset(const uint32_t spp) {
 	return offset;
 }
 
-NGP_NAMESPACE_END
+}
 

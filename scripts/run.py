@@ -204,6 +204,7 @@ if __name__ == "__main__":
 					tqdm_last_update = now
 
 	if args.save_snapshot:
+		os.makedirs(os.path.dirname(args.save_snapshot), exist_ok=True)
 		testbed.save_snapshot(args.save_snapshot, False)
 
 	if args.test_transforms:
@@ -280,7 +281,7 @@ if __name__ == "__main__":
 		print(args.screenshot_frames)
 		for idx in args.screenshot_frames:
 			f = ref_transforms["frames"][int(idx)]
-			cam_matrix = f["transform_matrix"]
+			cam_matrix = f.get("transform_matrix", f["transform_matrix_start"])
 			testbed.set_nerf_camera_matrix(np.matrix(cam_matrix)[:-1,:])
 			outname = os.path.join(args.screenshot_dir, os.path.basename(f["file_path"]))
 
