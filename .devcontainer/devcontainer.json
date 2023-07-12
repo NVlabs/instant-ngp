@@ -1,14 +1,33 @@
 {
-    "name": "Instant NGP Dev Container",
-    "dockerComposeFile": "docker-compose.yml",
-    "service": "instant-ngp",
-    "workspaceFolder": "/volume",
-    "shutdownAction": "stopCompose",
+    "name": "Instant NGP",
+    "context": "..",
+    "dockerFile": "Dockerfile",
     "extensions": [
         "ms-vscode.cpptools",
         "ms-vscode.cmake-tools",
-        "mutantdino.resourcemonitor",
         "ms-azuretools.vscode-docker",
-        "nvidia.nsight-vscode-edition"
-    ]
+        "nvidia.nsight-vscode-edition",
+        "ms-python.python",
+        "seatonjiang.gitmoji-vscode"
+    ],
+    "build": {
+        "args": {
+            "APP_ENV": "dev",
+			"GIT_ACCESS_TOKEN": "${localEnv:GIT_ACCESS_TOKEN}"
+        }
+    },
+    "runArgs": [
+        "--gpus",
+        "all",
+        "--net=host",
+        "-e",
+        "DISPLAY",
+        "--cap-add",
+        "SYS_PTRACE",
+        "-v",
+        "${localEnv:HOME}/.Xauthority:/root/.Xauthority",
+        "-v",
+        "${localEnv:HOME}/.aws/credentials:/home/dock/.aws/credentials"
+    ],
+    "postCreateCommand": "3dml_check config . --config_json .vscode/config.json"
 }

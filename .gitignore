@@ -1,4 +1,4 @@
-/.vscode
+/.vscode/*
 /.vs
 /build*
 /external
@@ -19,3 +19,4 @@ __pycache__
 .DS_Store
 imgui.ini
 /instant_ngp_3dml/data/*
+!.vscode/config.json

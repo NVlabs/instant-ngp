@@ -1,0 +1,55 @@
+{
+    "mypy": {
+        "ignore_missing_imports": [
+            "autopep8",
+            "cv2",
+            "fire",
+            "pye57",
+            "scipy",
+            "skimage",
+            "torch",
+            "imagesize",
+            "plotly",
+            "torchvision",
+            "ortools",
+            "libcolgraph",
+            "panda3d_viewer",
+            "open3d",
+            "matplotlib",
+            "pandas",
+            "svgpath2mpl",
+            "svgpathtools",
+            "PIL",
+            "sklearn",
+            "networkx",
+            "laspy",
+            "skfmm",
+            "nested_lookup",
+            "mozjpeg_lossless_optimization",
+            "pyngp"
+        ]
+    },
+    "pylint": {
+        "generated-members": [
+            "numpy",
+            "torch",
+            "cv2",
+            "pyngp"
+        ],
+        "ignore": [
+            "floorplan_utils"
+        ],
+        "ignored-modules": [
+            "scipy.spatial"
+        ]
+    },
+    "coverage": {
+        "skip": []
+    },
+    "project_name": "3dml-instant-ngp",
+    "exclude_executable_rules": [
+        "TEST0"
+    ],
+    "excluded_files": ["src/*", "scripts/*", "dependencies/*"],
+    "glossary_folders": []
+}

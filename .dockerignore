@@ -1,0 +1,9 @@
+.git
+.cache
+.mypy_cache
+.pytest_cache
+__pycache__
+data/*
+instant_ngp_3dml/data/*
+.vscode/*
+!.vscode/config.json

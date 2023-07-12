@@ -1,0 +1,6 @@
+autopep8==2.0.2
+mypy==1.3.0
+pylint==2.17.4
+darglint==1.8.1
+reorder-python-imports==2.6.0
+unimport==0.16.0
