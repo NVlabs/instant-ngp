@@ -18,3 +18,4 @@
 __pycache__
 .DS_Store
 imgui.ini
+/instant_ngp_3dml/data/*
