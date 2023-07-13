@@ -434,6 +434,7 @@ __global__ void overlay_depth_kernel(
 	float alpha,
 	const float* __restrict__ depth,
 	float depth_scale,
+	float max_depth,
 	ivec2 image_resolution,
 	int fov_axis,
 	float zoom,
@@ -467,7 +468,7 @@ __global__ void overlay_depth_kernel(
 		color = {0.0f, 0.0f, 0.0f, 0.0f};
 	} else {
 		float depth_value = depth[srcidx] * depth_scale;
-		vec3 c = colormap_turbo(depth_value);
+		vec3 c = colormap_turbo(depth_value/max_depth);
 		color = {c[0], c[1], c[2], 1.0f};
 	}
 
@@ -731,6 +732,7 @@ void CudaRenderBuffer::overlay_depth(
 	float alpha,
 	const float* __restrict__ depth,
 	float depth_scale,
+	float max_depth,
 	const ivec2& image_resolution,
 	int fov_axis,
 	float zoom,
@@ -745,6 +747,7 @@ void CudaRenderBuffer::overlay_depth(
 		alpha,
 		depth,
 		depth_scale,
+		max_depth,
 		image_resolution,
 		fov_axis,
 		zoom,

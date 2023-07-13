@@ -542,6 +542,7 @@ public:
 	bool m_render_ground_truth = false;
 	EGroundTruthRenderMode m_ground_truth_render_mode = EGroundTruthRenderMode::Shade;
 	float m_ground_truth_alpha = 1.0f;
+	float m_ground_truth_max_depth = 1.0f;
 
 	bool m_train = false;
 	bool m_training_data_available = false;
