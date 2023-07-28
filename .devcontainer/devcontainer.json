@@ -2,14 +2,22 @@
     "name": "Instant NGP",
     "context": "..",
     "dockerFile": "Dockerfile",
-    "extensions": [
-        "ms-vscode.cpptools",
-        "ms-vscode.cmake-tools",
-        "ms-azuretools.vscode-docker",
-        "nvidia.nsight-vscode-edition",
-        "ms-python.python",
-        "seatonjiang.gitmoji-vscode"
-    ],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cmake-tools",
+                "ms-azuretools.vscode-docker",
+                "nvidia.nsight-vscode-edition",
+                "ms-python.python",
+                "seatonjiang.gitmoji-vscode",
+                "ms-vscode.cpptools-extension-pack",
+                "streetsidesoftware.code-spell-checker",
+                "eamodio.gitlens",
+                "charliermarsh.ruff"
+            ]
+        }
+    },
     "build": {
         "args": {
             "APP_ENV": "dev",

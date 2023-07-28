@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.3
 
-# Other version not tested yet
+# Check supported tags for CUDA and UBUNTU versions:
+# https://gitlab.com/nvidia/container-images/cuda/blob/master/doc/supported-tags.md
 ARG CUDA_VERSION=11.3.1
 ARG UBUNTU_VERSION=20.04
 ARG APP_ENV="dev"
@@ -53,7 +54,7 @@ RUN add-apt-repository ppa:ubuntu-toolchain-r/test && \
 #-------------------------------------------------------------
 #       Python Installation
 #-------------------------------------------------------------
-ARG PYTHON_VERSION=3.9
+ARG PYTHON_VERSION=3.10
 RUN add-apt-repository ppa:deadsnakes/ppa       && \
     apt-get -y update                           && \
     apt-get install -y                             \

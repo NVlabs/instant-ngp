@@ -29,19 +29,7 @@
             "pyngp"
         ]
     },
-    "pylint": {
-        "generated-members": [
-            "numpy",
-            "torch",
-            "cv2",
-            "pyngp"
-        ],
-        "ignore": [
-            "floorplan_utils"
-        ],
-        "ignored-modules": [
-            "scipy.spatial"
-        ]
+    "ruff": {
     },
     "coverage": {
         "skip": []
