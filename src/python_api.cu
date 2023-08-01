@@ -348,6 +348,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.value("OpenCV", ELensMode::OpenCV)
 		.value("FTheta", ELensMode::FTheta)
 		.value("LatLong", ELensMode::LatLong)
+		.value("HalfLatLong", ELensMode::HalfLatLong)
 		.value("OpenCVFisheye", ELensMode::OpenCVFisheye)
 		.value("Equirectangular", ELensMode::Equirectangular)
 		.export_values();
@@ -668,6 +669,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_readwrite("intrinsic_l2_reg", &Testbed::Nerf::Training::intrinsic_l2_reg)
 		.def_readwrite("exposure_l2_reg", &Testbed::Nerf::Training::exposure_l2_reg)
 		.def_readwrite("depth_supervision_lambda", &Testbed::Nerf::Training::depth_supervision_lambda)
+		.def_readwrite("mask_supervision_strength", &Testbed::Nerf::Training::mask_supervision_strength)
 		.def_readonly("dataset", &Testbed::Nerf::Training::dataset)
 		.def("get_extra_dims", &Testbed::Nerf::Training::get_extra_dims_cpu, "Get the extra dims (including trained latent code) for a specified training view.")
 		.def("set_camera_intrinsics", &Testbed::Nerf::Training::set_camera_intrinsics,

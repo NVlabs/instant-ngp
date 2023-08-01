@@ -190,10 +190,11 @@ enum class ELensMode : int {
 	OpenCV,
 	FTheta,
 	LatLong,
+	HalfLatLong,
 	OpenCVFisheye,
 	Equirectangular,
 };
-static constexpr const char* LensModeStr = "Perspective\0OpenCV\0F-Theta\0LatLong\0OpenCV Fisheye\0Equirectangular\0\0";
+static constexpr const char* LensModeStr = "Perspective\0OpenCV\0F-Theta\0LatLong\0HalfLatLong\0OpenCV Fisheye\0Equirectangular\0\0";
 
 inline NGP_HOST_DEVICE bool supports_dlss(ELensMode mode) {
 	return mode == ELensMode::Perspective || mode == ELensMode::OpenCV || mode == ELensMode::OpenCVFisheye;

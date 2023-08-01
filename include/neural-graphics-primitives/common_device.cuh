@@ -390,6 +390,15 @@ inline NGP_HOST_DEVICE vec3 latlong_to_dir(const vec2& uv) {
 	return {sp * ct, st, cp * ct};
 }
 
+inline NGP_HOST_DEVICE vec3 half_latlong_to_dir(const vec2& uv) {
+	float theta = (uv.y - 1.0f) * 0.5f * PI();
+	float phi = (uv.x - 0.5f) * PI() * 2.0f;
+	float sp, cp, st, ct;
+	sincosf(theta, &st, &ct);
+	sincosf(phi, &sp, &cp);
+	return {sp * ct, st, cp * ct};
+}
+
 inline NGP_HOST_DEVICE vec3 equirectangular_to_dir(const vec2& uv) {
 	float ct = (uv.y - 0.5f) * 2.0f;
 	float st = sqrt(max(1.0f - ct * ct, 0.0f));
@@ -431,6 +440,8 @@ inline NGP_HOST_DEVICE Ray uv_to_ray(
 		}
 	} else if (lens.mode == ELensMode::LatLong) {
 		dir = latlong_to_dir(warped_uv);
+	} else if (lens.mode == ELensMode::HalfLatLong) {
+		dir = half_latlong_to_dir(warped_uv);
 	} else if (lens.mode == ELensMode::Equirectangular) {
 		dir = equirectangular_to_dir(warped_uv);
 	} else {

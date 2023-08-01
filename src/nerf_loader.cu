@@ -230,6 +230,10 @@ void read_lens(const nlohmann::json& json, Lens& lens, vec2& principal_point, ve
 		mode = ELensMode::LatLong;
 	}
 
+	if (json.contains("halflatlong")) {
+		mode = ELensMode::HalfLatLong;
+	}
+
 	if (json.contains("equirectangular")) {
 		mode = ELensMode::Equirectangular;
 	}
