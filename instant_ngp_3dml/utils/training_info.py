@@ -7,7 +7,7 @@ from typing import List
 
 @dataclass
 class StepInfo:
-    """Step Info"""
+    """Step Info."""
     step: int
     loss: float
     time: float  # Result from time.monotonic()
@@ -16,7 +16,7 @@ class StepInfo:
 
 @dataclass
 class TrainingInfo:
-    """NeRF Training Info"""
+    """NeRF Training Info."""
     begin_time: float  # Result from time.monotonic()
     end_time: float  # Result from time.monotonic()
     steps_info: List[StepInfo]

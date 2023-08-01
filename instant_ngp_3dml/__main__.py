@@ -6,6 +6,7 @@ from typing import Dict
 
 import fire
 
+from instant_ngp_3dml import logger
 from instant_ngp_3dml.rendering import main as render
 from instant_ngp_3dml.training import main as train
 
@@ -29,5 +30,5 @@ if __name__ == "__main__":
     if len(argv) > 1 and argv[1] in modules:
         fire.Fire(modules[argv[1]], command=argv[2:])
     else:
-        print(HELP)
+        logger.info(HELP)
         sys.exit(1)

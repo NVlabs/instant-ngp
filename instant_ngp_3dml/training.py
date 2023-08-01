@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Training Script"""
+"""Training Script."""
 import time
 
 import pyngp as ngp  # noqa
@@ -60,7 +60,6 @@ def __train(testbed: ngp.Testbed, n_steps: int, enable_depth_supervision: bool) 
                         enable_depth_supervision=enable_depth_supervision)
 
 
-
 @profile
 def main(nerf_transform_json: str,
          nerf_network_configuration_json: str,
@@ -69,8 +68,7 @@ def main(nerf_transform_json: str,
          snapshot_msgpack: str = "",
          n_steps: int = 100000,
          enable_depth_supervision: bool = False):
-    """
-    Train NeRF Scene.
+    """Train NeRF Scene.
 
     Args:
         nerf_transform_json: Input NeRF Transform Json

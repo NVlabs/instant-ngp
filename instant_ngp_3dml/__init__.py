@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Instant NGP"""
+"""Instant NGP."""
 import glob
 import os
 import sys

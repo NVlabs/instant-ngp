@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Tonemapper"""
+"""Tonemapper."""
 import glob
 import os
 from dataclasses import dataclass
@@ -26,8 +26,7 @@ class TonemapParameters:
 
 
 def tonemap(image: np.ndarray, parameters: TonemapParameters = TonemapParameters()) -> np.ndarray:
-    """Applied colormap"""
-
+    """Applied colormap."""
     image_clip = np.clip(image, parameters.min_value, parameters.max_value)
     image_scaled = (image_clip - parameters.min_value) / \
         (parameters.max_value - parameters.min_value)
@@ -43,8 +42,7 @@ def tonemap(image: np.ndarray, parameters: TonemapParameters = TonemapParameters
 
 
 def tonemap_folder(raw_depth_folder: str, color_depth_folder: str):
-    """Color Depth"""
-
+    """Color Depth."""
     os.makedirs(color_depth_folder, exist_ok=True)
 
     files = list(glob.glob(os.path.join(raw_depth_folder, "*.npy")))
