@@ -161,12 +161,16 @@ def read_image(file):
 	return img
 
 def write_image(file, img, quality=95):
-	if os.path.splitext(file)[1] == ".bin":
+	ext = os.path.splitext(file)[1]
+	if ext == ".bin":
 		if img.shape[2] < 4:
 			img = np.dstack((img, np.ones([img.shape[0], img.shape[1], 4 - img.shape[2]])))
 		with open(file, "wb") as f:
 			f.write(struct.pack("ii", img.shape[0], img.shape[1]))
 			f.write(img.astype(np.float16).tobytes())
+	elif ext == '.exr':
+		import pyexr
+		pyexr.write(file, img)
 	else:
 		if img.shape[2] == 4:
 			img = np.copy(img)

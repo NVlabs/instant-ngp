@@ -279,20 +279,27 @@ if __name__ == "__main__":
 		if not args.screenshot_frames:
 			args.screenshot_frames = range(len(ref_transforms["frames"]))
 		print(args.screenshot_frames)
-		for idx in args.screenshot_frames:
-			f = ref_transforms["frames"][int(idx)]
-			cam_matrix = f.get("transform_matrix", f["transform_matrix_start"])
-			testbed.set_nerf_camera_matrix(np.matrix(cam_matrix)[:-1,:])
-			outname = os.path.join(args.screenshot_dir, os.path.basename(f["file_path"]))
+		with tqdm(total=len(args.screenshot_frames)) as pbar:
+			for idx in args.screenshot_frames:
+				f = ref_transforms["frames"][int(idx)]
+				if 'transform_matrix' in f:
+					cam_matrix = f['transform_matrix']
+				elif 'transform_matrix_start' in f:
+					cam_matrix = f["transform_matrix_start"]
+				else:
+					raise KeyError()
+				testbed.set_nerf_camera_matrix(np.matrix(cam_matrix)[:-1,:])
+				outname = os.path.join(args.screenshot_dir, os.path.basename(f["file_path"]))
 
-			# Some NeRF datasets lack the .png suffix in the dataset metadata
-			if not os.path.splitext(outname)[1]:
-				outname = outname + ".png"
+				# Some NeRF datasets lack the .png suffix in the dataset metadata
+				if not os.path.splitext(outname)[1]:
+					outname = outname + ".png"
 
-			print(f"rendering {outname}")
-			image = testbed.render(args.width or int(ref_transforms["w"]), args.height or int(ref_transforms["h"]), args.screenshot_spp, True)
-			os.makedirs(os.path.dirname(outname), exist_ok=True)
-			write_image(outname, image)
+				pbar.set_description(outname)
+				image = testbed.render(args.width or int(ref_transforms["w"]), args.height or int(ref_transforms["h"]), args.screenshot_spp, True)
+				os.makedirs(os.path.dirname(outname), exist_ok=True)
+				write_image(outname, image)
+				pbar.update(1)
 	elif args.screenshot_dir:
 		outname = os.path.join(args.screenshot_dir, args.scene + "_" + network_stem)
 		print(f"Rendering {outname}.png")
