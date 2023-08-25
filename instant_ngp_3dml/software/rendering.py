@@ -89,7 +89,7 @@ def main(snapshot_msgpack: str,
          nerf_transform_json: str,
          out_rendering_folder: str,
          spp: int = 4,
-         render_mode: str = "color",
+         render_type: str = "color",
          color_depth: bool = True):
     """Render NeRF Scene.
 
@@ -97,18 +97,24 @@ def main(snapshot_msgpack: str,
         snapshot_msgpack: Input NeRF Weights
         nerf_transform_json: Input NeRF Transform Json
         out_rendering_folder: Output Folder with rendered images
-        spp: Sample per pixel
-        render_mode: Renderer method
-        color_depth: Tonemap the generated Depthmaps, if render_mode=="depth"
+        spp: Input number of samples per pixel
+        render_type: Input renderer method
+        color_depth: Input tonemap the generated Depthmaps, if render_type=="depth"
 
     Raises:
-        ValueError: if RenderMode doesn't exist
+        ValueError: if render_type doesn't exist
+
+    Resources:
+        cpu: normal
+        ram: normal
+        gpu: intensive
+        network: none
     """
     assert_isfile(nerf_transform_json, ext=FileExt.JSON)
     logger.debug(f"Load rendering transforms from {nerf_transform_json}")
     nerf_transform = NerfTransforms.load(nerf_transform_json)  # Validate JSON Schema
 
-    testbed, spp = get_testbed_and_spp(snapshot_msgpack, render_mode, spp)
+    testbed, spp = get_testbed_and_spp(snapshot_msgpack, render_type, spp)
 
     # Use load_training_data to load each input camera and re-run them using set_camera_to_training_view
     testbed.load_training_data(nerf_transform_json)
@@ -121,12 +127,11 @@ def main(snapshot_msgpack: str,
         w, h = tuple(testbed.nerf.training.dataset.metadata[trainview].resolution)
 
         image = testbed.render(w, h, spp, True)
-
         outname = os.path.join(out_rendering_folder, os.path.basename(filepath))
 
-        if render_mode == "color":
+        if render_type == "color":
             __save_color(outname, image)
-        elif render_mode == "depth":
+        elif render_type == "depth":
             # Force depth in numpy format
             outname = os.path.splitext(outname)[0] + ".npy"
             os.makedirs(os.path.dirname(outname), exist_ok=True)
@@ -137,7 +142,7 @@ def main(snapshot_msgpack: str,
                 outname = os.path.splitext(outname)[0] + ".png"
                 os.makedirs(os.path.dirname(outname), exist_ok=True)
                 imageio.imwrite(outname, tonemap(raw_depth))
-        elif render_mode == "confidence":
+        elif render_type == "confidence":
             __save_color(outname, image)
         else:
-            raise ValueError(f"Invalid render mode '{render_mode}'. Should be in {RENDER_MODES.keys()}")
+            raise ValueError(f"Invalid render mode '{render_type}'. Should be in {RENDER_MODES.keys()}")

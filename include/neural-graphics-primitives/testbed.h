@@ -714,6 +714,7 @@ public:
 			int view = 0;
 
 			float depth_supervision_lambda = 0.f;
+			float mask_supervision_strength = 0.f;
 
 			GPUMemory<float> sharpness_grid;
 

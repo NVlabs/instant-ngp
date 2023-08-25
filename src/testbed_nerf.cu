@@ -894,6 +894,7 @@ __global__ void compute_loss_kernel_train_nerf(
 	const vec3* __restrict__ exposure,
 	vec3* __restrict__ exposure_gradient,
 	float depth_supervision_lambda,
+	float mask_supervision_strength,
 	float near_distance
 ) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
@@ -1109,8 +1110,9 @@ __global__ void compute_loss_kernel_train_nerf(
 			dt * (dot(lg.gradient, T * rgb - suffix) + depth_supervision)
 		);
 
-		//static constexpr float mask_supervision_strength = 1.f; // we are already 'leaking' mask information into the nerf via the random bg colors; setting this to eg between 1 and  100 encourages density towards 0 in such regions.
-		//dloss_by_dmlp += (texsamp.a<0.001f) ? mask_supervision_strength * weight : 0.f;
+		// static constexpr float mask_supervision_strength = 100.f; // we are already 'leaking' mask information into the nerf via the random bg colors; setting this to eg between 1 and  100 encourages density towards 0 in such regions.
+		dloss_by_dmlp += (texsamp.a<0.001f) ? mask_supervision_strength * weight : 0.f;
+
 
 		local_dL_doutput[3] =
 			loss_scale * dloss_by_dmlp +
@@ -2860,6 +2862,7 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 			m_nerf.training.cam_exposure_gpu.data(),
 			m_nerf.training.optimize_exposure ? m_nerf.training.cam_exposure_gradient_gpu.data() : nullptr,
 			m_nerf.training.depth_supervision_lambda,
+			m_nerf.training.mask_supervision_strength,
 			m_nerf.training.near_distance
 		);
 	}

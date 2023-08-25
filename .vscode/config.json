@@ -35,6 +35,7 @@
         "skip": []
     },
     "project_name": "3dml-instant-ngp",
+    "module_name": "instant_ngp_3dml",
     "exclude_executable_rules": [
         "TEST0"
     ],

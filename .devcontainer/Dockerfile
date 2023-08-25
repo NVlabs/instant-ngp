@@ -177,8 +177,8 @@ RUN apt-get -y update &&       \
 #       Instant-NGP Installation
 #-------------------------------------------------------------
 
-ENV INSTANT_NGP_PATH="/workspaces/3dml-instant-ngp"
-WORKDIR ${INSTANT_NGP_PATH}
+ENV INSTANT_NGP_3DML_WORKDIR="/workspaces/3dml-instant-ngp"
+WORKDIR ${INSTANT_NGP_3DML_WORKDIR}
 
 COPY .devcontainer/requirements.txt .devcontainer/
 
@@ -209,10 +209,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 #       3D_NGP Installation
 #-------------------------------------------------------------
 
-ENV NGP="/workspaces/3dml-instant-ngp/"
-ENV PYTHONPATH $PYTHONPATH:$NGP
+ENV PYTHONPATH $PYTHONPATH:$INSTANT_NGP_3DML_WORKDIR
 
-WORKDIR $NGP
+WORKDIR $INSTANT_NGP_3DML_WORKDIR
 COPY . .
 
 #-------------------------------------------------------------------------------------

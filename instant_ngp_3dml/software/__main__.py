@@ -7,8 +7,8 @@ from typing import Dict
 import fire
 
 from instant_ngp_3dml import logger
-from instant_ngp_3dml.rendering import main as render
-from instant_ngp_3dml.training import main as train
+from instant_ngp_3dml.software.rendering import main as render
+from instant_ngp_3dml.software.training import main as train
 
 modules: Dict[str, Callable] = {
     "rendering": render,
