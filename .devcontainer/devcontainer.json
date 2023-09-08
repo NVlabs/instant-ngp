@@ -14,7 +14,8 @@
                 "ms-vscode.cpptools-extension-pack",
                 "streetsidesoftware.code-spell-checker",
                 "eamodio.gitlens",
-                "charliermarsh.ruff"
+                "charliermarsh.ruff",
+                "ms-python.autopep8"
             ]
         }
     },

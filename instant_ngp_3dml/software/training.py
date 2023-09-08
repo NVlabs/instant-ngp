@@ -10,6 +10,7 @@ from utils_3dml.utils.asserts import assert_gt
 from utils_3dml.utils.dataclass import _asdict_inner
 
 from instant_ngp_3dml import logger
+from instant_ngp_3dml.utils.network_config import get_nerf_config_json
 from instant_ngp_3dml.utils.training_info import StepInfo
 from instant_ngp_3dml.utils.training_info import TrainingInfo
 
@@ -62,7 +63,7 @@ def __train(testbed: ngp.Testbed, n_steps: int, enable_depth_supervision: bool) 
 
 @profile
 def main(nerf_transform_json: str,  # noqa: PLR0913
-         nerf_network_configuration_json: str,
+         config_name: str,
          out_snapshot_msgpack: str,
          out_training_info_json: str = "",
          snapshot_msgpack: str = "",
@@ -72,7 +73,7 @@ def main(nerf_transform_json: str,  # noqa: PLR0913
 
     Args:
         nerf_transform_json: Input NeRF Transform Json
-        nerf_network_configuration_json: Input configuration for NeRF Network
+        config_name: Input configuration for NeRF Network
         out_snapshot_msgpack: Output NeRF Weight
         out_training_info_json: Output Json with Training Information
         snapshot_msgpack: Optional Input NeRF Weight
@@ -90,7 +91,7 @@ def main(nerf_transform_json: str,  # noqa: PLR0913
     testbed = ngp.Testbed(ngp.TestbedMode.Nerf)
 
     testbed.load_training_data(nerf_transform_json)
-    testbed.reload_network_from_file(nerf_network_configuration_json)
+    testbed.reload_network_from_file(get_nerf_config_json(config_name))
 
     if snapshot_msgpack != "":
         logger.info(f"Loading snapshot {snapshot_msgpack}")
