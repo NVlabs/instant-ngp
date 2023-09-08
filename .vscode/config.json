@@ -39,6 +39,6 @@
     "exclude_executable_rules": [
         "TEST0"
     ],
-    "excluded_files": ["src/*", "scripts/*", "dependencies/*"],
+    "excluded_files": ["src", "scripts", "dependencies"],
     "glossary_folders": []
 }
