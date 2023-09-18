@@ -431,7 +431,7 @@ if __name__ == "__main__":
 		from detectron2 import model_zoo
 		from detectron2.engine import DefaultPredictor
 
-		category2id = json.load(open(SCRIPTS_FOLDER / "category2id.json", "r"))
+		category2id = json.load(open(os.path.join(SCRIPTS_FOLDER, "category2id.json"), "r"))
 		mask_ids = [category2id[c] for c in args.mask_categories]
 
 		cfg = get_cfg()
