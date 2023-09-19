@@ -40,7 +40,7 @@ def parse_args():
 	parser.add_argument("--aabb_scale", default=32, choices=["1", "2", "4", "8", "16", "32", "64", "128"], help="Large scene scale factor. 1=scene fits in unit cube; power of 2 up to 128")
 	parser.add_argument("--skip_early", default=0, help="Skip this many images from the start.")
 	parser.add_argument("--keep_colmap_coords", action="store_true", help="Keep transforms.json in COLMAP's original frame of reference (this will avoid reorienting and repositioning the scene for preview and rendering).")
-	parser.add_argument("--out", default="transforms.json", help="Output path.")
+	parser.add_argument("--out", default="transforms.json", help="Output JSON file path.")
 	parser.add_argument("--vocab_path", default="", help="Vocabulary tree path.")
 	parser.add_argument("--overwrite", action="store_true", help="Do not ask for confirmation for overwriting existing images and COLMAP data.")
 	parser.add_argument("--mask_categories", nargs="*", type=str, default=[], help="Object categories that should be masked out from the training images. See `scripts/category2id.json` for supported categories.")
@@ -201,6 +201,14 @@ if __name__ == "__main__":
 	IMAGE_FOLDER = args.images
 	TEXT_FOLDER = args.text
 	OUT_PATH = args.out
+
+	# Check that we can save the output before we do a lot of work
+	try:
+		open(OUT_PATH, "a").close()
+	except Exception as e:
+		print(f"Could not save transforms JSON to {OUT_PATH}: {e}")
+		sys.exit(1)
+
 	print(f"outputting to {OUT_PATH}...")
 	cameras = {}
 	with open(os.path.join(TEXT_FOLDER,"cameras.txt"), "r") as f:
