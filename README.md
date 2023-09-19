@@ -196,7 +196,7 @@ $ cd instant-ngp
 
 Then, use CMake to build the project: (on Windows, this must be in a [developer command prompt](https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line?view=msvc-160#developer_command_prompt))
 ```sh
-instant-ngp$ cmake . -B build
+instant-ngp$ cmake . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
 instant-ngp$ cmake --build build --config RelWithDebInfo -j
 ```
 
