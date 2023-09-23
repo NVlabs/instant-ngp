@@ -1,9 +1,9 @@
-FROM nvidia/cuda:10.2-devel-ubuntu18.04
+FROM nvidia/cuda:11.4.3-devel-ubuntu18.04
 
 ENV COLMAP_VERSION=3.7
 ENV CMAKE_VERSION=3.21.0
 ENV PYTHON_VERSION=3.7.0
-ENV OPENCV_VERSION=4.5.5.62
+ENV OPENCV_VERSION=4.8.0.76
 ENV CERES_SOLVER_VERSION=2.0.0
 
 RUN echo "Installing apt packages..." \
