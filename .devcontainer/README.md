@@ -1,6 +1,6 @@
 ## VS Code Dev Container
 
-> Basic dev container for running Instant Neural Graphics Primitives without GUI.
+> Basic dev container for running Instant Neural Graphics Primitives.
 
 ### Requirements
 
@@ -12,7 +12,22 @@
 
 ### How to build
 
+Without GUI.
+
 ```sh
-cmake -DNGP_BUILD_WITH_GUI=off ./ -B ./build
+cmake -DNGP_BUILD_WITH_GUI=off ./ -B ./build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build --config RelWithDebInfo -j 16
+```
+
+With GUI for Linux distributions.
+
+Allow the docker to connect to the local X server. For example, to allow any remote machine to connect to the local X server, execute the follwing command from the host shell.
+
+```sh
+xhost +x
+```
+Build the project inside the docker container.
+```sh
+cmake ./ -B ./build -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build --config RelWithDebInfo -j 16
 ```
