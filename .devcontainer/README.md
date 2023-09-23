@@ -15,7 +15,7 @@
 Without GUI.
 
 ```sh
-cmake -DNGP_BUILD_WITH_GUI=off ./ -B ./build
+cmake -DNGP_BUILD_WITH_GUI=off ./ -B ./build -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build --config RelWithDebInfo -j 16
 ```
 
@@ -28,6 +28,6 @@ xhost +x
 ```
 Build the project inside the docker container.
 ```sh
-cmake ./ -B ./build
+cmake ./ -B ./build -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build --config RelWithDebInfo -j 16
 ```
