@@ -3066,6 +3066,19 @@ GPUMemory<float> Testbed::get_density_on_grid(ivec3 res3d, const BoundingBox& aa
 	return density;
 }
 
+__global__ void filter_with_occupancy(const uint32_t n_elements, float* pos, const uint32_t floats_per_coord, const uint8_t* density_grid_bitfield, float* rgbsigma) {
+	const uint32_t point_id = threadIdx.x + blockIdx.x * blockDim.x;
+	if (point_id >= n_elements) return;
+	const vec3 pos_vec{pos[point_id * floats_per_coord], pos[point_id * floats_per_coord + 1], pos[point_id * floats_per_coord + 2]};
+	const uint32_t mip = mip_from_pos(pos_vec);
+	if (!density_grid_occupied_at(pos_vec, density_grid_bitfield, mip)) {
+		#pragma unroll
+		for (int i = 0; i < 4; i++) { // sigma=0 would be enough, but all to 0 compress better
+			rgbsigma[point_id * 4 + i] = 0.f;
+		}
+	}
+}
+
 GPUMemory<vec4> Testbed::get_rgba_on_grid(ivec3 res3d, vec3 ray_dir, bool voxel_centers, float depth, bool density_as_alpha) {
 	const uint32_t n_elements = (res3d.x*res3d.y*res3d.z);
 	GPUMemory<vec4> rgba(n_elements);
@@ -3102,6 +3115,12 @@ GPUMemory<vec4> Testbed::get_rgba_on_grid(ivec3 res3d, vec3 ray_dir, bool voxel_
 		GPUMatrix<float> positions_matrix((float*)(positions.data() + offset * floats_per_coord), floats_per_coord, local_batch_size);
 		GPUMatrix<float> rgbsigma_matrix((float*)(rgba.data() + offset), 4, local_batch_size);
 		m_network->inference(m_stream.get(), positions_matrix, rgbsigma_matrix);
+		linear_kernel(filter_with_occupancy, 0, m_stream.get(),
+					  local_batch_size,
+					  positions_matrix.data(),
+					  floats_per_coord,
+					  m_nerf.density_grid_bitfield.data(),
+					  rgbsigma_matrix.data());
 
 		// convert network output to RGBA (in place)
 		linear_kernel(compute_nerf_rgba_kernel, 0, m_stream.get(), local_batch_size, rgba.data() + offset, m_nerf.rgb_activation, m_nerf.density_activation, depth, density_as_alpha);
