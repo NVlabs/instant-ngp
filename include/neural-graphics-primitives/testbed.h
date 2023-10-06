@@ -359,6 +359,7 @@ public:
 	);
 	void visualize_nerf_cameras(ImDrawList* list, const mat4& world2proj);
 	fs::path find_network_config(const fs::path& network_config_path);
+	nlohmann::json load_network_config(std::istream& stream, bool is_compressed);
 	nlohmann::json load_network_config(const fs::path& network_config_path);
 	void reload_network_from_file(const fs::path& path = "");
 	void reload_network_from_json(const nlohmann::json& json, const std::string& config_base_path=""); // config_base_path is needed so that if the passed in json uses the 'parent' feature, we know where to look... be sure to use a filename, or if a directory, end with a trailing slash
@@ -484,7 +485,9 @@ public:
 	vec2 fov_xy() const ;
 	void set_fov_xy(const vec2& val);
 	void save_snapshot(const fs::path& path, bool include_optimizer_state, bool compress);
+	void load_snapshot(nlohmann::json config);
 	void load_snapshot(const fs::path& path);
+	void load_snapshot(std::istream& stream, bool is_compressed = true);
 	CameraKeyframe copy_camera_to_keyframe() const;
 	void set_camera_from_keyframe(const CameraKeyframe& k);
 	void set_camera_from_time(float t);

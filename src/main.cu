@@ -159,7 +159,7 @@ int main_func(const std::vector<std::string>& arguments) {
 	}
 
 	if (snapshot_flag) {
-		testbed.load_snapshot(get(snapshot_flag));
+		testbed.load_snapshot(static_cast<fs::path>(get(snapshot_flag)));
 	} else if (network_config_flag) {
 		testbed.reload_network_from_file(get(network_config_flag));
 	}
