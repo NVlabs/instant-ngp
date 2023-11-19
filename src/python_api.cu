@@ -449,7 +449,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.def_property("loop_animation", &Testbed::loop_animation, &Testbed::set_loop_animation)
 		.def("compute_and_save_png_slices", &Testbed::compute_and_save_png_slices,
 			py::arg("filename"),
-			py::arg("resolution") = ivec3(256),
+			py::arg("resolution") = 256,
 			py::arg("aabb") = BoundingBox{},
 			py::arg("thresh") = std::numeric_limits<float>::max(),
 			py::arg("density_range") = 4.f,
