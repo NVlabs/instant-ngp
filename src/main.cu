@@ -13,6 +13,7 @@
  */
 
 #include <neural-graphics-primitives/testbed.h>
+#include <synerfgine/engine.h>
 
 #include <tiny-cuda-nn/common.h>
 
@@ -149,6 +150,7 @@ int main_func(const std::vector<std::string>& arguments) {
 	}
 
 	Testbed testbed;
+	sng::Engine engine;
 
 	for (auto file : get(files)) {
 		testbed.load_file(file);
