@@ -30,11 +30,18 @@
 namespace sng {
 
 using ngp::CudaRenderBuffer;
+using ngp::GLTexture;
 
 class Renderer {
 public:
-	void init_glfw(GLFWwindow* m_glfw_window, const ivec2& m_window_res);
+	GLFWwindow* create_glfw_window(const ivec2& m_window_res);
+	bool begin_frame();
+	bool present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> rgba, std::shared_ptr<ngp::GLTexture> depth);
+	void end_frame();
+	void blit_texture(const ngp::Foveation& foveation, GLint rgba_texture, GLint rgba_filter_mode, 
+		GLint depth_texture, GLint framebuffer, const ivec2& offset, const ivec2& resolution);
 private:
+	GLFWwindow* m_glfw_window = nullptr;
 	ivec2 m_window_res = ivec2(0);
 
 	// The VAO will be empty, but we need a valid one for attribute-less rendering
@@ -46,8 +53,10 @@ private:
 
 class Ui {
 public:
-	void init_imgui(const GLFWwindow* m_glfw_window);
+	void init_imgui(GLFWwindow* m_glfw_window);
     void imgui();
+	bool begin_frame();
+	void end_frame();
 private:
 	GLFWwindow* m_glfw_window = nullptr;
 };
@@ -55,6 +64,12 @@ private:
 class Display {
 public:
     void init_window(int resw, int resh, bool hidden);
+	void destroy();
+	bool begin_frame();
+	bool present(); 
+	void end_frame();
+	Display() {}
+	~Display() { destroy(); }
 
 private:
 	void init_buffers();
@@ -64,10 +79,11 @@ private:
 	Ui ui;
 
 	// Buffers
-	std::vector<std::shared_ptr<GLTexture>> m_rgba_render_textures;
-	std::vector<std::shared_ptr<GLTexture>> m_depth_render_textures;
+	std::shared_ptr<GLTexture> m_rgba_render_textures;
+	std::shared_ptr<GLTexture> m_depth_render_textures;
 	std::shared_ptr<CudaRenderBuffer> m_render_buffer;
 	ivec2 m_view_res = ivec2(0);
+	static bool m_is_init;
 
 #ifdef NGP_GUI
 	GLFWwindow* m_glfw_window = nullptr;

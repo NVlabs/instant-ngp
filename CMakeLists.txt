@@ -57,14 +57,14 @@ else()
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
 endif()
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 ###############################################################################
 # CUDA compiler setup
 ###############################################################################
 
-set(CMAKE_CUDA_STANDARD 14)
+set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_EXTENSIONS OFF)
 set(CUDA_LINK_LIBRARIES_KEYWORD PUBLIC)
@@ -271,6 +271,8 @@ list(APPEND NGP_SOURCES
 	src/tinyexr_wrapper.cu
 	src/tinyobj_loader_wrapper.cu
 	src/triangle_bvh.cu
+	src/synerfgine/display.cu
+	src/synerfgine/engine.cu
 )
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})

@@ -17,8 +17,9 @@ class Engine {
 public:
     // Engine();
     void init(int res_width, int res_height);
-    bool frame() { return true; }
+    bool frame();
 
+private:
     Display display;
     std::vector<CudaDevice> m_devices;
 };

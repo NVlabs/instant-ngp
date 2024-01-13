@@ -5,6 +5,7 @@
 
 #include <tiny-cuda-nn/common.h>
 #include <tiny-cuda-nn/common_host.h>
+#include <tiny-cuda-nn/multi_stream.h>
 
 namespace sng {
 
@@ -126,5 +127,24 @@ private:
 
     std::unique_ptr<ThreadPool> m_render_worker;
 };
+
+inline CudaDevice::CudaDevice(int id, bool is_primary) : m_id{id}, m_is_primary{is_primary} {
+	auto guard = device_guard();
+	m_stream = std::make_unique<StreamAndEvent>();
+	m_data = std::make_unique<Data>();
+	m_render_worker = std::make_unique<ThreadPool>(is_primary ? 0u : 1u);
+}
+
+inline ScopeGuard CudaDevice::device_guard() {
+	int prev_device = cuda_device();
+	if (prev_device == m_id) {
+		return {};
+	}
+
+	set_cuda_device(m_id);
+	return ScopeGuard{[prev_device]() {
+		set_cuda_device(prev_device);
+	}};
+}
 
 }

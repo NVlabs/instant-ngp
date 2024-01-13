@@ -1,8 +1,12 @@
+#include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/marching_cubes.h>
+#include <synerfgine/file.h>
 
 #include <synerfgine/display.h>
 
 namespace sng {
+
+bool Display::m_is_init = false;
 
 void glfw_error_callback(int error, const char* description) {
 	tlog::error() << "GLFW error #" << error << ": " << description;
@@ -12,20 +16,20 @@ void Display::init_window(int resw, int resh, bool hidden) {
     m_window_res = {resw, resh};
 
 #ifdef NGP_GUI
-	renderer.init_glfw(m_glfw_window);
-    ui.init(m_glfw_window);
+	m_glfw_window = renderer.create_glfw_window(m_window_res);
+    ui.init_imgui(m_glfw_window);
 #endif
-	renderer.init_buffers();
+	init_buffers();
+	Display::m_is_init = true;
 }
 
-void Renderer::init_glfw(GLFWwindow* m_glfw_window, const ivec2& m_window_res) {
+GLFWwindow* Renderer::create_glfw_window(const ivec2& m_window_res) {
 	this->m_window_res = m_window_res;
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit()) {
         throw std::runtime_error{"GLFW could not be initialized."};
     }
     
-    glfwWindowHint(GLFW_VISIBLE, hidden ? GLFW_FALSE : GLFW_TRUE);
     std::string title = "Synthetic Object NeRF Engine";
     m_glfw_window = glfwCreateWindow(m_window_res.x, m_window_res.y, title.c_str(), NULL, NULL);
     if (m_glfw_window == NULL) {
@@ -53,9 +57,15 @@ void Renderer::init_glfw(GLFWwindow* m_glfw_window, const ivec2& m_window_res) {
     }
 
     tlog::success() << "Initialized OpenGL version " << glGetString(GL_VERSION);
+	return m_glfw_window;
 }
 
-void Ui::init_imgui(const GLFWwindow* m_glfw_window) {
+void Ui::init_imgui(GLFWwindow* m_glfw_window) {
+	this->m_glfw_window = m_glfw_window;
+
+	float xscale, yscale;
+	glfwGetWindowContentScale(m_glfw_window, &xscale, &yscale);
+
 	// IMGUI init
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -66,7 +76,7 @@ void Ui::init_imgui(const GLFWwindow* m_glfw_window) {
 	// Instead, we would like to place imgui.ini in the directory that instant-ngp project
 	// resides in.
 	static std::string ini_filename;
-	ini_filename = (root_dir()/"imgui.ini").str();
+	ini_filename = (Utils::get_root_dir()/"imgui.ini").string();
 	io.IniFilename = ini_filename.c_str();
 
 	// New ImGui event handling seems to make camera controls laggy if input trickling is true.
@@ -80,8 +90,13 @@ void Ui::init_imgui(const GLFWwindow* m_glfw_window) {
 	ImFontConfig font_cfg;
 	font_cfg.SizePixels = 13.0f * xscale;
 	io.Fonts->AddFontDefault(&font_cfg);
+}
 
-	this->m_glfw_window = m_glfw_window;
+void Ui::imgui() {
+	static std::string imgui_error_string = "";
+
+	if (ImGui::Begin("Camera path", 0, ImGuiWindowFlags_NoScrollbar));
+	ImGui::End();
 }
 
 void Renderer::init_opengl_shaders() {
@@ -156,8 +171,198 @@ void Renderer::init_opengl_shaders() {
 	glGenVertexArrays(1, &m_blit_vao);
 }
 
-void Renderer::init_buffers() {
+void Display::init_buffers() {
+	// Make sure there's at least one usable render texture
+	m_rgba_render_textures = std::make_shared<GLTexture>();
+	m_depth_render_textures = std::make_shared<GLTexture>();
 
+	m_render_buffer = std::make_shared<CudaRenderBuffer>(m_rgba_render_textures, m_depth_render_textures);
+	m_render_buffer->resize(m_view_res);
+}
+
+bool Display::begin_frame() {
+	if (glfwWindowShouldClose(m_glfw_window) || ImGui::IsKeyPressed(GLFW_KEY_ESCAPE) || ImGui::IsKeyPressed(GLFW_KEY_Q)) {
+		destroy();
+		return false;
+	}
+
+	glfwPollEvents();
+	glfwGetFramebufferSize(m_glfw_window, &m_window_res.x, &m_window_res.y);
+	return ui.begin_frame() && renderer.begin_frame();
+}
+
+bool Ui::begin_frame() {
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+	ImGuizmo::BeginFrame();
+
+	return true;
+}
+
+bool Renderer::begin_frame() {
+	return true;
+}
+
+void Display::end_frame() {
+	renderer.end_frame();
+	ui.end_frame();
+}
+
+void Ui::end_frame() {
+	ImGui::EndFrame();
+}
+
+void Renderer::end_frame() {
+}
+
+bool Display::present() {
+	ui.imgui();
+	return renderer.present({1,1}, m_rgba_render_textures, m_depth_render_textures); 
+}
+
+bool Renderer::present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> rgba, std::shared_ptr<ngp::GLTexture> depth) { 
+	if (!m_glfw_window) {
+		throw std::runtime_error{"Window must be initialized to be presented."};
+	}
+
+	// Make sure all the cuda code finished its business here
+	CUDA_CHECK_THROW(cudaDeviceSynchronize());
+
+	glfwMakeContextCurrent(m_glfw_window);
+	int display_w, display_h;
+	glfwGetFramebufferSize(m_glfw_window, &display_w, &display_h);
+	glViewport(0, 0, display_w, display_h);
+	glClearColor(0.f, 0.f, 0.f, 0.f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glEnable(GL_BLEND);
+	glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+	glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+	ivec2 extent = {(int)((float)display_w / m_n_views.x), (int)((float)display_h / m_n_views.y)};
+
+	ivec2 top_left{0, display_h - (0 + 1) * extent.y};
+	// blit_texture(m_foveated_rendering_visualize ? Foveation{} : view.foveation, m_rgba_render_textures.at(i)->texture(), m_foveated_rendering ? GL_LINEAR : GL_NEAREST, m_depth_render_textures.at(i)->texture(), 0, top_left, extent);
+	blit_texture(ngp::Foveation{}, rgba->texture(), GL_NEAREST, depth->texture(), 0, top_left, extent);
+	glFinish();
+	glViewport(0, 0, display_w, display_h);
+
+
+	ImDrawList* list = ImGui::GetBackgroundDrawList();
+	list->AddCallback(ImDrawCallback_ResetRenderState, nullptr);
+
+	// Visualizations are only meaningful when rendering a single view
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+	glfwSwapBuffers(m_glfw_window);
+
+	// Make sure all the OGL code finished its business here.
+	// Any code outside of this function needs to be able to freely write to
+	// textures without being worried about interfering with rendering.
+	glFinish();
+
+}
+
+void Renderer::blit_texture(const ngp::Foveation& foveation, GLint rgba_texture, GLint rgba_filter_mode, 
+	GLint depth_texture, GLint framebuffer, const ivec2& offset, const ivec2& resolution) {
+	if (m_blit_program == 0) {
+		return;
+	}
+
+	// Blit image to OpenXR swapchain.
+	// Note that the OpenXR swapchain is 8bit while the rendering is in a float texture.
+	// As some XR runtimes do not support float swapchains, we can't render into it directly.
+
+	bool tex = glIsEnabled(GL_TEXTURE_2D);
+	bool depth = glIsEnabled(GL_DEPTH_TEST);
+	bool cull = glIsEnabled(GL_CULL_FACE);
+
+	if (!tex) glEnable(GL_TEXTURE_2D);
+	if (!depth) glEnable(GL_DEPTH_TEST);
+	if (cull) glDisable(GL_CULL_FACE);
+
+	glDepthFunc(GL_ALWAYS);
+	glDepthMask(GL_TRUE);
+
+	glBindVertexArray(m_blit_vao);
+	glUseProgram(m_blit_program);
+	glUniform1i(glGetUniformLocation(m_blit_program, "rgba_texture"), 0);
+	glUniform1i(glGetUniformLocation(m_blit_program, "depth_texture"), 1);
+
+	auto bind_warp = [&](const ngp::FoveationPiecewiseQuadratic& warp, const std::string& uniform_name) {
+		glUniform1f(glGetUniformLocation(m_blit_program, (uniform_name + ".al").c_str()), warp.al);
+		glUniform1f(glGetUniformLocation(m_blit_program, (uniform_name + ".bl").c_str()), warp.bl);
+		glUniform1f(glGetUniformLocation(m_blit_program, (uniform_name + ".cl").c_str()), warp.cl);
+
+		glUniform1f(glGetUniformLocation(m_blit_program, (uniform_name + ".am").c_str()), warp.am);
+		glUniform1f(glGetUniformLocation(m_blit_program, (uniform_name + ".bm").c_str()), warp.bm);
+
+		glUniform1f(glGetUniformLocation(m_blit_program, (uniform_name + ".ar").c_str()), warp.ar);
+		glUniform1f(glGetUniformLocation(m_blit_program, (uniform_name + ".br").c_str()), warp.br);
+		glUniform1f(glGetUniformLocation(m_blit_program, (uniform_name + ".cr").c_str()), warp.cr);
+
+		glUniform1f(glGetUniformLocation(m_blit_program, (uniform_name + ".switch_left").c_str()), warp.switch_left);
+		glUniform1f(glGetUniformLocation(m_blit_program, (uniform_name + ".switch_right").c_str()), warp.switch_right);
+
+		glUniform1f(glGetUniformLocation(m_blit_program, (uniform_name + ".inv_switch_left").c_str()), warp.inv_switch_left);
+		glUniform1f(glGetUniformLocation(m_blit_program, (uniform_name + ".inv_switch_right").c_str()), warp.inv_switch_right);
+	};
+
+	bind_warp(foveation.warp_x, "warp_x");
+	bind_warp(foveation.warp_y, "warp_y");
+
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, depth_texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, rgba_texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, rgba_filter_mode);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, rgba_filter_mode);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+	glViewport(offset.x, offset.y, resolution.x, resolution.y);
+
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+
+	glBindVertexArray(0);
+	glUseProgram(0);
+
+	glDepthFunc(GL_LESS);
+
+	// restore old state
+	if (!tex) glDisable(GL_TEXTURE_2D);
+	if (!depth) glDisable(GL_DEPTH_TEST);
+	if (cull) glEnable(GL_CULL_FACE);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void Display::destroy() {
+#ifndef NGP_GUI
+	throw std::runtime_error{"destroy_window failed: NGP was built without GUI support"};
+#else
+	if (!Display::m_is_init) {
+		return;
+	}
+
+	m_render_buffer = nullptr;
+
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
+	glfwDestroyWindow(m_glfw_window);
+	glfwTerminate();
+
+	m_glfw_window = nullptr;
+	m_is_init = false;
+#endif //NGP_GUI
 }
 
 }
