@@ -25,7 +25,7 @@ public:
     void set_scale(float scale);
     void set_view_dir(const vec3& dir);
     void set_resolution(const ivec2& res);
-    void generate_rays(CudaDevice& device);
+    void generate_rays_async(CudaDevice& device);
 
     vec3* gpu_positions() { return g_positions.data(); }
 

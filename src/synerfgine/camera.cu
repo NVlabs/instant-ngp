@@ -4,12 +4,12 @@ namespace sng {
 
 __global__ void g_set_rays(const uint32_t n_elements, const uint32_t width, const uint32_t height, 
  const float focal_length, const mat4x3* cam_mat, vec3* __restrict__ positions, vec3* __restrict__ directions);
-Camera::Camera(const vec3& eye, const vec3& at, const vec3& up) : 
-    m_eye(eye), 
-    m_dir(at - eye), 
-    m_up(up), m_scale(length(m_dir)) {
+Camera::Camera(const vec3& eye, const vec3& at, const vec3& up) : m_up(up) {
+    translate_camera(eye, mat3::identity(), true);
+    set_look_at(at);
     m_dir = normalize(m_dir);
     g_camera.allocate_memory(sizeof(mat4x3));
+    for (int i = 0; i < 12; i++) std::cout << m_camera.data()[i] << std::endl;
     g_camera.copy_from_host({m_camera});
     translate_camera(m_eye, {}, true);
 }
@@ -57,6 +57,8 @@ void Camera::set_view_dir(const vec3& dir) {
 
 void Camera::set_resolution(const ivec2& res) {
     if (res == m_resolution) return;
+    g_camera.check_guards();
+    g_camera.copy_from_host({m_camera});
     size_t n_elements = res.x * res.y;
     g_positions.check_guards();
     g_positions.allocate_memory(n_elements * sizeof(vec3));
@@ -65,7 +67,7 @@ void Camera::set_resolution(const ivec2& res) {
     m_resolution = res;
 }
 
-void Camera::generate_rays(CudaDevice& device) {
+void Camera::generate_rays_async(CudaDevice& device) {
     g_camera.copy_from_host({m_camera});
     size_t n_elements = m_resolution.x * m_resolution.y;
     linear_kernel(g_set_rays, 0, device.stream(), n_elements, 
@@ -85,8 +87,11 @@ __global__ void g_set_rays(const uint32_t n_elements, const uint32_t width, cons
     float x = (float)(i % width) / (float)width - 0.5;
     float y = (float)(i / height) / (float)height - 0.5;
     positions[i] = (*p_camera)[3];
-    vec4 dir = vec4(x, y, focal_length, 1.0);
+    vec4 dir = vec4(normalize(vec3(x, y, focal_length)), 1.0);
     directions[i] = (*p_camera) * dir;
+    // if (i == 10234) {
+    //     printf("%i-1 %f %f %f\n", i, directions[i].x, directions[i].y, directions[i].z);
+    // }
 }
 
 }
