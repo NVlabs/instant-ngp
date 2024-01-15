@@ -89,9 +89,17 @@ VirtualObject::VirtualObject(const char* fp, const std::string& name)
     }
 	// bvh = TriangleBvh::make();
 	triangles_gpu.resize_and_copy_from_host(triangles_cpu);
-	cam_triangles_gpu.resize_and_copy_from_host(triangles_cpu);
+	// cam_triangles_gpu.resize_and_copy_from_host(triangles_cpu);
 	// bvh->build(triangles_cpu, 3);
 	// TODO: build a bvh implementation that can be updated
+}
+
+const std::vector<Triangle>& VirtualObject::cpu_triangles() {
+	return triangles_cpu;
+}
+
+Triangle* VirtualObject::gpu_triangles() {
+	return triangles_gpu.data();
 }
 
 mat4 VirtualObject::get_transform() {

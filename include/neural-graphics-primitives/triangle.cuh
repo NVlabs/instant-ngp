@@ -22,6 +22,9 @@
 
 namespace ngp {
 
+constexpr float MAX_RT_DIST = std::numeric_limits<float>::max();
+constexpr float MIN_RT_DIST = 0.00000001f;
+
 struct Triangle {
 	NGP_HOST_DEVICE vec3 sample_uniform_position(const vec2& sample) const {
 		float sqrt_x = sqrt(sample.x);

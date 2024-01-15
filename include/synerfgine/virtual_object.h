@@ -34,6 +34,8 @@ public:
     VirtualObject(const char* fp, const std::string& name);
     ~VirtualObject();
     mat4 get_transform();
+    Triangle* gpu_triangles();
+    const std::vector<Triangle>& cpu_triangles();
     void imgui();
 
 private:
@@ -47,7 +49,7 @@ private:
     
     std::vector<Triangle> triangles_cpu;
 	GPUMemory<Triangle> triangles_gpu;
-	GPUMemory<Triangle> cam_triangles_gpu;
+	// GPUMemory<Triangle> cam_triangles_gpu;
 };
 
 VirtualObject load_virtual_obj(const char* fp, const std::string& name);
