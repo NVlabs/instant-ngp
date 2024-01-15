@@ -20,6 +20,7 @@
 #include <args/args.hxx>
 
 #include <filesystem/path.h>
+#include <filesystem>
 
 using namespace args;
 using namespace ngp;
@@ -174,21 +175,26 @@ int main_func(const std::vector<std::string>& arguments) {
 	bool gui = false;
 #endif
 
-	if (gui) {
-		// testbed.init_window(width_flag ? get(width_flag) : 1920, height_flag ? get(height_flag) : 1080);
-		engine.init(width_flag ? get(width_flag) : 1920, height_flag ? get(height_flag) : 1080);
-	}
-
-	if (vr_flag) {
-		testbed.init_vr();
-	}
-
-	// Render/training loop
-	// while (testbed.frame()) {
-	while (engine.frame()) {
-		if (!gui) {
-			tlog::info() << "iteration=" << testbed.m_training_step << " loss=" << testbed.m_loss_scalar.val();
+	try {
+		if (gui) {
+			// testbed.load_file(fs::path("../data/nerf/fox/base.ingp"));
+			// testbed.init_window(width_flag ? get(width_flag) : 1920, height_flag ? get(height_flag) : 1080);
+			engine.init(width_flag ? get(width_flag) : 1920, height_flag ? get(height_flag) : 1080);
 		}
+
+		if (vr_flag) {
+			testbed.init_vr();
+		}
+
+		// Render/training loop
+		// while (testbed.frame()) {
+		while (engine.frame()) {
+			if (!gui) {
+				tlog::info() << "iteration=" << testbed.m_training_step << " loss=" << testbed.m_loss_scalar.val();
+			}
+		}
+	} catch (const std::runtime_error& e) {
+		tlog::error(e.what());
 	}
 
 	return 0;

@@ -147,4 +147,89 @@ inline ScopeGuard CudaDevice::device_guard() {
 	}};
 }
 
+inline int find_cuda_device() {
+	int active_device;
+    CUDA_CHECK_THROW(cudaGetDevice(&active_device));
+	cudaDeviceProp props;
+	CUDA_CHECK_THROW(cudaGetDeviceProperties(&props, active_device));
+	int active_compute_capability = props.major * 10 + props.minor;
+	tlog::success() << fmt::format(
+		"Initialized CUDA {}. Active GPU is #{}: {} [{}]",
+		cuda_runtime_version_string(),
+		active_device,
+		cuda_device_name(),
+		active_compute_capability
+	);
+
+	if (active_compute_capability < MIN_GPU_ARCH) {
+		tlog::warning() << "Insufficient compute capability " << active_compute_capability << " detected.";
+		tlog::warning() << "This program was compiled for >=" << MIN_GPU_ARCH << " and may thus behave unexpectedly.";
+	}
+
+    return active_device;
+}
+
+inline void sync_device(CudaRenderBuffer& render_buffer, CudaDevice& device, StreamAndEvent& stream) {
+	if (!device.dirty()) {
+		return;
+	}
+
+	if (device.is_primary()) {
+		device.data().hidden_area_mask = render_buffer.hidden_area_mask();
+		device.set_dirty(false);
+		return;
+	}
+
+	stream.signal(device.stream());
+	device.set_dirty(false);
+	device.signal(stream.get());
+}
+
+// From https://stackoverflow.com/questions/20843271/passing-a-non-copyable-closure-object-to-stdfunction-parameter
+template <class F>
+auto create_copyable_function(F&& f) {
+	using dF = std::decay_t<F>;
+	auto spf = std::make_shared<dF>(std::forward<F>(f));
+	return [spf](auto&&... args) -> decltype(auto) {
+		return (*spf)( decltype(args)(args)... );
+	};
+}
+
+inline ScopeGuard use_device(cudaStream_t stream, CudaRenderBuffer& render_buffer, CudaDevice& device) {
+	device.wait_for(stream);
+
+	if (device.is_primary()) {
+		device.set_render_buffer_view(render_buffer.view());
+		return ScopeGuard{[&device, stream]() {
+			device.set_render_buffer_view({});
+			device.signal(stream);
+		}};
+	}
+
+	int active_device = cuda_device();
+	auto guard = device.device_guard();
+
+	size_t n_pixels = product(render_buffer.in_resolution());
+
+	GPUMemoryArena::Allocation alloc;
+	auto scratch = allocate_workspace_and_distribute<vec4, float>(device.stream(), &alloc, n_pixels, n_pixels);
+
+	device.set_render_buffer_view({
+		std::get<0>(scratch),
+		std::get<1>(scratch),
+		render_buffer.in_resolution(),
+		render_buffer.spp(),
+		device.data().hidden_area_mask,
+	});
+
+	return ScopeGuard{create_copyable_function([&render_buffer, &device, guard=std::move(guard), alloc=std::move(alloc), active_device, stream]() {
+		// Copy device's render buffer's data onto the original render buffer
+		CUDA_CHECK_THROW(cudaMemcpyPeerAsync(render_buffer.frame_buffer(), active_device, device.render_buffer_view().frame_buffer, device.id(), product(render_buffer.in_resolution()) * sizeof(vec4), device.stream()));
+		CUDA_CHECK_THROW(cudaMemcpyPeerAsync(render_buffer.depth_buffer(), active_device, device.render_buffer_view().depth_buffer, device.id(), product(render_buffer.in_resolution()) * sizeof(float), device.stream()));
+
+		device.set_render_buffer_view({});
+		device.signal(stream);
+	})};
+}
+
 }

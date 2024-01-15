@@ -1,8 +1,9 @@
 #include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/marching_cubes.h>
-#include <synerfgine/file.h>
 
 #include <synerfgine/display.h>
+#include <synerfgine/file.h>
+#include <synerfgine/virtual_object.h>
 
 namespace sng {
 
@@ -12,7 +13,7 @@ void glfw_error_callback(int error, const char* description) {
 	tlog::error() << "GLFW error #" << error << ": " << description;
 }
 
-void Display::init_window(int resw, int resh, bool hidden) {
+GLFWwindow* Display::init_window(int resw, int resh, bool hidden) {
     m_window_res = {resw, resh};
 
 #ifdef NGP_GUI
@@ -21,6 +22,7 @@ void Display::init_window(int resw, int resh, bool hidden) {
 #endif
 	init_buffers();
 	Display::m_is_init = true;
+	return m_glfw_window;
 }
 
 GLFWwindow* Renderer::create_glfw_window(const ivec2& m_window_res) {
@@ -57,6 +59,9 @@ GLFWwindow* Renderer::create_glfw_window(const ivec2& m_window_res) {
     }
 
     tlog::success() << "Initialized OpenGL version " << glGetString(GL_VERSION);
+
+	init_opengl_shaders();
+
 	return m_glfw_window;
 }
 
@@ -92,10 +97,54 @@ void Ui::init_imgui(GLFWwindow* m_glfw_window) {
 	io.Fonts->AddFontDefault(&font_cfg);
 }
 
-void Ui::imgui() {
+void Ui::imgui(SyntheticWorld& syn_world, float frame_time) {
 	static std::string imgui_error_string = "";
 
-	if (ImGui::Begin("Camera path", 0, ImGuiWindowFlags_NoScrollbar));
+	if (ImGui::Begin("Metrics")) {
+		float fps = !frame_time ? 1000.0f : (1000.0f / frame_time);
+		ImGui::Text("Frame: %.2f ms (%.1f FPS)", frame_time, fps);
+	}
+	ImGui::End();
+
+	if (ImGui::Begin("Load Virtual Object")) {
+		ImGui::Text("Add Virtual Object (.obj only)");
+		ImGui::InputText("##PathFile", sng::virtual_object_fp, 1024);
+		ImGui::SameLine();
+		static std::string vo_path_load_error_string = "";
+		if (ImGui::Button("Load")) {
+			try {
+				syn_world.create_object(sng::virtual_object_fp);
+			} catch (const std::exception& e) {
+				ImGui::OpenPopup("Virtual object path load error");
+				vo_path_load_error_string = std::string{"Failed to load object path: "} + e.what();
+			}
+		}
+		if (ImGui::BeginPopupModal("Virtual object path load error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::Text("%s", vo_path_load_error_string.c_str());
+			if (ImGui::Button("OK", ImVec2(120, 0))) {
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
+		if (ImGui::CollapsingHeader("Virtual Objects", ImGuiTreeNodeFlags_DefaultOpen)) {
+			auto& objs = syn_world.objects();
+			std::string to_remove;
+			size_t k = 0;
+			for (auto& vo : objs) {
+				std::string delete_button_name = std::to_string(k) + ". Delete ";
+				delete_button_name.append(vo.first);
+				if (ImGui::Button(delete_button_name.c_str())) {
+					to_remove = vo.first;
+					break;
+				}
+				vo.second.imgui();
+				++k;
+			}
+			if (!to_remove.empty()) {
+				syn_world.delete_object(to_remove);
+			}
+		}
+	}
 	ImGui::End();
 }
 
@@ -178,9 +227,10 @@ void Display::init_buffers() {
 
 	m_render_buffer = std::make_shared<CudaRenderBuffer>(m_rgba_render_textures, m_depth_render_textures);
 	m_render_buffer->resize(m_view_res);
+	m_render_buffer->disable_dlss();
 }
 
-bool Display::begin_frame() {
+bool Display::begin_frame(CudaDevice& device, bool& is_dirty) {
 	if (glfwWindowShouldClose(m_glfw_window) || ImGui::IsKeyPressed(GLFW_KEY_ESCAPE) || ImGui::IsKeyPressed(GLFW_KEY_Q)) {
 		destroy();
 		return false;
@@ -188,6 +238,11 @@ bool Display::begin_frame() {
 
 	glfwPollEvents();
 	glfwGetFramebufferSize(m_glfw_window, &m_window_res.x, &m_window_res.y);
+	if (is_dirty) {
+		device.device_guard();
+		m_render_buffer->resize(m_window_res);
+		is_dirty = false;
+	}
 	return ui.begin_frame() && renderer.begin_frame();
 }
 
@@ -207,7 +262,10 @@ bool Renderer::begin_frame() {
 void Display::end_frame() {
 	renderer.end_frame();
 	ui.end_frame();
-}
+	auto time_now = std::chrono::system_clock::now();
+	m_last_frame_time = (float)std::chrono::duration_cast<std::chrono::milliseconds>(time_now - m_last_timestamp).count();
+	m_last_timestamp = time_now;
+ }
 
 void Ui::end_frame() {
 	ImGui::EndFrame();
@@ -216,24 +274,26 @@ void Ui::end_frame() {
 void Renderer::end_frame() {
 }
 
-bool Display::present() {
-	ui.imgui();
-	return renderer.present({1,1}, m_rgba_render_textures, m_depth_render_textures); 
+bool Display::present(CudaDevice& device, SyntheticWorld& syn_world) {
+	ui.imgui(syn_world, m_last_frame_time);
+	m_render_buffer->set_hidden_area_mask(nullptr);
+	return renderer.present({1,1}, m_rgba_render_textures, m_depth_render_textures, device); 
 }
 
-bool Renderer::present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> rgba, std::shared_ptr<ngp::GLTexture> depth) { 
+bool Renderer::present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> rgba, std::shared_ptr<ngp::GLTexture> depth, CudaDevice& device) { 
 	if (!m_glfw_window) {
 		throw std::runtime_error{"Window must be initialized to be presented."};
 	}
 
 	// Make sure all the cuda code finished its business here
 	CUDA_CHECK_THROW(cudaDeviceSynchronize());
-
 	glfwMakeContextCurrent(m_glfw_window);
 	int display_w, display_h;
 	glfwGetFramebufferSize(m_glfw_window, &display_w, &display_h);
+
+	// IMAGE RENDER
 	glViewport(0, 0, display_w, display_h);
-	glClearColor(0.f, 0.f, 0.f, 0.f);
+	glClearColor(0.0f, 0.0f, 0.5f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	glEnable(GL_BLEND);
@@ -242,12 +302,30 @@ bool Renderer::present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> r
 
 	ivec2 extent = {(int)((float)display_w / m_n_views.x), (int)((float)display_h / m_n_views.y)};
 
-	ivec2 top_left{0, display_h - (0 + 1) * extent.y};
-	// blit_texture(m_foveated_rendering_visualize ? Foveation{} : view.foveation, m_rgba_render_textures.at(i)->texture(), m_foveated_rendering ? GL_LINEAR : GL_NEAREST, m_depth_render_textures.at(i)->texture(), 0, top_left, extent);
-	blit_texture(ngp::Foveation{}, rgba->texture(), GL_NEAREST, depth->texture(), 0, top_left, extent);
-	glFinish();
-	glViewport(0, 0, display_w, display_h);
+    {
+		auto n_elements = m_window_res.x * m_window_res.y;
+		if (n_elements != m_cpu_frame_buffer.size()) m_cpu_frame_buffer.resize(n_elements);
+		if (n_elements != m_cpu_depth_buffer.size()) m_cpu_depth_buffer.resize(n_elements);
+        CUDA_CHECK_THROW(cudaMemcpyAsync(m_cpu_frame_buffer.data(), device.render_buffer_view().frame_buffer, n_elements * sizeof(vec4), cudaMemcpyDeviceToHost, device.stream()));
+        CUDA_CHECK_THROW(cudaMemcpyAsync(m_cpu_depth_buffer.data(), device.render_buffer_view().depth_buffer, n_elements * sizeof(float), cudaMemcpyDeviceToHost, device.stream()));
+		auto rgba_size = rgba->resolution();
+		auto depth_size = depth->resolution();
+		CUDA_CHECK_THROW(cudaStreamSynchronize(device.stream()));
 
+		glBindTexture(GL_TEXTURE_2D, rgba->texture());
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, rgba_size.x, rgba_size.y, 0, GL_RGBA, GL_FLOAT, m_cpu_frame_buffer.data());
+		glBindTexture(GL_TEXTURE_2D, depth->texture());
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, depth_size.x, depth_size.y, 0, GL_RED, GL_FLOAT, m_cpu_depth_buffer.data());
+    }
+
+	ivec2 top_left{0, display_h - extent.y};
+	// blit_texture(m_foveated_rendering_visualize ? Foveation{} : view.foveation, m_rgba_render_textures.at(i)->texture(), m_foveated_rendering ? GL_LINEAR : GL_NEAREST, m_depth_render_textures.at(i)->texture(), 0, top_left, extent);
+	// rgba->blit_from_cuda_mapping()
+	blit_texture(ngp::Foveation{}, rgba->texture(), GL_LINEAR, depth->texture(), 0, top_left, extent);
+	glFinish();
+
+	// UI DRAWING
+	glViewport(0, 0, display_w, display_h);
 
 	ImDrawList* list = ImGui::GetBackgroundDrawList();
 	list->AddCallback(ImDrawCallback_ResetRenderState, nullptr);
@@ -263,6 +341,7 @@ bool Renderer::present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> r
 	// textures without being worried about interfering with rendering.
 	glFinish();
 
+	return true;
 }
 
 void Renderer::blit_texture(const ngp::Foveation& foveation, GLint rgba_texture, GLint rgba_filter_mode, 
@@ -279,17 +358,22 @@ void Renderer::blit_texture(const ngp::Foveation& foveation, GLint rgba_texture,
 	bool depth = glIsEnabled(GL_DEPTH_TEST);
 	bool cull = glIsEnabled(GL_CULL_FACE);
 
-	if (!tex) glEnable(GL_TEXTURE_2D);
-	if (!depth) glEnable(GL_DEPTH_TEST);
-	if (cull) glDisable(GL_CULL_FACE);
+	if (!tex) 
+		glEnable(GL_TEXTURE_2D);
+	if (!depth) 
+		glEnable(GL_DEPTH_TEST);
+	if (cull) 
+		glDisable(GL_CULL_FACE);
 
 	glDepthFunc(GL_ALWAYS);
 	glDepthMask(GL_TRUE);
 
 	glBindVertexArray(m_blit_vao);
 	glUseProgram(m_blit_program);
-	glUniform1i(glGetUniformLocation(m_blit_program, "rgba_texture"), 0);
-	glUniform1i(glGetUniformLocation(m_blit_program, "depth_texture"), 1);
+	auto rgba_uniform = glGetUniformLocation(m_blit_program, "rgba_texture");
+	auto depth_uniform = glGetUniformLocation(m_blit_program, "depth_texture");
+	glUniform1i(rgba_uniform, 0);
+	glUniform1i(depth_uniform, 1);
 
 	auto bind_warp = [&](const ngp::FoveationPiecewiseQuadratic& warp, const std::string& uniform_name) {
 		glUniform1f(glGetUniformLocation(m_blit_program, (uniform_name + ".al").c_str()), warp.al);

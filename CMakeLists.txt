@@ -271,8 +271,11 @@ list(APPEND NGP_SOURCES
 	src/tinyexr_wrapper.cu
 	src/tinyobj_loader_wrapper.cu
 	src/triangle_bvh.cu
+	src/synerfgine/camera.cu
 	src/synerfgine/display.cu
 	src/synerfgine/engine.cu
+	src/synerfgine/syn_world.cu
+	src/synerfgine/virtual_object.cu
 )
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})

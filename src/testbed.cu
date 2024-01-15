@@ -2181,7 +2181,7 @@ void Testbed::handle_user_input() {
 	keyboard_event();
 
 	if (m_imgui.enabled) {
-		imgui();
+		// imgui();
 	}
 }
 
