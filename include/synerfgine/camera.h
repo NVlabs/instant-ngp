@@ -24,13 +24,12 @@ public:
 
     ~Camera();
 
-    void translate_camera(const vec3& rel, const mat3& rot, bool allow_up_down);
+    // void translate_amera(const vec3& rel, const mat3& rot = mat3::identity());
     vec3 look_at() const;
     void set_look_at(const vec3& pos);
     void set_scale(float scale);
     void set_view_dir(const vec3& dir);
     void set_position(const vec3& pos);
-
     void set_resolution(const ivec2& res);
     void generate_rays_async(CudaDevice& device);
 
@@ -43,10 +42,11 @@ private:
     vec3 m_dir{};
     vec3 m_up{};
     float m_scale{};
-    mat4x3 m_camera{};
+    mat4 m_rotate{};
+    mat4 m_camera{};
     ivec2 m_resolution{};
 
-    GPUMemory<mat4x3> g_camera;
+    GPUMemory<mat4> g_camera;
     GPUMemory<vec3> g_positions;
     GPUMemory<vec3> g_directions;
 };

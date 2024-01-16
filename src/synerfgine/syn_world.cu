@@ -55,16 +55,19 @@ bool SyntheticWorld::handle(CudaDevice& device, const ivec2& resolution) {
             CUDA_CHECK_THROW(cudaStreamSynchronize(one_timer));
             is_first = false;
         }
-        draw_object_async(device, vo);
-        CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
+        // draw_object_async(device, vo);
+        // CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
     }
-    // linear_kernel(debug_draw_rays, 0, stream, n_elements,
-    //     m_resolution.x, 
-    //     m_resolution.y, 
-    //     cam.gpu_positions(),
-    //     cam.gpu_directions(),
-    //     device.render_buffer_view().frame_buffer, 
-    //     device.render_buffer_view().depth_buffer);
+    {
+        auto n_elements = m_resolution.x * m_resolution.y;
+        linear_kernel(debug_draw_rays, 0, stream, n_elements,
+            m_resolution.x, 
+            m_resolution.y, 
+            cam.gpu_positions(),
+            cam.gpu_directions(),
+            device.render_buffer_view().frame_buffer, 
+            device.render_buffer_view().depth_buffer);
+    }
     return true;
 }
 
@@ -140,7 +143,7 @@ __global__ void debug_draw_rays(const uint32_t n_elements, const uint32_t width,
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_elements) return;
     vec3 dir = ray_directions[i];
-    rgba[i] = vec4(abs(dir.x), abs(dir.y), abs(dir.z), 1.0);
+    rgba[i] = vec4(abs(dir.x), abs(dir.y), 0.0, 1.0);
 }
 
 __global__ void debug_paint(const uint32_t n_elements, const uint32_t width, const uint32_t height, 
