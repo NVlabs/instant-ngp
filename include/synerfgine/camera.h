@@ -37,13 +37,14 @@ public:
 
     vec3* gpu_directions() { return g_directions.data(); }
 
+    mat4 m_world_to_cam{};
+    mat4 m_cam_to_world{};
+
 private:
     vec3 m_eye{};
     vec3 m_dir{};
     vec3 m_up{};
     float m_scale{};
-    mat4 m_rotate{};
-    mat4 m_camera{};
     ivec2 m_resolution{};
 
     GPUMemory<mat4> g_camera;

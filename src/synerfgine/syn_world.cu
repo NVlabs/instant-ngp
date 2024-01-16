@@ -25,6 +25,11 @@ __global__ void debug_draw_rays(const uint32_t n_elements, const uint32_t width,
 __global__ void debug_triangle_vertices(const uint32_t n_elements, const Triangle* __restrict__ triangles,
     vec3* __restrict__ ray_origins, vec3* __restrict__ ray_directions);
 
+__global__ void debug_rt(const uint32_t n_elements, const uint32_t width, const uint32_t height, 
+    const vec3 ro, const mat4 obj_to_world, const mat4 world_to_cam, 
+    const uint32_t tri_count, const Triangle* __restrict__ triangles, 
+    vec4* __restrict__ rgba, float* __restrict__ depth);
+
 bool SyntheticWorld::handle(CudaDevice& device, const ivec2& resolution) {
     auto stream = device.stream();
     device.render_buffer_view().clear(stream);
@@ -57,17 +62,32 @@ bool SyntheticWorld::handle(CudaDevice& device, const ivec2& resolution) {
         }
         // draw_object_async(device, vo);
         // CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
+        {
+            const std::string& name = vo_kv.first;
+            uint32_t tri_count = static_cast<uint32_t>(m_objects.at(name).cpu_triangles().size());
+            auto n_elements = m_resolution.x * m_resolution.y;
+            linear_kernel(debug_rt, 0, stream, n_elements,
+                m_resolution.x, 
+                m_resolution.y, 
+                cam.m_world_to_cam[3],
+                mat4::identity(),
+                cam.m_world_to_cam,
+                tri_count,
+                m_objects.at(name).gpu_triangles(),
+                device.render_buffer_view().frame_buffer, 
+                device.render_buffer_view().depth_buffer);
+        }
     }
-    {
-        auto n_elements = m_resolution.x * m_resolution.y;
-        linear_kernel(debug_draw_rays, 0, stream, n_elements,
-            m_resolution.x, 
-            m_resolution.y, 
-            cam.gpu_positions(),
-            cam.gpu_directions(),
-            device.render_buffer_view().frame_buffer, 
-            device.render_buffer_view().depth_buffer);
-    }
+    // {
+    //     auto n_elements = m_resolution.x * m_resolution.y;
+    //     linear_kernel(debug_draw_rays, 0, stream, n_elements,
+    //         m_resolution.x, 
+    //         m_resolution.y, 
+    //         cam.gpu_positions(),
+    //         cam.gpu_directions(),
+    //         device.render_buffer_view().frame_buffer, 
+    //         device.render_buffer_view().depth_buffer);
+    // }
     return true;
 }
 
@@ -131,10 +151,41 @@ __global__ void gpu_draw_object(const uint32_t n_elements, const uint32_t width,
     }
     depth[i] = max(10.0 - dt, 0.0);
     if (dt < ngp::MAX_RT_DIST) {
-        rgba[i] = vec4(1.0, 0.0, 0.0, 1.0);
+        rgba[i] = vec4(vec3(depth[i] / 10.), 1.0);
     } else {
         rgba[i] = vec4(vec3(0.0), 1.0);
     }
+}
+
+__global__ void debug_rt(const uint32_t n_elements, const uint32_t width, const uint32_t height, 
+    const vec3 ro, const mat4 obj_to_world, const mat4 world_to_cam, 
+    const uint32_t tri_count, const Triangle* __restrict__ triangles, 
+    vec4* __restrict__ rgba, float* __restrict__ depth) {
+	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
+	if (i >= n_elements) return;
+    float x = (float)(i % width) / (float)width - 0.5;
+    float y = (float)(i / height) / (float)height - 0.5;
+    vec3 rd = normalize(vec3(x, y, 1.0));
+    float dt = ngp::MAX_RT_DIST;
+    vec3 new_ro = ro;
+    for (size_t k = 0; k < tri_count; ++k) {
+        Triangle tri = triangles[k];
+        tri.a = (world_to_cam * obj_to_world * vec4(tri.a, 1.0)).xyz();
+        tri.b = (world_to_cam * obj_to_world * vec4(tri.b, 1.0)).xyz();
+        tri.c = (world_to_cam * obj_to_world * vec4(tri.c, 1.0)).xyz();
+        float t = tri.ray_intersect(ro, rd);
+        if (t < dt && t > ngp::MIN_RT_DIST) {
+            dt = t;
+            new_ro = ro + rd * t;
+        }
+    }
+    depth[i] = max(10.0 - dt, 0.0);
+    if (dt < ngp::MAX_RT_DIST) {
+        rgba[i] = vec4(vec3(depth[i] / 50.), 1.0);
+    } else {
+        rgba[i] = vec4(vec3(0.0), 1.0);
+    }
+
 }
 
 __global__ void debug_draw_rays(const uint32_t n_elements, const uint32_t width, const uint32_t height, 
