@@ -43,13 +43,14 @@ private:
     fs::path file_path;
     vec3 pos;
     vec3 rot;
+    vec3 center;
 	tinyobj::attrib_t attrib;
 	std::vector<tinyobj::shape_t> shapes;
 	std::vector<tinyobj::material_t> materials;
     
     std::vector<Triangle> triangles_cpu;
+	GPUMemory<Triangle> orig_triangles_gpu;
 	GPUMemory<Triangle> triangles_gpu;
-	// GPUMemory<Triangle> cam_triangles_gpu;
 };
 
 VirtualObject load_virtual_obj(const char* fp, const std::string& name);

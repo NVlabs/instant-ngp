@@ -10,7 +10,7 @@ namespace sng {
 using namespace tcnn;
 
 struct Light {
-	Light(): pos(1.0f), col(1.0f), intensity(1.0f) {}
+	Light(): pos(3.0f), col(1.0f), intensity(1.0f) {}
     Light(const vec3& pos, const vec3& col, float intensity) : pos(pos), col(col), intensity(intensity) {}
     vec3 pos;
     vec3 col;

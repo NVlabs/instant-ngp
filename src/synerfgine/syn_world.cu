@@ -15,7 +15,7 @@ __global__ void debug_paint(const uint32_t n_elements, const uint32_t width, con
     vec4* __restrict__ rgba, float* __restrict__ depth);
 
 __global__ void gpu_draw_object(const uint32_t n_elements, const uint32_t width, const uint32_t height, const uint32_t tri_count,
-    vec3* __restrict__ ray_origins, vec3* __restrict__ ray_directions, const Triangle* __restrict__ triangles,
+    vec3* __restrict__ ray_origins, vec3* __restrict__ ray_directions, const Triangle* __restrict__ triangles, const Light sun,
     vec4* __restrict__ rgba, float* __restrict__ depth);
 
 __global__ void debug_draw_rays(const uint32_t n_elements, const uint32_t width, const uint32_t height, 
@@ -51,8 +51,8 @@ bool SyntheticWorld::handle(CudaDevice& device, const ivec2& resolution) {
             CUDA_CHECK_THROW(cudaStreamSynchronize(one_timer));
             is_first = false;
         }
-        // draw_object_async(device, vo);
-        // CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
+        draw_object_async(device, vo);
+        CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
         {
             const std::string& name = vo_kv.first;
             uint32_t tri_count = static_cast<uint32_t>(m_objects.at(name).cpu_triangles().size());
@@ -69,16 +69,17 @@ bool SyntheticWorld::handle(CudaDevice& device, const ivec2& resolution) {
             //     device.render_buffer_view().depth_buffer);
         }
     }
-    {
-        auto n_elements = m_resolution.x * m_resolution.y;
-        linear_kernel(debug_draw_rays, 0, stream, n_elements,
-            m_resolution.x, 
-            m_resolution.y, 
-            cam.gpu_positions(),
-            cam.gpu_directions(),
-            device.render_buffer_view().frame_buffer, 
-            device.render_buffer_view().depth_buffer);
-    }
+    // {
+    //     auto n_elements = m_resolution.x * m_resolution.y;
+    //     linear_kernel(debug_draw_rays, 0, stream, n_elements,
+    //         m_resolution.x, 
+    //         m_resolution.y, 
+    //         cam.gpu_positions(),
+    //         cam.gpu_directions(),
+    //         device.render_buffer_view().frame_buffer, 
+    //         device.render_buffer_view().depth_buffer);
+    //     CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
+    // }
     return true;
 }
 
@@ -105,30 +106,45 @@ void SyntheticWorld::draw_object_async(CudaDevice& device, VirtualObject& virtua
         cam.gpu_positions(),
         cam.gpu_directions(),
         virtual_object.gpu_triangles(),
+        cam.sun(),
         device.render_buffer_view().frame_buffer, 
         device.render_buffer_view().depth_buffer);
+    CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
 }
 
 __global__ void gpu_draw_object(const uint32_t n_elements, const uint32_t width, const uint32_t height, const uint32_t tri_count,
-    vec3* __restrict__ ray_origins, vec3* __restrict__ ray_directions, const Triangle* __restrict__ triangles,
+    vec3* __restrict__ ray_origins, vec3* __restrict__ ray_directions, const Triangle* __restrict__ triangles, const Light sun,
     vec4* __restrict__ rgba, float* __restrict__ depth) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_elements) return;
     rgba[i] = vec4(vec3(0.0), 1.0);
     depth[i] = ngp::MAX_RT_DIST;
     vec3 rd = ray_directions[i];
-    vec3 ro = ray_directions[i];
+    vec3 ro = ray_origins[i];
     float dt = ngp::MAX_RT_DIST;
+    vec3 normal;
     for (size_t k = 0; k < tri_count; ++k) {
         float t = triangles[k].ray_intersect(ro, rd);
         if (t < dt && t > ngp::MIN_RT_DIST) {
             dt = t;
-            ro += rd * t;
+            normal = triangles[k].normal();
+        }
+        if (i == n_elements / 2) {
+            printf("ro: [%f, %f, %f]; rd: [%f, %f, %f]; t: [%f]\n", ro.r, ro.b, ro.g, rd.r, rd.b, rd.g, t);
+            printf("TRI: [%f, %f, %f], [%f, %f, %f], [%f, %f, %f]\n", 
+                triangles[k].a.r, triangles[k].a.b, triangles[k].a.g,
+                triangles[k].b.r, triangles[k].b.b, triangles[k].b.g,
+                triangles[k].c.r, triangles[k].c.b, triangles[k].c.g);
         }
     }
-    depth[i] = max(10.0 - dt, 0.0);
+
+    // depth[i] = max(10.0 - dt, 0.0);
     if (dt < ngp::MAX_RT_DIST) {
-        rgba[i] = vec4(vec3(depth[i] / 10.), 1.0);
+        ro += rd * dt;
+        vec3 to_sun = normalize(sun.pos - ro);
+        // FOR DIFFUSE ONLY, NO AMBIENT / SPEC
+        float ndotv = dot(normal, to_sun);
+        rgba[i] = vec4(ndotv * vec3(1.0, 0.2, 0.0), 1.0);
     } else {
         rgba[i] = vec4(vec3(0.0), 1.0);
     }
@@ -158,11 +174,11 @@ __global__ void debug_rt(const uint32_t n_elements, const uint32_t width, const 
     }
     depth[i] = max(10.0 - dt, 0.0);
     if (dt < ngp::MAX_RT_DIST) {
-        rgba[i] = vec4(vec3(depth[i] / 50.), 1.0);
+        rgba[i] = vec4(vec3(depth[i]), 1.0);
+        printf("I: %i\n", i);
     } else {
         rgba[i] = vec4(vec3(0.0), 1.0);
     }
-
 }
 
 __global__ void debug_draw_rays(const uint32_t n_elements, const uint32_t width, const uint32_t height, 
@@ -170,8 +186,9 @@ __global__ void debug_draw_rays(const uint32_t n_elements, const uint32_t width,
     vec4* __restrict__ rgba, float* __restrict__ depth) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_elements) return;
-    vec3 dir = ray_directions[i];
-    rgba[i] = vec4(abs(dir.x), abs(dir.y), 0.0, 1.0);
+	// if (i == 0) { printf("DIR: %f %f %f\n", ray_directions[i].x, ray_directions[i].y, ray_directions[i].z); }
+    rgba[i] = vec4(abs(ray_directions[i]), 1.0);
+	// if (i % 100000 == 0) { printf("COL %i: %f %f %f %f\n", i, rgba[i].x, rgba[i].y, rgba[i].z, rgba[i].w); }
 }
 
 __global__ void debug_paint(const uint32_t n_elements, const uint32_t width, const uint32_t height, 
@@ -193,10 +210,10 @@ __global__ void debug_triangle_vertices(const uint32_t n_elements, const Triangl
         tri->a.r, tri->a.g, tri->a.b,
         tri->b.r, tri->b.g, tri->b.b,
         tri->c.r, tri->c.g, tri->c.b);
-    printf("%i: pos [%f %f %f], dir [%f %f %f]\n", i, 
-        ray_origins[i].r, ray_origins[i].g, ray_origins[i].b, 
-        ray_directions[i].r, ray_directions[i].g, ray_directions[i].b
-    );
+    // printf("%i: pos [%f %f %f], dir [%f %f %f]\n", i, 
+    //     ray_origins[i].r, ray_origins[i].g, ray_origins[i].b, 
+    //     ray_directions[i].r, ray_directions[i].g, ray_directions[i].b
+    // );
 }
 
 }

@@ -17,29 +17,12 @@
 #endif
 
 namespace sng {
-__global__ void debug_set_screen(uint32_t n_elements, vec4* __restrict__ render_buffer, uint32_t width, uint32_t height);
 __global__ void transform_triangles(uint32_t n_elements, const Triangle* __restrict__ orig, 
-	Triangle* __restrict tris, const mat4x3* camera_matrix, const mat4* world_matrix);
+	Triangle* __restrict__ tris, const mat4 world_matrix);
 
 VirtualObject sng::load_virtual_obj(const char* fp, const std::string& name) {
     return VirtualObject(fp, name);
 }
-
-// void sng::reset_final_views(size_t n_views, std::vector<RTView>& rt_views, ivec2 resolution) {
-//     while (rt_views.size() > n_views) {
-//         rt_views.pop_back();
-//     }
-// 	rt_views.resize(n_views, RTView(resolution));
-// }
-
-// void RTView::debug_paint(cudaStream_t stream) {
-// 	if (render_buffer->frame_buffer() != nullptr) {
-// 		uint32_t width_res = static_cast<uint32_t>(render_buffer->in_resolution().r);
-// 		uint32_t height_res = static_cast<uint32_t>(render_buffer->in_resolution().g);
-// 		linear_kernel(debug_set_screen, 0, stream, width_res * height_res, 
-// 			render_buffer->frame_buffer(), width_res, height_res);
-// 	}
-// }
 
 VirtualObject::VirtualObject(const char* fp, const std::string& name) 
     : file_path(fp), name(name), pos(0.0), rot(0.0) {
@@ -69,6 +52,8 @@ VirtualObject::VirtualObject(const char* fp, const std::string& name)
 
 	tlog::success() << "Loaded mesh \"" << file_path.c_str() << "\" file with " << shapes.size() << " shapes.";
 	
+	vec3 center{0.0};
+	uint32_t tri_count = 0;
     for(auto& shape : shapes) {
 		auto& idxs = shape.mesh.indices;
 		auto& verts = attrib.vertices;
@@ -83,11 +68,15 @@ VirtualObject::VirtualObject(const char* fp, const std::string& name)
             Triangle triangle {
                 get_vec(i), get_vec(i+1), get_vec(i+2)
             };
+			center += triangle.a + triangle.b + triangle.c;
+			tri_count += 3;
 			// std::cout << triangle << std::endl
             triangles_cpu.push_back(triangle);
         }
     }
+	if (tri_count) center = center / (float)tri_count;
 	// bvh = TriangleBvh::make();
+	orig_triangles_gpu.resize_and_copy_from_host(triangles_cpu);
 	triangles_gpu.resize_and_copy_from_host(triangles_cpu);
 	// cam_triangles_gpu.resize_and_copy_from_host(triangles_cpu);
 	// bvh->build(triangles_cpu, 3);
@@ -111,15 +100,6 @@ mat4 VirtualObject::get_transform() {
 	return mat4(rmat[0], rmat[1], rmat[2], vec4(pos, 1.0));
 }
 
-// GPUMemory<Triangle>& VirtualObject::transform_tris(const mat4x3& camera_matrix, cudaStream_t stream) {
-//     mat4x3* gpu_camera_matrix;
-//     CUDA_CHECK_THROW(cudaMallocAsync(&gpu_camera_matrix, sizeof(mat4x3), stream));
-//     CUDA_CHECK_THROW(cudaMemcpyAsync(gpu_camera_matrix, &camera_matrix, sizeof(mat4x3), cudaMemcpyHostToDevice, stream));
-// 	linear_kernel(transform_triangles, 0, stream, triangles_cpu.size(), triangles_gpu.data(), cam_triangles_gpu.data(), gpu_camera_matrix);
-// 	CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
-// 	return cam_triangles_gpu;
-// }
-
 VirtualObject::~VirtualObject() {
 	triangles_gpu.free_memory();
 }
@@ -129,30 +109,25 @@ void VirtualObject::imgui() {
     std::string rot_name = "Rotation: " + name;
     ImGui::Text(name.c_str());
 	// update the bvh when the values change
-    if (ImGui::SliderFloat3(pos_name.c_str(), pos.data(), sng::MIN_DIST, sng::MAX_DIST)) {}
-    if (ImGui::SliderFloat3(rot_name.c_str(), rot.data(), sng::MIN_DIST, sng::MAX_DIST)) {}
+    if (ImGui::SliderFloat3(pos_name.c_str(), pos.data(), sng::MIN_DIST, sng::MAX_DIST)) {
+		// TODO: DEVICE FROM THE SYN_WORLD, PASS INTO HERE, WAIT FOR STREAM
+		// linear_kernel(triangles_cpu.size(), 0, 
+	}
+    if (ImGui::SliderFloat3(rot_name.c_str(), rot.data(), sng::MIN_DIST, sng::MAX_DIST)) {
+
+	}
     ImGui::Separator();
 }
 
-__global__ void debug_set_screen(uint32_t n_elements, vec4* __restrict__ render_buffer, uint32_t width, uint32_t height) {
-	uint32_t tidx = threadIdx.x + blockIdx.x * blockDim.x;
-	uint32_t x = tidx % width;
-	uint32_t y = tidx / width;
-	if (x < width && y < height) {
-		vec4 data_v = vec4((float)x / (float) width, (float)y / (float)height, 0.0, 1.0);
-		render_buffer[tidx] = data_v;
-	}
-}
-
 __global__ void transform_triangles(uint32_t n_elements, const Triangle* __restrict__ orig, 
-	Triangle* __restrict tris, const mat4x3* camera_matrix, const mat4* world_matrix) {
+	Triangle* __restrict__ tris, const mat4 world_matrix) {
     uint32_t i = threadIdx.x + blockDim.x * blockIdx.x;
     if (i >= n_elements) {
         return;
     }
-	tris[i].a = *camera_matrix * vec4(orig[i].a, 1.0);
-	tris[i].b = *camera_matrix * vec4(orig[i].b, 1.0);
-	tris[i].c = *camera_matrix * vec4(orig[i].c, 1.0);
+	tris[i].a = world_matrix * vec4(orig[i].a, 1.0);
+	tris[i].b = world_matrix * vec4(orig[i].b, 1.0);
+	tris[i].c = world_matrix * vec4(orig[i].c, 1.0);
 }
 
 }

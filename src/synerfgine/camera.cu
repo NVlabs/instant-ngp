@@ -34,43 +34,48 @@ __global__ void init_rays_cam(
 	ERenderMode render_mode
 );
 
-void Camera::handle_mouse_wheel() {
+bool Camera::handle_mouse_wheel() {
 	float delta = ImGui::GetIO().MouseWheel;
 	if (delta == 0) {
-		return;
+		return false;
 	}
 
 	float scale_factor = pow(1.1f, -delta);
 	set_scale(m_scale * scale_factor);
+	return true;
 }
 
-void Camera::handle_mouse_drag() {
+bool Camera::handle_mouse_drag() {
 	vec2 rel = vec2{ImGui::GetIO().MouseDelta.x, ImGui::GetIO().MouseDelta.y} / (float)m_resolution[m_fov_axis];
 	vec2 mouse = {ImGui::GetMousePos().x, ImGui::GetMousePos().y};
 
 	vec3 side = m_camera[0];
+	bool is_moved = false;
 
 	// Left held
 	if (ImGui::GetIO().MouseDown[0]) {
         float rot_sensitivity = m_fps_camera ? 0.35f : 1.0f;
         mat3 rot = rotation_from_angles(-rel * 2.0f * PI() * rot_sensitivity);
 
-        if (m_fps_camera) {
+        // if (m_fps_camera) {
             rot *= mat3(m_camera);
             m_camera = mat4x3(rot[0], rot[1], rot[2], m_camera[3]);
-        } else {
-            // Turntable
-            auto old_look_at = look_at();
-            set_look_at({0.0f, 0.0f, 0.0f});
-            m_camera = rot * m_camera;
-            set_look_at(old_look_at);
-        }
+        // } else {
+        //     // Turntable
+        //     auto old_look_at = look_at();
+        //     set_look_at({0.0f, 0.0f, 0.0f});
+        //     m_camera = rot * m_camera;
+        //     set_look_at(old_look_at);
+        // }
+		is_moved = true;
 	}
 
 	// Right held
 	if (ImGui::GetIO().MouseDown[1]) {
 		mat3 rot = rotation_from_angles(-rel * 2.0f * PI());
+		// MOVING LIGHT SOURCE
 		// m_slice_plane_z += -rel.y * m_bounding_radius;
+		m_sun.pos = transpose(rot) * m_sun.pos;
 	}
 
 	// Middle pressed
@@ -93,18 +98,17 @@ void Camera::handle_mouse_drag() {
 		}
 
 		translate_camera(translation, mat3(m_camera));
+		is_moved = true;
 	}
+	return is_moved;
 }
 
 void Camera::generate_rays_async(CudaDevice& device) {
-	handle_mouse_drag();
-	handle_mouse_wheel();
+	if (!handle_user_input()) {
+		return;
+	}
     cudaStream_t stream = device.stream();
     uint32_t n_elements = m_resolution.x * m_resolution.y;
-    // {
-    //     gpu_camera.check_guards();
-    //     gpu_camera.resize_and_copy_from_host({m_camera});
-    // }
 	auto buf_size = sizeof(vec3) * n_elements;
     if (m_gpu_positions.size() != buf_size) {
         m_gpu_positions.check_guards();
@@ -114,6 +118,10 @@ void Camera::generate_rays_async(CudaDevice& device) {
         m_gpu_directions.check_guards();
         m_gpu_directions.resize(buf_size);
     }
+
+	vec2 focal_length = calc_focal_length(device.render_buffer_view().resolution, m_relative_focal_length, m_fov_axis, m_zoom);
+	vec2 screen_center = render_screen_center(camera_default::screen_center);
+
     CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
     // generate rays
 
@@ -124,11 +132,11 @@ void Camera::generate_rays_async(CudaDevice& device) {
         m_gpu_positions.data(),
         m_gpu_directions.data(),
         m_resolution,
-        m_relative_focal_length,
+        focal_length,
 		m_camera,
 		m_camera,
 		vec4(0.0f), // rolling_shutter
-        m_screen_center,
+        screen_center,
 		vec3(0.0),
 		true,
 		// render_aabb,
@@ -145,8 +153,6 @@ void Camera::generate_rays_async(CudaDevice& device) {
 		Buffer2DView<const vec2>{}, // distortion
 		ERenderMode::Shade
     );
-
-    CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
 }
 
 void Camera::translate_camera(const vec3& rel, const mat3& rot, bool allow_up_down) {
@@ -195,9 +201,9 @@ void Camera::reset_camera() {
     m_scale = camera_default::scale;
 
 	m_camera = transpose(mat3x4{
-		1.0f, 0.0f, 0.0f, 0.5f,
-		0.0f, -1.0f, 0.0f, 0.5f,
-		0.0f, 0.0f, -1.0f, 0.5f
+		1.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f, 2.0f,
+		0.0f, 0.0f, 1.0f, 0.0f
 	});
 
 	m_camera[3] -= m_scale * view_dir();
@@ -217,6 +223,44 @@ vec2 Camera::fov_xy() const {
 
 void Camera::set_fov_xy(const vec2& val) {
 	m_relative_focal_length = fov_to_focal_length(ivec2(1), val);
+}
+
+vec2 Camera::calc_focal_length(const ivec2& resolution, const vec2& relative_focal_length, int fov_axis, float zoom) const {
+	return relative_focal_length * (float)resolution[fov_axis] * zoom;
+}
+
+vec2 Camera::render_screen_center(const vec2& screen_center) const {
+	// see pixel_to_ray for how screen center is used; 0.5, 0.5 is 'normal'. we flip so that it becomes the point in the original image we want to center on.
+	return (0.5f - screen_center) * m_zoom + 0.5f;
+}
+
+inline NGP_HOST_DEVICE Ray my_uv_to_ray(
+	uint32_t spp,
+	const vec2& uv,
+	const ivec2& resolution,
+	const vec2& focal_length,
+	const mat4x3& camera_matrix,
+	const vec2& screen_center,
+	const float aperture_size = 1.0f,
+	const float focus_z = 1.0f,
+	const vec3 near_distance = vec3{0.0}
+) {
+
+	vec3 dir = {
+		(uv.x - screen_center.x) * (float)resolution.x / focal_length.x,
+		(uv.y - screen_center.y) * (float)resolution.y / focal_length.y,
+		1.0f
+	};
+
+	vec3 origin = camera_matrix[3];
+	vec3 lookat = origin + dir * focus_z;
+	// auto px = ivec2(uv * vec2(resolution));
+	// vec2 blur = aperture_size * square2disk_shirley(ld_random_val_2d(spp, px.x * 19349663 + px.y * 96925573) * 2.0f - 1.0f);
+	// origin += mat2x3(camera_matrix) * blur;
+	// dir = (lookat - origin) / focus_z;
+
+	origin += dir * near_distance;
+	return {origin, dir};
 }
 
 __global__ void init_rays_cam(
@@ -246,16 +290,15 @@ __global__ void init_rays_cam(
 	Buffer2DView<const vec2> distortion,
 	ERenderMode render_mode
 ) {
-	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
-	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
+	uint32_t idx =threadIdx.x + blockDim.x * blockIdx.x; 
+	uint32_t x = idx % resolution.x;
+	uint32_t y = idx / resolution.x;
 
-	if (x >= resolution.x || y >= resolution.y) {
+	if (idx > n_elements) {
 		return;
 	}
 
-	uint32_t idx = x + resolution.x * y;
-	frame_buffer[idx] = vec4(0.3, 0.0, 0.0, 1.0);
-
+	// printf("DIR %i %i %i %i\n", x, y, resolution.x, resolution.y); 
 
 	if (plane_z < 0) {
 		aperture_size = 0.0;
@@ -264,8 +307,16 @@ __global__ void init_rays_cam(
 	vec2 pixel_offset = ld_random_pixel_offset(snap_to_pixel_centers ? 0 : sample_index);
 	vec2 uv = vec2{(float)x + pixel_offset.x, (float)y + pixel_offset.y} / vec2(resolution);
 	mat4x3 camera = get_xform_given_rolling_shutter({camera_matrix0, camera_matrix1}, rolling_shutter, uv, ld_random_val(sample_index, idx * 72239731));
-
-	if (idx == 0) { printf("UV: %f %ff\n", uv.x, uv.y); }
+    // int xx = idx % resolution.x;
+    // int yy = idx / resolution.x;
+	// if (idx == 0) {
+	// 	printf("%f %f %f\n%f %f %f\n%f %f %f\n%f %f %f\n\n", 
+	// 		camera[0].r, camera[0].g, camera[0].b, 
+	// 		camera[1].r, camera[1].g, camera[1].b, 
+	// 		camera[2].r, camera[2].g, camera[2].b, 
+	// 		camera[3].r, camera[3].g, camera[3].b
+	// 	);
+	// }
 
 	Ray ray = uv_to_ray(
 		sample_index,
@@ -273,18 +324,16 @@ __global__ void init_rays_cam(
 		resolution,
 		focal_length,
 		camera,
-		screen_center,
-		parallax_shift,
-		near_distance,
-		plane_z,
-		aperture_size,
-		foveation,
-		hidden_area_mask,
-		lens,
-		distortion
+		screen_center
+		// parallax_shift,
+		// near_distance,
+		// plane_z,
+		// aperture_size,
+		// foveation,
+		// hidden_area_mask,
+		// lens,
+		// distortion
 	);
-
-	if (idx == 0) { printf("DIR: %f %f %f\n", ray.d.x, ray.d.y, ray.d.z); }
 
 	// NerfPayload& payload = payloads[idx];
 	// payload.max_weight = 0.0f;
@@ -342,7 +391,7 @@ __global__ void init_rays_cam(
 
     positions[idx] = ray.o;
     directions[idx] = ray.d;
-	frame_buffer[idx] = vec4(abs(ray.d), 1.0);
+	frame_buffer[idx] = vec4(abs(normalize(ray.d)), 1.0);
 	// payload.origin = ray.o;
 	// payload.dir = ray.d;
 	// payload.t = t;

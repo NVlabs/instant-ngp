@@ -13,7 +13,6 @@ namespace sng {
 namespace inputs {
 using namespace tcnn;
 static vec3 i_camera_eye = camera_default::position;
-static vec3 i_camera_at = camera_default::lookat;
 }
 
 bool Display::m_is_init = false;
@@ -69,6 +68,9 @@ GLFWwindow* Renderer::create_glfw_window(const ivec2& m_window_res) {
 
     tlog::success() << "Initialized OpenGL version " << glGetString(GL_VERSION);
 
+	// TODO: Fix window size crashing issues
+	// glfwSetWindowSizeCallback(m_glfw_window, );
+
 	init_opengl_shaders();
 
 	return m_glfw_window;
@@ -108,12 +110,6 @@ void Ui::init_imgui(GLFWwindow* m_glfw_window) {
 
 void Ui::imgui(SyntheticWorld& syn_world, float frame_time) {
 	static std::string imgui_error_string = "";
-
-	if (ImGui::Begin("Metrics")) {
-		float fps = !frame_time ? 1000.0f : (1000.0f / frame_time);
-		ImGui::Text("Frame: %.2f ms (%.1f FPS)", frame_time, fps);
-	}
-	ImGui::End();
 
 	if (ImGui::Begin("Load Virtual Object")) {
 		ImGui::Text("Add Virtual Object (.obj only)");
@@ -155,7 +151,20 @@ void Ui::imgui(SyntheticWorld& syn_world, float frame_time) {
 		}
 	}
 	ImGui::End();
-	// if (ImGui::Begin("Camera")) {
+	if (ImGui::Begin("Camera")) {
+		auto rd = syn_world.camera().view_pos();
+		ImGui::Text("View Pos: %f, %f, %f", rd.r, rd.g, rd.b);
+		rd = syn_world.camera().view_dir();
+		ImGui::Text("View Dir: %f, %f, %f", rd.r, rd.g, rd.b);
+		rd = syn_world.camera().look_at();
+		ImGui::Text("Look At: %f, %f, %f", rd.r, rd.g, rd.b);
+		rd = syn_world.camera().sun_pos();
+		ImGui::Text("Sun Pos: %f, %f, %f", rd.r, rd.g, rd.b);
+		float fps = !frame_time ? 1000.0f : (1000.0f / frame_time);
+		ImGui::Text("Frame: %.2f ms (%.1f FPS)", frame_time, fps);
+		if (ImGui::Button("Reset Camera")) {
+			syn_world.mut_camera().reset_camera();
+		}
 	// 	if (ImGui::SliderFloat3("Camera Position", inputs::i_camera_eye.data(), -10.0, 10.0)) {
 	// 		// syn_world.camera_position(inputs::i_camera_eye);
 	// 	}
@@ -170,8 +179,8 @@ void Ui::imgui(SyntheticWorld& syn_world, float frame_time) {
 	// 		inputs::i_camera_at = camera_default::lookat;
 	// 		// syn_world.camera_look_at(inputs::i_camera_at);
 	// 	}
-	// }
-	// ImGui::End();
+	}
+	ImGui::End();
 }
 
 void Renderer::init_opengl_shaders() {

@@ -29,6 +29,9 @@ public:
     void delete_object(const std::string& name) {
         m_objects.erase(name);
     }
+    const Camera& camera() { return m_camera; }
+    Camera& mut_camera() { return m_camera; }
+
 private:
     ivec2 m_resolution;
     void draw_object_async(CudaDevice& device, VirtualObject& vo);
