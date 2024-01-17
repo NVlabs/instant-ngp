@@ -34,17 +34,8 @@ bool SyntheticWorld::handle(CudaDevice& device, const ivec2& resolution) {
     auto stream = device.stream();
     device.render_buffer_view().clear(stream);
     m_resolution = resolution;
-    // TEMPORARY
-    if (m_cameras.size() != 1) {
-        m_cameras.clear();
-        create_camera(camera_default::position, camera_default::lookat);
-    }
-    if (m_lights.size() != 1) {
-        m_lights.clear();
-        m_lights.push_back({vec3(2.0, 3.0, 3.0), vec3(1.0), 1.0});
-    }
-    // END TEMPORARY
-    auto& cam = m_cameras.front();
+
+    auto& cam = m_camera;
     cam.set_resolution(m_resolution);
     cam.generate_rays_async(device);
     CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
@@ -66,28 +57,28 @@ bool SyntheticWorld::handle(CudaDevice& device, const ivec2& resolution) {
             const std::string& name = vo_kv.first;
             uint32_t tri_count = static_cast<uint32_t>(m_objects.at(name).cpu_triangles().size());
             auto n_elements = m_resolution.x * m_resolution.y;
-            linear_kernel(debug_rt, 0, stream, n_elements,
-                m_resolution.x, 
-                m_resolution.y, 
-                cam.m_world_to_cam[3],
-                mat4::identity(),
-                cam.m_world_to_cam,
-                tri_count,
-                m_objects.at(name).gpu_triangles(),
-                device.render_buffer_view().frame_buffer, 
-                device.render_buffer_view().depth_buffer);
+            // linear_kernel(debug_rt, 0, stream, n_elements,
+            //     m_resolution.x, 
+            //     m_resolution.y, 
+            //     cam.m_world_to_cam[3],
+            //     mat4::identity(),
+            //     cam.m_world_to_cam,
+            //     tri_count,
+            //     m_objects.at(name).gpu_triangles(),
+            //     device.render_buffer_view().frame_buffer, 
+            //     device.render_buffer_view().depth_buffer);
         }
     }
-    // {
-    //     auto n_elements = m_resolution.x * m_resolution.y;
-    //     linear_kernel(debug_draw_rays, 0, stream, n_elements,
-    //         m_resolution.x, 
-    //         m_resolution.y, 
-    //         cam.gpu_positions(),
-    //         cam.gpu_directions(),
-    //         device.render_buffer_view().frame_buffer, 
-    //         device.render_buffer_view().depth_buffer);
-    // }
+    {
+        auto n_elements = m_resolution.x * m_resolution.y;
+        linear_kernel(debug_draw_rays, 0, stream, n_elements,
+            m_resolution.x, 
+            m_resolution.y, 
+            cam.gpu_positions(),
+            cam.gpu_directions(),
+            device.render_buffer_view().frame_buffer, 
+            device.render_buffer_view().depth_buffer);
+    }
     return true;
 }
 
@@ -103,7 +94,7 @@ void SyntheticWorld::create_object(const std::string& filename) {
 }
 
 void SyntheticWorld::draw_object_async(CudaDevice& device, VirtualObject& virtual_object) {
-    auto& cam = m_cameras.front();
+    auto& cam = m_camera;
     auto stream = device.stream();
     auto n_elements = m_resolution.x * m_resolution.y;
     uint32_t tri_count = static_cast<uint32_t>(virtual_object.cpu_triangles().size());
@@ -116,20 +107,6 @@ void SyntheticWorld::draw_object_async(CudaDevice& device, VirtualObject& virtua
         virtual_object.gpu_triangles(),
         device.render_buffer_view().frame_buffer, 
         device.render_buffer_view().depth_buffer);
-}
-
-void SyntheticWorld::create_camera(const vec3& eye, const vec3& at, const vec3& up) {
-    m_cameras.emplace_back(eye, at, up);
-}
-
-void SyntheticWorld::camera_position(const vec3& eye) {
-    if (m_cameras.empty()) return;
-    m_cameras[0].set_position(eye);
-}
-
-void SyntheticWorld::camera_look_at(const vec3& at) {
-    if (m_cameras.empty()) return;
-    m_cameras[0].set_look_at(at);
 }
 
 __global__ void gpu_draw_object(const uint32_t n_elements, const uint32_t width, const uint32_t height, const uint32_t tri_count,

@@ -155,23 +155,23 @@ void Ui::imgui(SyntheticWorld& syn_world, float frame_time) {
 		}
 	}
 	ImGui::End();
-	if (ImGui::Begin("Camera")) {
-		if (ImGui::SliderFloat3("Camera Position", inputs::i_camera_eye.data(), -10.0, 10.0)) {
-			syn_world.camera_position(inputs::i_camera_eye);
-		}
-		if (ImGui::Button("Reset Position")) {
-			inputs::i_camera_eye = camera_default::position;
-			syn_world.camera_position(inputs::i_camera_eye);
-		}
-		if (ImGui::SliderFloat3("Camera Look At", inputs::i_camera_at.data(), -10.0, 10.0)) {
-			syn_world.camera_look_at(inputs::i_camera_at);
-		}
-		if (ImGui::Button("Reset Look At")) {
-			inputs::i_camera_at = camera_default::lookat;
-			syn_world.camera_look_at(inputs::i_camera_at);
-		}
-	}
-	ImGui::End();
+	// if (ImGui::Begin("Camera")) {
+	// 	if (ImGui::SliderFloat3("Camera Position", inputs::i_camera_eye.data(), -10.0, 10.0)) {
+	// 		// syn_world.camera_position(inputs::i_camera_eye);
+	// 	}
+	// 	if (ImGui::Button("Reset Position")) {
+	// 		inputs::i_camera_eye = camera_default::position;
+	// 		// syn_world.camera_position(inputs::i_camera_eye);
+	// 	}
+	// 	if (ImGui::SliderFloat3("Camera Look At", inputs::i_camera_at.data(), -10.0, 10.0)) {
+	// 		// syn_world.camera_look_at(inputs::i_camera_at);
+	// 	}
+	// 	if (ImGui::Button("Reset Look At")) {
+	// 		inputs::i_camera_at = camera_default::lookat;
+	// 		// syn_world.camera_look_at(inputs::i_camera_at);
+	// 	}
+	// }
+	// ImGui::End();
 }
 
 void Renderer::init_opengl_shaders() {
