@@ -45,8 +45,8 @@ public:
 	void translate_camera(const vec3& rel, const mat3& rot, bool allow_up_down = true);
 	mat3 rotation_from_angles(const vec2& angles) const;
     // move out later
-	void mouse_drag();
-	void mouse_wheel();
+	void handle_mouse_drag();
+	void handle_mouse_wheel();
 	vec3 look_at() const;
 	void set_look_at(const vec3& pos);
 	float scale() const { return m_scale; }

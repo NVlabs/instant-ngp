@@ -7,6 +7,7 @@
 namespace sng {
 
 __global__ void init_rays_cam(
+	uint32_t n_elements,
 	uint32_t sample_index,
 	vec3* __restrict__ positions,
 	vec3* __restrict__ directions,
@@ -33,7 +34,7 @@ __global__ void init_rays_cam(
 	ERenderMode render_mode
 );
 
-void Camera::mouse_wheel() {
+void Camera::handle_mouse_wheel() {
 	float delta = ImGui::GetIO().MouseWheel;
 	if (delta == 0) {
 		return;
@@ -43,7 +44,7 @@ void Camera::mouse_wheel() {
 	set_scale(m_scale * scale_factor);
 }
 
-void Camera::mouse_drag() {
+void Camera::handle_mouse_drag() {
 	vec2 rel = vec2{ImGui::GetIO().MouseDelta.x, ImGui::GetIO().MouseDelta.y} / (float)m_resolution[m_fov_axis];
 	vec2 mouse = {ImGui::GetMousePos().x, ImGui::GetMousePos().y};
 
@@ -96,19 +97,22 @@ void Camera::mouse_drag() {
 }
 
 void Camera::generate_rays_async(CudaDevice& device) {
+	handle_mouse_drag();
+	handle_mouse_wheel();
     cudaStream_t stream = device.stream();
     uint32_t n_elements = m_resolution.x * m_resolution.y;
     // {
     //     gpu_camera.check_guards();
     //     gpu_camera.resize_and_copy_from_host({m_camera});
     // }
-    {
+	auto buf_size = sizeof(vec3) * n_elements;
+    if (m_gpu_positions.size() != buf_size) {
         m_gpu_positions.check_guards();
-        m_gpu_positions.allocate_memory(sizeof(vec3) * n_elements);
+        m_gpu_positions.resize(buf_size);
     }
-    {
+    if (m_gpu_directions.size() != buf_size) {
         m_gpu_directions.check_guards();
-        m_gpu_directions.allocate_memory(sizeof(vec3) * n_elements);
+        m_gpu_directions.resize(buf_size);
     }
     CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
     // generate rays
@@ -216,6 +220,7 @@ void Camera::set_fov_xy(const vec2& val) {
 }
 
 __global__ void init_rays_cam(
+	uint32_t n_elements,
 	uint32_t sample_index,
 	vec3* __restrict__ positions,
 	vec3* __restrict__ directions,
@@ -249,6 +254,8 @@ __global__ void init_rays_cam(
 	}
 
 	uint32_t idx = x + resolution.x * y;
+	frame_buffer[idx] = vec4(0.3, 0.0, 0.0, 1.0);
+
 
 	if (plane_z < 0) {
 		aperture_size = 0.0;
@@ -257,6 +264,8 @@ __global__ void init_rays_cam(
 	vec2 pixel_offset = ld_random_pixel_offset(snap_to_pixel_centers ? 0 : sample_index);
 	vec2 uv = vec2{(float)x + pixel_offset.x, (float)y + pixel_offset.y} / vec2(resolution);
 	mat4x3 camera = get_xform_given_rolling_shutter({camera_matrix0, camera_matrix1}, rolling_shutter, uv, ld_random_val(sample_index, idx * 72239731));
+
+	if (idx == 0) { printf("UV: %f %ff\n", uv.x, uv.y); }
 
 	Ray ray = uv_to_ray(
 		sample_index,
@@ -274,6 +283,8 @@ __global__ void init_rays_cam(
 		lens,
 		distortion
 	);
+
+	if (idx == 0) { printf("DIR: %f %f %f\n", ray.d.x, ray.d.y, ray.d.z); }
 
 	// NerfPayload& payload = payloads[idx];
 	// payload.max_weight = 0.0f;
@@ -331,6 +342,7 @@ __global__ void init_rays_cam(
 
     positions[idx] = ray.o;
     directions[idx] = ray.d;
+	frame_buffer[idx] = vec4(abs(ray.d), 1.0);
 	// payload.origin = ray.o;
 	// payload.dir = ray.d;
 	// payload.t = t;
