@@ -39,7 +39,7 @@ using ngp::GLTexture;
 class Renderer {
 public:
 	GLFWwindow* create_glfw_window(const ivec2& m_window_res);
-	bool begin_frame();
+	bool begin_frame(const ivec2& window_res);
 	bool present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> rgba, std::shared_ptr<ngp::GLTexture> depth, CudaDevice& device);
 	void end_frame();
 	void blit_texture(const ngp::Foveation& foveation, GLint rgba_texture, GLint rgba_filter_mode, 
@@ -62,7 +62,7 @@ class Ui {
 public:
 	void init_imgui(GLFWwindow* m_glfw_window);
     void imgui(SyntheticWorld& sng_world, float frame_time);
-	bool begin_frame();
+	bool begin_frame(const ivec2& window_res);
 	void end_frame();
 private:
 	GLFWwindow* m_glfw_window = nullptr;

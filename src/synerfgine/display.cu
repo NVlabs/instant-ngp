@@ -278,10 +278,10 @@ bool Display::begin_frame(CudaDevice& device, bool& is_dirty) {
 		m_render_buffer->resize(m_window_res);
 		is_dirty = false;
 	}
-	return ui.begin_frame() && renderer.begin_frame();
+	return ui.begin_frame(m_window_res) && renderer.begin_frame(m_window_res);
 }
 
-bool Ui::begin_frame() {
+bool Ui::begin_frame(const [[maybe_unused]] ivec2& window_res) {
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
@@ -290,7 +290,8 @@ bool Ui::begin_frame() {
 	return true;
 }
 
-bool Renderer::begin_frame() {
+bool Renderer::begin_frame(const ivec2& window_res) {
+	m_window_res = window_res;
 	return true;
 }
 
@@ -345,6 +346,12 @@ bool Renderer::present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> r
         CUDA_CHECK_THROW(cudaMemcpyAsync(m_cpu_depth_buffer.data(), device.render_buffer_view().depth_buffer, n_elements * sizeof(float), cudaMemcpyDeviceToHost, device.stream()));
 		auto rgba_size = rgba->resolution();
 		auto depth_size = depth->resolution();
+		if (rgba_size != m_window_res) {
+			rgba->resize(m_window_res, 4);
+		}
+		if (depth_size != m_window_res) {
+			depth->resize(m_window_res, 1);
+		}
 		CUDA_CHECK_THROW(cudaStreamSynchronize(device.stream()));
 
 		glBindTexture(GL_TEXTURE_2D, rgba->texture());
