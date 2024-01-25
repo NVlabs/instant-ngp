@@ -44,12 +44,14 @@ bool Engine::frame() {
 
 	auto& testbed = *m_testbed;
     futures[1] = device.enqueue_task([this, &device, &testbed, stream=synced_streams.get(1)]() {
-		testbed.handle_user_input();
-		testbed.train_and_render(true);
+        // m_nerf_world.handle(device, m_testbed, m_display.get_window_res());
+		// testbed.handle_user_input();
+		// testbed.train_and_render(true);
     });
 
     if (futures[0].valid()) {
         futures[0].get();
+        // auto device_guard = use_device(synced_streams.get(0), *render_buffer, device);
    	}
     if (futures[1].valid()) {
         futures[1].get();
