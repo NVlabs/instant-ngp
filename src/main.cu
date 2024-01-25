@@ -20,7 +20,6 @@
 #include <args/args.hxx>
 
 #include <filesystem/path.h>
-#include <filesystem>
 
 using namespace args;
 using namespace ngp;
@@ -177,9 +176,9 @@ int main_func(const std::vector<std::string>& arguments) {
 
 	try {
 		if (gui) {
-			// testbed.load_file(fs::path("../data/nerf/fox/base.ingp"));
+			testbed.load_file(fs::path("../data/nerf/fox/base.ingp"));
 			// testbed.init_window(width_flag ? get(width_flag) : 1920, height_flag ? get(height_flag) : 1080);
-			engine.init(width_flag ? get(width_flag) : 1920, height_flag ? get(height_flag) : 1080);
+			engine.init(width_flag ? get(width_flag) : 1920, height_flag ? get(height_flag) : 1080, &testbed);
 		}
 
 		if (vr_flag) {

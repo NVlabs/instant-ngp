@@ -161,6 +161,10 @@ void Testbed::clear_training_data() {
 	m_nerf.training.dataset.metadata.clear();
 }
 
+Testbed::Nerf* Testbed::mutable_nerf() {
+	return &m_nerf;
+}
+
 void Testbed::set_mode(ETestbedMode mode) {
 	if (mode == m_testbed_mode) {
 		return;

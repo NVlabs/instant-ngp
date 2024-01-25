@@ -63,6 +63,7 @@ class GLTexture;
 
 class Testbed {
 public:
+	struct Nerf;
 	Testbed(ETestbedMode mode = ETestbedMode::None);
 	~Testbed();
 
@@ -75,6 +76,7 @@ public:
 	void load_training_data(const fs::path& path);
 	void reload_training_data();
 	void clear_training_data();
+	Testbed::Nerf* mutable_nerf();
 
 	void set_mode(ETestbedMode mode);
 

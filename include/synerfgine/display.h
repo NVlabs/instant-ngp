@@ -88,6 +88,7 @@ public:
 
 private:
 	void init_buffers();
+	void copy_texture();
 
 	ivec2 m_window_res = ivec2(0);
 	Renderer renderer;
