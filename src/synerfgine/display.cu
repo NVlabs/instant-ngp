@@ -1,3 +1,4 @@
+#include <memory>
 #include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/marching_cubes.h>
 
@@ -194,8 +195,10 @@ void Renderer::init_opengl_shaders() {
 	static const char* shader_frag = R"glsl(#version 140
 		in vec2 UVs;
 		out vec4 frag_color;
-		uniform sampler2D rgba_texture;
-		uniform sampler2D depth_texture;
+		uniform sampler2D syn_rgba;
+		uniform sampler2D syn_depth;
+		uniform sampler2D nerf_rgba;
+		uniform sampler2D nerf_depth;
 
 		struct FoveationWarp {
 			float al, bl, cl;
@@ -227,10 +230,12 @@ void Renderer::init_opengl_shaders() {
 			vec2 tex_coords = UVs;
 			tex_coords.y = 1.0 - tex_coords.y;
 			tex_coords = unwarp(tex_coords);
-			frag_color = texture(rgba_texture, tex_coords.xy);
+			vec4 syn = texture(syn_rgba, tex_coords.xy);
+			vec4 nerf = texture(nerf_rgba, tex_coords.xy);
+			frag_color = mix(syn, nerf, 0.7);
 			//Uncomment the following line of code to visualize debug the depth buffer for debugging.
 			// frag_color = vec4(vec3(texture(depth_texture, tex_coords.xy).r), 1.0);
-			gl_FragDepth = texture(depth_texture, tex_coords.xy).r;
+			gl_FragDepth = texture(syn_depth, tex_coords.xy).r;
 		})glsl";
 
 	GLuint vert = glCreateShader(GL_VERTEX_SHADER);
@@ -313,7 +318,76 @@ void Renderer::end_frame() {
 bool Display::present(CudaDevice& device, SyntheticWorld& syn_world) {
 	ui.imgui(syn_world, m_last_frame_time);
 	m_render_buffer->set_hidden_area_mask(nullptr);
-	return renderer.present({1,1}, m_rgba_render_textures, m_depth_render_textures, device); 
+	return renderer.present({1,1}, m_rgba_render_textures, m_depth_render_textures, m_render_buffer->view(), 
+		syn_world.m_rgba_render_textures, syn_world.m_depth_render_textures, syn_world.m_render_buffer_view, device);
+	// return renderer.present({1,1}, m_rgba_render_textures, m_depth_render_textures, device); 
+}
+
+template <typename T>
+void resize_transfer_bind(cudaStream_t stream, T* gpu_buffer, std::vector<T>& cpu_texture, 
+		std::shared_ptr<GLTexture> gl_texture_obj, GLint internal_fmt, GLenum fmt) {
+	auto resolution = gl_texture_obj->resolution();
+	auto n_elements = resolution.x * resolution.y;
+	if (n_elements != cpu_texture.size()) cpu_texture.resize(n_elements);
+	CUDA_CHECK_THROW(cudaMemcpyAsync(cpu_texture.data(), gpu_buffer, n_elements * sizeof(T), cudaMemcpyDeviceToHost, stream));
+	glBindTexture(GL_TEXTURE_2D, gl_texture_obj->texture());
+	glTexImage2D(GL_TEXTURE_2D, 0, internal_fmt, resolution.x, resolution.y, 0, fmt, GL_FLOAT, cpu_texture.data());
+}
+
+bool Renderer::present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> syn_rgba, std::shared_ptr<ngp::GLTexture> syn_depth, const CudaRenderBufferView& syn_view,
+		std::shared_ptr<ngp::GLTexture> nerf_rgba, std::shared_ptr<ngp::GLTexture> nerf_depth, const CudaRenderBufferView& nerf_view, CudaDevice& device) { 
+	// https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#opengl-interoperability
+	if (!m_glfw_window) {
+		throw std::runtime_error{"Window must be initialized to be presented."};
+	}
+
+	// Make sure all the cuda code finished its business here
+	CUDA_CHECK_THROW(cudaDeviceSynchronize());
+	glfwMakeContextCurrent(m_glfw_window);
+	int display_w, display_h;
+	glfwGetFramebufferSize(m_glfw_window, &display_w, &display_h);
+
+	// IMAGE RENDER
+	glViewport(0, 0, display_w, display_h);
+	glClearColor(0.0f, 0.0f, 0.5f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glEnable(GL_BLEND);
+	glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+	glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+	ivec2 extent = {(int)((float)display_w / m_n_views.x), (int)((float)display_h / m_n_views.y)};
+
+    {
+		resize_transfer_bind(device.stream(), syn_view.frame_buffer, m_cpu_frame_buffer_syn, syn_rgba, GL_RGBA32F, GL_RGBA);
+		resize_transfer_bind(device.stream(), syn_view.depth_buffer, m_cpu_depth_buffer_syn, syn_depth, GL_R32F, GL_RED);
+		resize_transfer_bind(device.stream(), nerf_view.frame_buffer, m_cpu_frame_buffer_nerf, nerf_rgba, GL_RGBA32F, GL_RGBA);
+		resize_transfer_bind(device.stream(), nerf_view.depth_buffer, m_cpu_depth_buffer_nerf, nerf_depth, GL_R32F, GL_RED);
+    }
+
+	ivec2 top_left{0, display_h - extent.y};
+	blit_texture(ngp::Foveation{}, syn_rgba->texture(), nerf_rgba->texture(), GL_LINEAR, syn_depth->texture(), 
+		nerf_depth->texture(), 0, top_left, extent);
+	glFinish();
+
+	// UI DRAWING
+	glViewport(0, 0, display_w, display_h);
+
+	ImDrawList* list = ImGui::GetBackgroundDrawList();
+	list->AddCallback(ImDrawCallback_ResetRenderState, nullptr);
+
+	// Visualizations are only meaningful when rendering a single view
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+	glfwSwapBuffers(m_glfw_window);
+
+	// Make sure all the OGL code finished its business here.
+	// Any code outside of this function needs to be able to freely write to
+	// textures without being worried about interfering with rendering.
+	glFinish();
+
+	return true;
 }
 
 bool Renderer::present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> rgba, std::shared_ptr<ngp::GLTexture> depth, CudaDevice& device) { 
@@ -340,10 +414,10 @@ bool Renderer::present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> r
 
     {
 		auto n_elements = m_window_res.x * m_window_res.y;
-		if (n_elements != m_cpu_frame_buffer.size()) m_cpu_frame_buffer.resize(n_elements);
-		if (n_elements != m_cpu_depth_buffer.size()) m_cpu_depth_buffer.resize(n_elements);
-        CUDA_CHECK_THROW(cudaMemcpyAsync(m_cpu_frame_buffer.data(), device.render_buffer_view().frame_buffer, n_elements * sizeof(vec4), cudaMemcpyDeviceToHost, device.stream()));
-        CUDA_CHECK_THROW(cudaMemcpyAsync(m_cpu_depth_buffer.data(), device.render_buffer_view().depth_buffer, n_elements * sizeof(float), cudaMemcpyDeviceToHost, device.stream()));
+		if (n_elements != m_cpu_frame_buffer_syn.size()) m_cpu_frame_buffer_syn.resize(n_elements);
+		if (n_elements != m_cpu_depth_buffer_syn.size()) m_cpu_depth_buffer_syn.resize(n_elements);
+        CUDA_CHECK_THROW(cudaMemcpyAsync(m_cpu_frame_buffer_syn.data(), device.render_buffer_view().frame_buffer, n_elements * sizeof(vec4), cudaMemcpyDeviceToHost, device.stream()));
+        CUDA_CHECK_THROW(cudaMemcpyAsync(m_cpu_depth_buffer_syn.data(), device.render_buffer_view().depth_buffer, n_elements * sizeof(float), cudaMemcpyDeviceToHost, device.stream()));
 		auto rgba_size = rgba->resolution();
 		auto depth_size = depth->resolution();
 		if (rgba_size != m_window_res) {
@@ -355,15 +429,16 @@ bool Renderer::present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> r
 		CUDA_CHECK_THROW(cudaStreamSynchronize(device.stream()));
 
 		glBindTexture(GL_TEXTURE_2D, rgba->texture());
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, rgba_size.x, rgba_size.y, 0, GL_RGBA, GL_FLOAT, m_cpu_frame_buffer.data());
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, rgba_size.x, rgba_size.y, 0, GL_RGBA, GL_FLOAT, m_cpu_frame_buffer_syn.data());
 		glBindTexture(GL_TEXTURE_2D, depth->texture());
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, depth_size.x, depth_size.y, 0, GL_RED, GL_FLOAT, m_cpu_depth_buffer.data());
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, depth_size.x, depth_size.y, 0, GL_RED, GL_FLOAT, m_cpu_depth_buffer_syn.data());
     }
 
 	ivec2 top_left{0, display_h - extent.y};
 	// blit_texture(m_foveated_rendering_visualize ? Foveation{} : view.foveation, m_rgba_render_textures.at(i)->texture(), m_foveated_rendering ? GL_LINEAR : GL_NEAREST, m_depth_render_textures.at(i)->texture(), 0, top_left, extent);
 	// rgba->blit_from_cuda_mapping()
-	blit_texture(ngp::Foveation{}, rgba->texture(), GL_LINEAR, depth->texture(), 0, top_left, extent);
+	blit_texture(ngp::Foveation{}, rgba->texture(), rgba->texture(), GL_LINEAR, depth->texture(), 
+		depth->texture(), 0, top_left, extent);
 	glFinish();
 
 	// UI DRAWING
@@ -386,8 +461,8 @@ bool Renderer::present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> r
 	return true;
 }
 
-void Renderer::blit_texture(const ngp::Foveation& foveation, GLint rgba_texture, GLint rgba_filter_mode, 
-	GLint depth_texture, GLint framebuffer, const ivec2& offset, const ivec2& resolution) {
+void Renderer::blit_texture(const ngp::Foveation& foveation, GLint syn_rgba, GLint nerf_rgba, GLint rgba_filter_mode, 
+	GLint syn_depth, GLint nerf_depth, GLint framebuffer, const ivec2& offset, const ivec2& resolution) {
 	if (m_blit_program == 0) {
 		return;
 	}
@@ -412,10 +487,14 @@ void Renderer::blit_texture(const ngp::Foveation& foveation, GLint rgba_texture,
 
 	glBindVertexArray(m_blit_vao);
 	glUseProgram(m_blit_program);
-	auto rgba_uniform = glGetUniformLocation(m_blit_program, "rgba_texture");
-	auto depth_uniform = glGetUniformLocation(m_blit_program, "depth_texture");
-	glUniform1i(rgba_uniform, 0);
-	glUniform1i(depth_uniform, 1);
+	auto syn_rgba_uniform = glGetUniformLocation(m_blit_program, "syn_rgba");
+	auto syn_depth_uniform = glGetUniformLocation(m_blit_program, "syn_depth");
+	glUniform1i(syn_rgba_uniform, 0);
+	glUniform1i(syn_depth_uniform, 1);
+	auto nerf_rgba_uniform = glGetUniformLocation(m_blit_program, "nerf_rgba");
+	auto nerf_depth_uniform = glGetUniformLocation(m_blit_program, "nerf_depth");
+	glUniform1i(nerf_rgba_uniform, 2);
+	glUniform1i(nerf_depth_uniform, 3);
 
 	auto bind_warp = [&](const ngp::FoveationPiecewiseQuadratic& warp, const std::string& uniform_name) {
 		glUniform1f(glGetUniformLocation(m_blit_program, (uniform_name + ".al").c_str()), warp.al);
@@ -439,15 +518,29 @@ void Renderer::blit_texture(const ngp::Foveation& foveation, GLint rgba_texture,
 	bind_warp(foveation.warp_x, "warp_x");
 	bind_warp(foveation.warp_y, "warp_y");
 
+	glActiveTexture(GL_TEXTURE3);
+	glBindTexture(GL_TEXTURE_2D, nerf_depth);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, nerf_rgba);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, rgba_filter_mode);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, rgba_filter_mode);
+
 	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, depth_texture);
+	glBindTexture(GL_TEXTURE_2D, syn_depth);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, rgba_texture);
+	glBindTexture(GL_TEXTURE_2D, syn_rgba);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, rgba_filter_mode);

@@ -41,10 +41,12 @@ public:
 	GLFWwindow* create_glfw_window(const ivec2& m_window_res);
 	bool begin_frame(const ivec2& window_res);
 	bool present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> rgba, std::shared_ptr<ngp::GLTexture> depth, CudaDevice& device);
+	bool present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> syn_rgba, std::shared_ptr<ngp::GLTexture> syn_depth, const CudaRenderBufferView& syn_view,
+		std::shared_ptr<ngp::GLTexture> nerf_rgba, std::shared_ptr<ngp::GLTexture> nerf_depth, const CudaRenderBufferView& nerf_view,CudaDevice& device);
 	void end_frame();
-	void blit_texture(const ngp::Foveation& foveation, GLint rgba_texture, GLint rgba_filter_mode, 
-		GLint depth_texture, GLint framebuffer, const ivec2& offset, const ivec2& resolution);
 private:
+	void blit_texture(const ngp::Foveation& foveation, GLint syn_rgba, GLint nerf_rgba, GLint rgba_filter_mode, 
+		GLint syn_depth, GLint nerf_depth, GLint framebuffer, const ivec2& offset, const ivec2& resolution);
 	GLFWwindow* m_glfw_window = nullptr;
 	ivec2 m_window_res = ivec2(0);
 
@@ -52,8 +54,10 @@ private:
 	GLuint m_blit_vao = 0;
 	GLuint m_blit_program = 0;
 
-	std::vector<vec4> m_cpu_frame_buffer; 
-	std::vector<float> m_cpu_depth_buffer; 
+	std::vector<vec4> m_cpu_frame_buffer_syn; 
+	std::vector<float> m_cpu_depth_buffer_syn; 
+	std::vector<vec4> m_cpu_frame_buffer_nerf; 
+	std::vector<float> m_cpu_depth_buffer_nerf; 
 
 	void init_opengl_shaders();
 };
@@ -88,7 +92,8 @@ public:
 
 private:
 	void init_buffers();
-	void copy_texture();
+	void copy_textures(std::shared_ptr<ngp::GLTexture> rgba, 
+		std::shared_ptr<ngp::GLTexture> depth, CudaDevice& device);
 
 	ivec2 m_window_res = ivec2(0);
 	Renderer renderer;

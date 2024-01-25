@@ -25,10 +25,25 @@ __global__ void debug_draw_rays(const uint32_t n_elements, const uint32_t width,
 __global__ void debug_triangle_vertices(const uint32_t n_elements, const Triangle* __restrict__ triangles,
     vec3* __restrict__ ray_origins, vec3* __restrict__ ray_directions);
 
+SyntheticWorld::SyntheticWorld() {
+	m_rgba_render_textures = std::make_shared<GLTexture>();
+	m_depth_render_textures = std::make_shared<GLTexture>();
+
+	m_render_buffer = std::make_shared<CudaRenderBuffer>(m_rgba_render_textures, m_depth_render_textures);
+    m_render_buffer_view = m_render_buffer->view();
+	m_render_buffer->disable_dlss();
+}
+
 bool SyntheticWorld::handle(CudaDevice& device, const ivec2& resolution) {
     auto stream = device.stream();
     device.render_buffer_view().clear(stream);
-    m_resolution = resolution;
+    if (resolution != m_resolution) {
+        m_resolution = resolution;
+        m_rgba_render_textures->resize(resolution, 4);
+        m_depth_render_textures->resize(resolution, 1);
+        m_render_buffer->resize(resolution);
+        m_render_buffer_view = m_render_buffer->view();
+    }
 
     auto& cam = m_camera;
     cam.set_resolution(m_resolution);
@@ -36,16 +51,6 @@ bool SyntheticWorld::handle(CudaDevice& device, const ivec2& resolution) {
     CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
     for (auto& vo_kv : m_objects) {
         auto& vo = vo_kv.second;
-        // if (is_first) {
-        //     const std::string& name = vo_kv.first;
-        //     uint32_t tri_count = static_cast<uint32_t>(m_objects.at(name).cpu_triangles().size());
-        //     cudaStream_t one_timer;
-        //     CUDA_CHECK_THROW(cudaStreamCreate(&one_timer));
-        //     linear_kernel(debug_triangle_vertices, 0, one_timer, tri_count, 
-        //         m_objects.at(name).gpu_triangles(), cam.gpu_positions(), cam.gpu_directions());
-        //     CUDA_CHECK_THROW(cudaStreamSynchronize(one_timer));
-        //     is_first = false;
-        // }
         draw_object_async(device, vo);
         CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
         {
@@ -102,8 +107,11 @@ void SyntheticWorld::draw_object_async(CudaDevice& device, VirtualObject& virtua
         cam.gpu_directions(),
         virtual_object.gpu_triangles(),
         cam.sun(),
-        device.render_buffer_view().frame_buffer, 
-        device.render_buffer_view().depth_buffer);
+        // device.render_buffer_view().frame_buffer, 
+        // device.render_buffer_view().depth_buffer
+        m_render_buffer_view.frame_buffer, 
+        m_render_buffer_view.depth_buffer
+        );
     CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
 }
 
@@ -124,13 +132,6 @@ __global__ void gpu_draw_object(const uint32_t n_elements, const uint32_t width,
             dt = t;
             normal = triangles[k].normal();
         }
-        // if (i == n_elements / 2) {
-        //     printf("ro: [%f, %f, %f]; rd: [%f, %f, %f]; t: [%f]\n", ro.r, ro.b, ro.g, rd.r, rd.b, rd.g, t);
-        //     printf("TRI: [%f, %f, %f], [%f, %f, %f], [%f, %f, %f]\n", 
-        //         triangles[k].a.r, triangles[k].a.b, triangles[k].a.g,
-        //         triangles[k].b.r, triangles[k].b.b, triangles[k].b.g,
-        //         triangles[k].c.r, triangles[k].c.b, triangles[k].c.g);
-        // }
     }
 
     // depth[i] = max(10.0 - dt, 0.0);
