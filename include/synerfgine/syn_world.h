@@ -32,6 +32,7 @@ public:
     void delete_object(const std::string& name) {
         m_objects.erase(name);
     }
+    std::shared_ptr<CudaRenderBuffer> render_buffer() { return m_render_buffer; }
     const Camera& camera() { return m_camera; }
     Camera& mut_camera() { return m_camera; }
 

@@ -47,6 +47,7 @@ public:
 	bool handle_user_input() {
 		bool is_dragged = handle_mouse_drag();
 		bool is_wheeled = handle_mouse_wheel();
+		is_buffer_outdated = true;
 		return is_dragged || is_wheeled;
 	}
 	vec3 look_at() const;
@@ -66,15 +67,24 @@ public:
 	void set_fov_xy(const vec2& val);
     void reset_camera();
 
-    void set_resolution(const ivec2& resolution) { m_resolution = resolution; }
+    void set_resolution(const ivec2& resolution) { 
+		if (m_resolution != resolution) {
+			is_buffer_outdated = true;
+			m_resolution = resolution;
+			return;
+		}
+	}
     vec3* gpu_positions() { return m_gpu_positions.data(); }
     vec3* gpu_directions() { return m_gpu_directions.data(); }
 
 	vec2 calc_focal_length(const ivec2& resolution, const vec2& relative_focal_length, int fov_axis, float zoom) const;
+	vec2 get_focal_length(const ivec2& resolution) const { return calc_focal_length(resolution, m_relative_focal_length, m_fov_axis, m_zoom); }
 	vec2 render_screen_center(const vec2& screen_center) const;
+	mat4x3 get_matrix() const { return m_camera; }
     // void set_render_buffer(const CudaRenderBuffer& render_buffer) { m_render_buffer = {render_buffer};}
 
 private:
+	bool is_buffer_outdated = true;
 	bool handle_mouse_drag();
 	bool handle_mouse_wheel();
 	float get_depth_from_renderbuffer(const CudaRenderBuffer& render_buffer, const vec2& uv);

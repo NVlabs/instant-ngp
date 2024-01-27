@@ -1,3 +1,4 @@
+#include <synerfgine/cuda_helpers.h>
 #include <synerfgine/syn_world.h>
 
 #include <tiny-cuda-nn/common.h>
@@ -47,6 +48,8 @@ bool SyntheticWorld::handle(CudaDevice& device, const ivec2& resolution) {
 
     auto& cam = m_camera;
     cam.set_resolution(m_resolution);
+    
+    auto device_guard = use_device(stream, *m_render_buffer, device);
     cam.generate_rays_async(device);
     CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
     for (auto& vo_kv : m_objects) {

@@ -1,4 +1,3 @@
-#include <synerfgine/cuda_helpers.h>
 #include <synerfgine/engine.h>
 #include <iostream>
 
@@ -17,6 +16,7 @@ void Engine::init(int res_width, int res_height, Testbed* nerf) {
 			engine->redraw_next_frame();
 		}
 	});
+    m_nerf_world.init(nerf);
 	m_testbed = nerf;
 }
 
@@ -31,30 +31,31 @@ bool Engine::frame() {
 
     SyncedMultiStream synced_streams{m_stream.get(), 2};
     std::vector<std::future<void>> futures(2);
-    auto render_buffer = m_display.get_render_buffer();
-    render_buffer->set_color_space(ngp::EColorSpace::SRGB);
-    render_buffer->set_tonemap_curve(ngp::ETonemapCurve::Identity);
+    m_syn_world.mut_camera().handle_user_input();
 
-    futures[0] = device.enqueue_task([this, &device, render_buffer, stream=synced_streams.get(0)]() {
-        auto device_guard = use_device(stream, *render_buffer, device);
+    futures[0] = device.enqueue_task([this, &device, stream=synced_streams.get(0)]() {
+        std::shared_ptr<CudaRenderBuffer> render_buffer = m_syn_world.render_buffer();
+        render_buffer->set_color_space(ngp::EColorSpace::SRGB);
+        render_buffer->set_tonemap_curve(ngp::ETonemapCurve::Identity);
         m_syn_world.handle(device, m_display.get_window_res());
-        m_display.present(device, m_syn_world);
-        m_display.end_frame();
     });
 
 	auto& testbed = *m_testbed;
-    futures[1] = device.enqueue_task([this, &device, &testbed, stream=synced_streams.get(1)]() {
-        // m_nerf_world.handle(device, m_testbed, m_display.get_window_res());
-		// testbed.handle_user_input();
-		// testbed.train_and_render(true);
+    futures[1] = device.enqueue_task([this, &device, stream=synced_streams.get(1)]() {
+        std::shared_ptr<CudaRenderBuffer> render_buffer = m_nerf_world.render_buffer();
+        render_buffer->set_color_space(ngp::EColorSpace::SRGB);
+        render_buffer->set_tonemap_curve(ngp::ETonemapCurve::Identity);
+        auto device_guard = use_device(stream, *render_buffer, device);
+        m_nerf_world.handle(device, m_syn_world.camera(), m_display.get_window_res());
     });
 
     if (futures[0].valid()) {
         futures[0].get();
-        // auto device_guard = use_device(synced_streams.get(0), *render_buffer, device);
    	}
     if (futures[1].valid()) {
         futures[1].get();
+        m_display.present(device, m_syn_world, m_nerf_world);
+        m_display.end_frame();
    	}
 
     return true;

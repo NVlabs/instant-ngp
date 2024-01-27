@@ -104,7 +104,7 @@ bool Camera::handle_mouse_drag() {
 }
 
 void Camera::generate_rays_async(CudaDevice& device) {
-	if (!handle_user_input()) {
+	if (!is_buffer_outdated) {
 		return;
 	}
     cudaStream_t stream = device.stream();
@@ -153,6 +153,7 @@ void Camera::generate_rays_async(CudaDevice& device) {
 		Buffer2DView<const vec2>{}, // distortion
 		ERenderMode::Shade
     );
+	is_buffer_outdated = false;
 }
 
 void Camera::translate_camera(const vec3& rel, const mat3& rot, bool allow_up_down) {

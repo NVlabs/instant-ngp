@@ -11,12 +11,18 @@
 
 namespace sng {
 
-namespace inputs {
-using namespace tcnn;
-static vec3 i_camera_eye = camera_default::position;
-}
-
 bool Display::m_is_init = false;
+
+template <typename T>
+void resize_transfer_bind(cudaStream_t stream, T* gpu_buffer, std::vector<T>& cpu_texture, 
+		std::shared_ptr<GLTexture> gl_texture_obj, GLint internal_fmt, GLenum fmt) {
+	auto resolution = gl_texture_obj->resolution();
+	auto n_elements = resolution.x * resolution.y;
+	if (n_elements != cpu_texture.size()) cpu_texture.resize(n_elements);
+	CUDA_CHECK_THROW(cudaMemcpyAsync(cpu_texture.data(), gpu_buffer, n_elements * sizeof(T), cudaMemcpyDeviceToHost, stream));
+	glBindTexture(GL_TEXTURE_2D, gl_texture_obj->texture());
+	glTexImage2D(GL_TEXTURE_2D, 0, internal_fmt, resolution.x, resolution.y, 0, fmt, GL_FLOAT, cpu_texture.data());
+}
 
 void glfw_error_callback(int error, const char* description) {
 	tlog::error() << "GLFW error #" << error << ": " << description;
@@ -232,7 +238,8 @@ void Renderer::init_opengl_shaders() {
 			tex_coords = unwarp(tex_coords);
 			vec4 syn = texture(syn_rgba, tex_coords.xy);
 			vec4 nerf = texture(nerf_rgba, tex_coords.xy);
-			frag_color = mix(syn, nerf, 0.7);
+			frag_color = vec4(nerf.rgb, 1.0);
+			// frag_color = vec4(mix(syn.rgb, nerf.rgb, 0.5), 1.0);
 			//Uncomment the following line of code to visualize debug the depth buffer for debugging.
 			// frag_color = vec4(vec3(texture(depth_texture, tex_coords.xy).r), 1.0);
 			gl_FragDepth = texture(syn_depth, tex_coords.xy).r;
@@ -315,23 +322,14 @@ void Ui::end_frame() {
 void Renderer::end_frame() {
 }
 
-bool Display::present(CudaDevice& device, SyntheticWorld& syn_world) {
+bool Display::present(CudaDevice& device, SyntheticWorld& syn_world, NerfWorld& nerf_world) {
 	ui.imgui(syn_world, m_last_frame_time);
 	m_render_buffer->set_hidden_area_mask(nullptr);
-	return renderer.present({1,1}, m_rgba_render_textures, m_depth_render_textures, m_render_buffer->view(), 
-		syn_world.m_rgba_render_textures, syn_world.m_depth_render_textures, syn_world.m_render_buffer_view, device);
+	return renderer.present({1,1}, nerf_world.m_rgba_render_textures, nerf_world.m_depth_render_textures, nerf_world.m_render_buffer_view, 
+		nerf_world.m_rgba_render_textures, nerf_world.m_depth_render_textures, nerf_world.m_render_buffer_view, device);
+	// return renderer.present({1,1}, nerf_world.m_rgba_render_textures, nerf_world.m_depth_render_textures, nerf_world.m_render_buffer_view, 
+	// 	syn_world.m_rgba_render_textures, syn_world.m_depth_render_textures, syn_world.m_render_buffer_view, device);
 	// return renderer.present({1,1}, m_rgba_render_textures, m_depth_render_textures, device); 
-}
-
-template <typename T>
-void resize_transfer_bind(cudaStream_t stream, T* gpu_buffer, std::vector<T>& cpu_texture, 
-		std::shared_ptr<GLTexture> gl_texture_obj, GLint internal_fmt, GLenum fmt) {
-	auto resolution = gl_texture_obj->resolution();
-	auto n_elements = resolution.x * resolution.y;
-	if (n_elements != cpu_texture.size()) cpu_texture.resize(n_elements);
-	CUDA_CHECK_THROW(cudaMemcpyAsync(cpu_texture.data(), gpu_buffer, n_elements * sizeof(T), cudaMemcpyDeviceToHost, stream));
-	glBindTexture(GL_TEXTURE_2D, gl_texture_obj->texture());
-	glTexImage2D(GL_TEXTURE_2D, 0, internal_fmt, resolution.x, resolution.y, 0, fmt, GL_FLOAT, cpu_texture.data());
 }
 
 bool Renderer::present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> syn_rgba, std::shared_ptr<ngp::GLTexture> syn_depth, const CudaRenderBufferView& syn_view,
