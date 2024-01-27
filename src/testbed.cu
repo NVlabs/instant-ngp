@@ -40,6 +40,7 @@
 
 #include <zstr.hpp>
 
+#include <iostream>
 #include <fstream>
 #include <set>
 #include <unordered_set>
@@ -2185,7 +2186,7 @@ void Testbed::handle_user_input() {
 	keyboard_event();
 
 	if (m_imgui.enabled) {
-		// imgui();
+		imgui();
 	}
 }
 
@@ -2846,6 +2847,10 @@ void Testbed::train_and_render(bool skip_rendering) {
 
 		size_t n_pixels = 0, n_pixels_full_res = 0;
 		for (const auto& view : m_views) {
+			auto view_in_res = view.render_buffer->in_resolution();
+			auto view_out_res = view.render_buffer->out_resolution();
+			// std::cerr << "ORIG: " << view_in_res.x << " " << view_in_res.y 
+			// 	<< " " << view_out_res.x << " " << view_out_res.y << std::endl;
 			n_pixels += product(view.render_buffer->in_resolution());
 			n_pixels_full_res += product(view.full_resolution);
 		}
@@ -2859,6 +2864,7 @@ void Testbed::train_and_render(bool skip_rendering) {
 		}
 
 		factor = clamp(factor, 1.0f / 16.0f, 1.0f);
+		// std::cerr << pixel_ratio << " " << last_factor << " " << factor << std::endl;
 
 		for (auto&& view : m_views) {
 			if (m_dlss) {
@@ -2869,6 +2875,7 @@ void Testbed::train_and_render(bool skip_rendering) {
 
 			ivec2 render_res = view.render_buffer->in_resolution();
 			ivec2 new_render_res = clamp(ivec2(vec2(view.full_resolution) * factor), view.full_resolution / 16, view.full_resolution);
+			// std::cerr << "NEW: " << new_render_res.x << " " << new_render_res.y << std::endl;
 
 			if (m_camera_path.rendering) {
 				new_render_res = m_camera_path.render_settings.resolution;

@@ -17,6 +17,7 @@ void Engine::init(int res_width, int res_height, Testbed* nerf) {
 		}
 	});
     m_nerf_world.init(nerf);
+    m_syn_world.mut_camera().set_default_matrix(nerf->m_camera);
 	m_testbed = nerf;
 }
 
@@ -43,8 +44,6 @@ bool Engine::frame() {
 	auto& testbed = *m_testbed;
     futures[1] = device.enqueue_task([this, &device, stream=synced_streams.get(1)]() {
         std::shared_ptr<CudaRenderBuffer> render_buffer = m_nerf_world.render_buffer();
-        render_buffer->set_color_space(ngp::EColorSpace::SRGB);
-        render_buffer->set_tonemap_curve(ngp::ETonemapCurve::Identity);
         auto device_guard = use_device(stream, *render_buffer, device);
         m_nerf_world.handle(device, m_syn_world.camera(), m_display.get_window_res());
     });

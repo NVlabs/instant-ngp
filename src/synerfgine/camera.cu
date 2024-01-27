@@ -103,6 +103,16 @@ bool Camera::handle_mouse_drag() {
 	return is_moved;
 }
 
+bool Camera::handle_user_input() {
+	if (ImGui::IsAnyItemActive() || ImGui::GetIO().WantCaptureMouse) {
+		return false;
+	}
+	bool is_dragged = handle_mouse_drag();
+	bool is_wheeled = handle_mouse_wheel();
+	is_buffer_outdated = true;
+	return is_dragged || is_wheeled;
+}
+
 void Camera::generate_rays_async(CudaDevice& device) {
 	if (!is_buffer_outdated) {
 		return;
@@ -185,6 +195,10 @@ void Camera::set_scale(float scale) {
 	m_scale = scale;
 }
 
+void Camera::set_default_matrix(const mat4x3& matrix) {
+	m_default_camera = m_camera = matrix;
+}
+
 void Camera::set_view_dir(const vec3& dir) {
 	auto old_look_at = look_at();
 	m_camera[0] = normalize(cross(dir, m_up_dir));
@@ -201,11 +215,7 @@ void Camera::reset_camera() {
     set_fov(50.625f);
     m_scale = camera_default::scale;
 
-	m_camera = transpose(mat3x4{
-		1.0f, 0.0f, 0.0f, 0.0f,
-		0.0f, 1.0f, 0.0f, 2.0f,
-		0.0f, 0.0f, 1.0f, 0.0f
-	});
+	m_camera = m_default_camera;
 
 	m_camera[3] -= m_scale * view_dir();
 }

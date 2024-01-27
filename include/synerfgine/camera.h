@@ -43,13 +43,7 @@ public:
     void generate_rays_async(CudaDevice& device);
 	void translate_camera(const vec3& rel, const mat3& rot, bool allow_up_down = true);
 	mat3 rotation_from_angles(const vec2& angles) const;
-    // move out later
-	bool handle_user_input() {
-		bool is_dragged = handle_mouse_drag();
-		bool is_wheeled = handle_mouse_wheel();
-		is_buffer_outdated = true;
-		return is_dragged || is_wheeled;
-	}
+	bool handle_user_input();
 	vec3 look_at() const;
 	void set_look_at(const vec3& pos);
 	float scale() const { return m_scale; }
@@ -58,8 +52,10 @@ public:
 	vec3 view_dir() const { return m_camera[2]; }
 	vec3 view_up() const { return m_camera[1]; }
 	vec3 view_side() const { return m_camera[0]; }
+	vec2 relative_focal_length() const { return m_relative_focal_length; }
 	vec3 sun_pos() const { return m_sun.pos; }
 	Light sun() const { return m_sun; }
+	void set_default_matrix(const mat4x3& matrix);
 	void set_view_dir(const vec3& dir);
 	float fov() const ;
 	void set_fov(float val) ;
@@ -94,11 +90,12 @@ private:
 	// 	0.0f, -1.0f, 0.0f, 0.5f,
 	// 	0.0f, 0.0f, -1.0f, 0.5f
 	// });
-	mat4x3 m_camera = transpose(mat3x4{
+	mat4x3 m_default_camera{transpose(mat3x4{
 		1.0f, 0.0f, 0.0f, 0.0f,
 		0.0f, 1.0f, 0.0f, 2.0f,
 		0.0f, 0.0f, 1.0f, 0.0f
-	});
+	})};
+	mat4x3 m_camera{m_default_camera};
     vec3 m_up_dir = camera_default::up_dir;
     float m_scale = camera_default::scale;
 	uint32_t m_fov_axis = camera_default::fov_axis;

@@ -118,7 +118,7 @@ void Ui::init_imgui(GLFWwindow* m_glfw_window) {
 void Ui::imgui(SyntheticWorld& syn_world, float frame_time) {
 	static std::string imgui_error_string = "";
 
-	if (ImGui::Begin("Load Virtual Object")) {
+	if (ImGui::Begin("Load Virtual Object"), ImGuiWindowFlags_NoMouseInputs) {
 		ImGui::Text("Add Virtual Object (.obj only)");
 		ImGui::InputText("##PathFile", sng::virtual_object_fp, 1024);
 		ImGui::SameLine();
@@ -158,7 +158,7 @@ void Ui::imgui(SyntheticWorld& syn_world, float frame_time) {
 		}
 	}
 	ImGui::End();
-	if (ImGui::Begin("Camera")) {
+	if (ImGui::Begin("Camera"), ImGuiWindowFlags_NoMouseInputs) {
 		auto rd = syn_world.camera().view_pos();
 		ImGui::Text("View Pos: %f, %f, %f", rd.r, rd.g, rd.b);
 		rd = syn_world.camera().view_dir();
@@ -238,11 +238,20 @@ void Renderer::init_opengl_shaders() {
 			tex_coords = unwarp(tex_coords);
 			vec4 syn = texture(syn_rgba, tex_coords.xy);
 			vec4 nerf = texture(nerf_rgba, tex_coords.xy);
-			frag_color = vec4(nerf.rgb, 1.0);
+			float sd = texture(syn_depth, tex_coords.xy).r;
+			float nd = texture(nerf_depth, tex_coords.xy).r;
+			bool is_syn = sd < nd;
 			// frag_color = vec4(mix(syn.rgb, nerf.rgb, 0.5), 1.0);
+			if (sd != 0.0 && sd < nd) {
+				frag_color = vec4(syn.rgb, 1.0);
+				gl_FragDepth = sd;
+			} else {
+				frag_color = vec4(nerf.rgb, 1.0);
+				gl_FragDepth = nd;
+			}
 			//Uncomment the following line of code to visualize debug the depth buffer for debugging.
 			// frag_color = vec4(vec3(texture(depth_texture, tex_coords.xy).r), 1.0);
-			gl_FragDepth = texture(syn_depth, tex_coords.xy).r;
+			// frag_color = vec4(vec3(gl_FragDepth), 1.0);
 		})glsl";
 
 	GLuint vert = glCreateShader(GL_VERTEX_SHADER);
