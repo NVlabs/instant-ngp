@@ -1,6 +1,7 @@
 #pragma once
 
 #include <synerfgine/cuda_helpers.h>
+#include <synerfgine/nerf_world.h>
 #include <synerfgine/syn_world.h>
 
 #include <neural-graphics-primitives/render_buffer.h>
@@ -79,7 +80,8 @@ public:
     GLFWwindow* init_window(int resw, int resh, bool hidden);
 	void destroy();
 	bool begin_frame(CudaDevice& device, bool& is_dirty);
-	bool present(CudaDevice& device, SyntheticWorld& syn_world); 
+	// bool present(CudaDevice& device, SyntheticWorld& syn_world); 
+	bool present(CudaDevice& device, SyntheticWorld& syn_world, NerfWorld& nerf_world); 
 	void end_frame();
 
 	std::shared_ptr<CudaRenderBuffer> get_render_buffer() {

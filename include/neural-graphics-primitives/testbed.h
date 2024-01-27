@@ -53,6 +53,10 @@ template <typename T, typename PARAMS_T, typename COMPUTE_T> class Trainer;
 template <uint32_t N_DIMS, uint32_t RANK, typename T> class TrainableBuffer;
 }
 
+namespace sng {
+	class NerfWorld;
+}
+
 namespace ngp {
 
 template <typename T> class NerfNetwork;
@@ -63,6 +67,7 @@ class GLTexture;
 
 class Testbed {
 public:
+	friend class sng::NerfWorld;
 	struct Nerf;
 	Testbed(ETestbedMode mode = ETestbedMode::None);
 	~Testbed();

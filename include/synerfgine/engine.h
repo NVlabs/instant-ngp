@@ -26,8 +26,8 @@ public:
 private:
     bool is_dirty = true;
     SyntheticWorld m_syn_world;
-    Testbed* m_testbed;
     NerfWorld m_nerf_world;
+    Testbed* m_testbed;
     Display m_display;
     std::vector<CudaDevice> m_devices;
     StreamAndEvent m_stream;
