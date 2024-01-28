@@ -66,7 +66,8 @@ private:
 class Ui {
 public:
 	void init_imgui(GLFWwindow* m_glfw_window);
-    void imgui(SyntheticWorld& sng_world, float frame_time);
+    // void imgui(SyntheticWorld& sng_world, float frame_time);
+    void imgui(SyntheticWorld& sng_world, NerfWorld& nerf_world, float frame_time);
 	bool begin_frame(const ivec2& window_res);
 	void end_frame();
 private:

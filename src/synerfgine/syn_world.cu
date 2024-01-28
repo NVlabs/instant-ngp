@@ -4,6 +4,21 @@
 #include <tiny-cuda-nn/common.h>
 #include <filesystem>
 
+#ifdef NGP_GUI
+#	include <imgui/backends/imgui_impl_glfw.h>
+#	include <imgui/backends/imgui_impl_opengl3.h>
+#	include <imgui/imgui.h>
+#	include <imguizmo/ImGuizmo.h>
+#	ifdef _WIN32
+#		include <GL/gl3w.h>
+#	else
+#		include <GL/glew.h>
+#	endif
+#	include <GLFW/glfw3.h>
+#	include <GLFW/glfw3native.h>
+#	include <cuda_gl_interop.h>
+#endif
+
 namespace sng {
 
 namespace fs = std::filesystem;
@@ -54,6 +69,8 @@ bool SyntheticWorld::handle(CudaDevice& device, const ivec2& resolution) {
     CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
     for (auto& vo_kv : m_objects) {
         auto& vo = vo_kv.second;
+        vo.update_triangles(stream);
+        CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
         draw_object_async(device, vo);
         CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
         {
@@ -147,8 +164,86 @@ __global__ void gpu_draw_object(const uint32_t n_elements, const uint32_t width,
     } else {
         rgba[i] = vec4(vec3(0.0), 1.0);
     }
+    depth[i] = dt;
+    // if (dt != ngp::MAX_RT_DIST && i % 100000 == 0) {
+    //     printf("SYN: %d: %f\n", i, dt);
+    // }
 }
 
+void SyntheticWorld::imgui(float frame_time) {
+	static std::string imgui_error_string = "";
+
+	if (ImGui::Begin("Load Virtual Object")) {
+		ImGui::Text("Add Virtual Object (.obj only)");
+		ImGui::InputText("##PathFile", sng::virtual_object_fp, 1024);
+		ImGui::SameLine();
+		static std::string vo_path_load_error_string = "";
+		if (ImGui::Button("Load")) {
+			try {
+				create_object(sng::virtual_object_fp);
+			} catch (const std::exception& e) {
+				ImGui::OpenPopup("Virtual object path load error");
+				vo_path_load_error_string = std::string{"Failed to load object path: "} + e.what();
+			}
+		}
+		if (ImGui::BeginPopupModal("Virtual object path load error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::Text("%s", vo_path_load_error_string.c_str());
+			if (ImGui::Button("OK", ImVec2(120, 0))) {
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
+		if (ImGui::CollapsingHeader("Virtual Objects", ImGuiTreeNodeFlags_DefaultOpen)) {
+			auto& objs = objects();
+			std::string to_remove;
+			size_t k = 0;
+			for (auto& vo : objs) {
+				std::string delete_button_name = std::to_string(k) + ". Delete ";
+				delete_button_name.append(vo.first);
+				if (ImGui::Button(delete_button_name.c_str())) {
+					to_remove = vo.first;
+					break;
+				}
+				vo.second.imgui();
+				++k;
+			}
+			if (!to_remove.empty()) {
+				delete_object(to_remove);
+			}
+		}
+	}
+	ImGui::End();
+	if (ImGui::Begin("Camera")) {
+		auto rd = camera().view_pos();
+		ImGui::Text("View Pos: %f, %f, %f", rd.r, rd.g, rd.b);
+		rd = camera().view_dir();
+		ImGui::Text("View Dir: %f, %f, %f", rd.r, rd.g, rd.b);
+		rd = camera().look_at();
+		ImGui::Text("Look At: %f, %f, %f", rd.r, rd.g, rd.b);
+		rd = camera().sun_pos();
+		ImGui::Text("Sun Pos: %f, %f, %f", rd.r, rd.g, rd.b);
+		float fps = !frame_time ? std::numeric_limits<float>::max() : (1000.0f / frame_time);
+		ImGui::Text("Frame: %.2f ms (%.1f FPS)", frame_time, fps);
+		if (ImGui::Button("Reset Camera")) {
+			mut_camera().reset_camera();
+		}
+	// 	if (ImGui::SliderFloat3("Camera Position", inputs::i_camera_eye.data(), -10.0, 10.0)) {
+	// 		// camera_position(inputs::i_camera_eye);
+	// 	}
+	// 	if (ImGui::Button("Reset Position")) {
+	// 		inputs::i_camera_eye = camera_default::position;
+	// 		// camera_position(inputs::i_camera_eye);
+	// 	}
+	// 	if (ImGui::SliderFloat3("Camera Look At", inputs::i_camera_at.data(), -10.0, 10.0)) {
+	// 		// camera_look_at(inputs::i_camera_at);
+	// 	}
+	// 	if (ImGui::Button("Reset Look At")) {
+	// 		inputs::i_camera_at = camera_default::lookat;
+	// 		// camera_look_at(inputs::i_camera_at);
+	// 	}
+	}
+	ImGui::End();
+}
 
 __global__ void debug_draw_rays(const uint32_t n_elements, const uint32_t width, const uint32_t height, 
     vec3* __restrict__ ray_origins, vec3* __restrict__ ray_directions, 

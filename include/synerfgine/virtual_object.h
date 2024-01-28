@@ -22,8 +22,8 @@ using namespace tcnn;
 namespace fs = std::filesystem;
 using ngp::Triangle;
 
-constexpr float MIN_DIST = -1000.0;
-constexpr float MAX_DIST = 1000.0;
+constexpr float MIN_DIST = -25.0;
+constexpr float MAX_DIST = 25.0;
 
 // struct RTView;
 
@@ -33,12 +33,14 @@ class VirtualObject {
 public:
     VirtualObject(const char* fp, const std::string& name);
     ~VirtualObject();
+    void update_triangles(cudaStream_t stream);
     mat4 get_transform();
     Triangle* gpu_triangles();
     const std::vector<Triangle>& cpu_triangles();
     void imgui();
 
 private:
+    bool needs_update{true};
     std::string name;
     fs::path file_path;
     vec3 pos;

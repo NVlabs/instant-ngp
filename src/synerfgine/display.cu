@@ -115,79 +115,9 @@ void Ui::init_imgui(GLFWwindow* m_glfw_window) {
 	io.Fonts->AddFontDefault(&font_cfg);
 }
 
-void Ui::imgui(SyntheticWorld& syn_world, float frame_time) {
-	static std::string imgui_error_string = "";
-
-	if (ImGui::Begin("Load Virtual Object"), ImGuiWindowFlags_NoMouseInputs) {
-		ImGui::Text("Add Virtual Object (.obj only)");
-		ImGui::InputText("##PathFile", sng::virtual_object_fp, 1024);
-		ImGui::SameLine();
-		static std::string vo_path_load_error_string = "";
-		if (ImGui::Button("Load")) {
-			try {
-				syn_world.create_object(sng::virtual_object_fp);
-			} catch (const std::exception& e) {
-				ImGui::OpenPopup("Virtual object path load error");
-				vo_path_load_error_string = std::string{"Failed to load object path: "} + e.what();
-			}
-		}
-		if (ImGui::BeginPopupModal("Virtual object path load error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-			ImGui::Text("%s", vo_path_load_error_string.c_str());
-			if (ImGui::Button("OK", ImVec2(120, 0))) {
-				ImGui::CloseCurrentPopup();
-			}
-			ImGui::EndPopup();
-		}
-		if (ImGui::CollapsingHeader("Virtual Objects", ImGuiTreeNodeFlags_DefaultOpen)) {
-			auto& objs = syn_world.objects();
-			std::string to_remove;
-			size_t k = 0;
-			for (auto& vo : objs) {
-				std::string delete_button_name = std::to_string(k) + ". Delete ";
-				delete_button_name.append(vo.first);
-				if (ImGui::Button(delete_button_name.c_str())) {
-					to_remove = vo.first;
-					break;
-				}
-				vo.second.imgui();
-				++k;
-			}
-			if (!to_remove.empty()) {
-				syn_world.delete_object(to_remove);
-			}
-		}
-	}
-	ImGui::End();
-	if (ImGui::Begin("Camera"), ImGuiWindowFlags_NoMouseInputs) {
-		auto rd = syn_world.camera().view_pos();
-		ImGui::Text("View Pos: %f, %f, %f", rd.r, rd.g, rd.b);
-		rd = syn_world.camera().view_dir();
-		ImGui::Text("View Dir: %f, %f, %f", rd.r, rd.g, rd.b);
-		rd = syn_world.camera().look_at();
-		ImGui::Text("Look At: %f, %f, %f", rd.r, rd.g, rd.b);
-		rd = syn_world.camera().sun_pos();
-		ImGui::Text("Sun Pos: %f, %f, %f", rd.r, rd.g, rd.b);
-		float fps = !frame_time ? 1000.0f : (1000.0f / frame_time);
-		ImGui::Text("Frame: %.2f ms (%.1f FPS)", frame_time, fps);
-		if (ImGui::Button("Reset Camera")) {
-			syn_world.mut_camera().reset_camera();
-		}
-	// 	if (ImGui::SliderFloat3("Camera Position", inputs::i_camera_eye.data(), -10.0, 10.0)) {
-	// 		// syn_world.camera_position(inputs::i_camera_eye);
-	// 	}
-	// 	if (ImGui::Button("Reset Position")) {
-	// 		inputs::i_camera_eye = camera_default::position;
-	// 		// syn_world.camera_position(inputs::i_camera_eye);
-	// 	}
-	// 	if (ImGui::SliderFloat3("Camera Look At", inputs::i_camera_at.data(), -10.0, 10.0)) {
-	// 		// syn_world.camera_look_at(inputs::i_camera_at);
-	// 	}
-	// 	if (ImGui::Button("Reset Look At")) {
-	// 		inputs::i_camera_at = camera_default::lookat;
-	// 		// syn_world.camera_look_at(inputs::i_camera_at);
-	// 	}
-	}
-	ImGui::End();
+void Ui::imgui(SyntheticWorld& syn_world, NerfWorld& nerf_world, float frame_time) {
+	syn_world.imgui(frame_time);
+	nerf_world.imgui(frame_time);
 }
 
 void Renderer::init_opengl_shaders() {
@@ -232,23 +162,27 @@ void Renderer::init_opengl_shaders() {
 			return vec2(unwarp(warp_x, pos.x), unwarp(warp_y, pos.y));
 		}
 
+		const float max_nd = 16384.0;
+
 		void main() {
 			vec2 tex_coords = UVs;
 			tex_coords.y = 1.0 - tex_coords.y;
 			tex_coords = unwarp(tex_coords);
 			vec4 syn = texture(syn_rgba, tex_coords.xy);
-			vec4 nerf = texture(nerf_rgba, tex_coords.xy);
 			float sd = texture(syn_depth, tex_coords.xy).r;
+			// frag_color = vec4(syn.rgb, 1.0);
+			// gl_FragDepth = sd;
+
+			vec4 nerf = texture(nerf_rgba, tex_coords.xy);
 			float nd = texture(nerf_depth, tex_coords.xy).r;
 			bool is_syn = sd < nd;
-			// frag_color = vec4(mix(syn.rgb, nerf.rgb, 0.5), 1.0);
-			if (sd != 0.0 && sd < nd) {
+			gl_FragDepth = is_syn ? sd : nd;
+			if (sd != 0.0 && sd < max_nd) {
 				frag_color = vec4(syn.rgb, 1.0);
-				gl_FragDepth = sd;
-			} else {
+			} else if (nd < max_nd) {
 				frag_color = vec4(nerf.rgb, 1.0);
-				gl_FragDepth = nd;
 			}
+
 			//Uncomment the following line of code to visualize debug the depth buffer for debugging.
 			// frag_color = vec4(vec3(texture(depth_texture, tex_coords.xy).r), 1.0);
 			// frag_color = vec4(vec3(gl_FragDepth), 1.0);
@@ -332,13 +266,10 @@ void Renderer::end_frame() {
 }
 
 bool Display::present(CudaDevice& device, SyntheticWorld& syn_world, NerfWorld& nerf_world) {
-	ui.imgui(syn_world, m_last_frame_time);
+	ui.imgui(syn_world, nerf_world, m_last_frame_time);
 	m_render_buffer->set_hidden_area_mask(nullptr);
-	return renderer.present({1,1}, nerf_world.m_rgba_render_textures, nerf_world.m_depth_render_textures, nerf_world.m_render_buffer_view, 
+	return renderer.present({1,1}, syn_world.m_rgba_render_textures, syn_world.m_depth_render_textures, syn_world.m_render_buffer_view, 
 		nerf_world.m_rgba_render_textures, nerf_world.m_depth_render_textures, nerf_world.m_render_buffer_view, device);
-	// return renderer.present({1,1}, nerf_world.m_rgba_render_textures, nerf_world.m_depth_render_textures, nerf_world.m_render_buffer_view, 
-	// 	syn_world.m_rgba_render_textures, syn_world.m_depth_render_textures, syn_world.m_render_buffer_view, device);
-	// return renderer.present({1,1}, m_rgba_render_textures, m_depth_render_textures, device); 
 }
 
 bool Renderer::present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> syn_rgba, std::shared_ptr<ngp::GLTexture> syn_depth, const CudaRenderBufferView& syn_view,
@@ -356,7 +287,7 @@ bool Renderer::present(const ivec2& m_n_views, std::shared_ptr<ngp::GLTexture> s
 
 	// IMAGE RENDER
 	glViewport(0, 0, display_w, display_h);
-	glClearColor(0.0f, 0.0f, 0.5f, 1.0f);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	glEnable(GL_BLEND);
@@ -536,8 +467,8 @@ void Renderer::blit_texture(const ngp::Foveation& foveation, GLint syn_rgba, GLi
 	glBindTexture(GL_TEXTURE_2D, nerf_rgba);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, rgba_filter_mode);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, rgba_filter_mode);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 	glActiveTexture(GL_TEXTURE1);
 	glBindTexture(GL_TEXTURE_2D, syn_depth);

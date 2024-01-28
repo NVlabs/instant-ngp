@@ -19,6 +19,7 @@ void Engine::init(int res_width, int res_height, Testbed* nerf) {
     m_nerf_world.init(nerf);
     m_syn_world.mut_camera().set_default_matrix(nerf->m_camera);
 	m_testbed = nerf;
+    m_testbed->m_train = false;
 }
 
 bool Engine::frame() {

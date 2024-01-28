@@ -177,9 +177,9 @@ int main_func(const std::vector<std::string>& arguments) {
 	try {
 		if (gui) {
 			fs::path p = fs::path::getcwd();
-			testbed.load_file(p / fs::path("../data/nerf/fox/base.ingp"));
-			// testbed.init_window(width_flag ? get(width_flag) : 1920, height_flag ? get(height_flag) : 1080);
-			engine.init(width_flag ? get(width_flag) : 1920, height_flag ? get(height_flag) : 1080, &testbed);
+			testbed.load_snapshot(p / fs::path("../data/nerf/fox/base.ingp"));
+			// testbed.init_window(width_flag ? get(width_flag) : 1280, height_flag ? get(height_flag) : 720);
+			engine.init(width_flag ? get(width_flag) : 1280, height_flag ? get(height_flag) : 720, &testbed);
 		}
 
 		if (vr_flag) {
