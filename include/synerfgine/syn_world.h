@@ -40,6 +40,7 @@ private:
     std::unordered_map<std::string, VirtualObject> m_objects;
     // std::vector<Camera> m_cameras;
     Camera m_camera;
+    mat4x3 m_last_camera;
 
     // Buffers and resolution
 	std::shared_ptr<GLTexture> m_rgba_render_textures;

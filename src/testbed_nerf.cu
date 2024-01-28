@@ -672,7 +672,8 @@ __global__ void composite_kernel_nerf(
 	}
 
 	rgba[i] = local_rgba;
-	depth[i] = local_depth;
+	// depth[i] = local_depth;
+	depth[i] = payload.t;
 }
 
 __global__ void generate_training_samples_nerf(

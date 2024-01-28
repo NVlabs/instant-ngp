@@ -170,22 +170,28 @@ void Renderer::init_opengl_shaders() {
 			tex_coords = unwarp(tex_coords);
 			vec4 syn = texture(syn_rgba, tex_coords.xy);
 			float sd = texture(syn_depth, tex_coords.xy).r;
-			// frag_color = vec4(syn.rgb, 1.0);
-			// gl_FragDepth = sd;
-
 			vec4 nerf = texture(nerf_rgba, tex_coords.xy);
 			float nd = texture(nerf_depth, tex_coords.xy).r;
-			bool is_syn = sd < nd;
-			gl_FragDepth = is_syn ? sd : nd;
-			if (sd != 0.0 && sd < max_nd) {
+
+			// DEBUG
+			// frag_color = vec4(0.0, 0.0, 0.0, 1.0);
+			// if (nd < max_nd) {
+			// 	frag_color += vec4(0.0, 0.0, nd, 1.0);
+			// 	gl_FragDepth = nd;
+			// }
+			// if (sd < nd) {
+			// 	frag_color += vec4(sd, 0.0, 0.0, 1.0);
+			// 	gl_FragDepth = nd;
+			// }
+			// frag_color.rgb /= 5.0;
+
+			if (sd < nd) {
 				frag_color = vec4(syn.rgb, 1.0);
+				gl_FragDepth = sd;
 			} else if (nd < max_nd) {
 				frag_color = vec4(nerf.rgb, 1.0);
+				gl_FragDepth = nd;
 			}
-
-			//Uncomment the following line of code to visualize debug the depth buffer for debugging.
-			// frag_color = vec4(vec3(texture(depth_texture, tex_coords.xy).r), 1.0);
-			// frag_color = vec4(vec3(gl_FragDepth), 1.0);
 		})glsl";
 
 	GLuint vert = glCreateShader(GL_VERTEX_SHADER);

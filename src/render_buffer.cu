@@ -688,7 +688,7 @@ void CudaRenderBuffer::tonemap(float exposure, const vec4& background_color, ECo
 		dlss_splat_kernel<<<out_blocks, threads, 0, stream>>>(out_res, m_dlss->output(), surface());
 	}
 
-	if (m_depth_target) {
+	if (m_must_splat && m_depth_target) {
 		depth_splat_kernel<<<blocks, threads, 0, stream>>>(res, znear, zfar, depth_buffer(), m_depth_target->surface());
 	}
 }

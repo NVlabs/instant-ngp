@@ -2875,7 +2875,6 @@ void Testbed::train_and_render(bool skip_rendering) {
 
 			ivec2 render_res = view.render_buffer->in_resolution();
 			ivec2 new_render_res = clamp(ivec2(vec2(view.full_resolution) * factor), view.full_resolution / 16, view.full_resolution);
-			// std::cerr << "NEW: " << new_render_res.x << " " << new_render_res.y << std::endl;
 
 			if (m_camera_path.rendering) {
 				new_render_res = m_camera_path.render_settings.resolution;

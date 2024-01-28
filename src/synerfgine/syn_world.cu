@@ -27,6 +27,8 @@ using ngp::GLTexture;
 
 static bool is_first = true;
 
+__global__ void debug_syn_depth(const uint32_t n_elements, vec4* __restrict__ rgba, float* __restrict__ depth);
+
 __global__ void debug_paint(const uint32_t n_elements, const uint32_t width, const uint32_t height, 
     vec4* __restrict__ rgba, float* __restrict__ depth);
 
@@ -62,44 +64,28 @@ bool SyntheticWorld::handle(CudaDevice& device, const ivec2& resolution) {
     }
 
     auto& cam = m_camera;
+    auto cam_matrix = cam.get_matrix();
     cam.set_resolution(m_resolution);
     
     auto device_guard = use_device(stream, *m_render_buffer, device);
     cam.generate_rays_async(device);
+    bool changed_depth = cam_matrix == m_last_camera;
     CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
     for (auto& vo_kv : m_objects) {
         auto& vo = vo_kv.second;
-        vo.update_triangles(stream);
+        changed_depth = changed_depth && vo.update_triangles(stream);
         CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
         draw_object_async(device, vo);
         CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
-        {
-            const std::string& name = vo_kv.first;
-            uint32_t tri_count = static_cast<uint32_t>(m_objects.at(name).cpu_triangles().size());
-            auto n_elements = m_resolution.x * m_resolution.y;
-            // linear_kernel(debug_rt, 0, stream, n_elements,
-            //     m_resolution.x, 
-            //     m_resolution.y, 
-            //     cam.m_world_to_cam[3],
-            //     mat4::identity(),
-            //     cam.m_world_to_cam,
-            //     tri_count,
-            //     m_objects.at(name).gpu_triangles(),
-            //     device.render_buffer_view().frame_buffer, 
-            //     device.render_buffer_view().depth_buffer);
-        }
     }
-    // {
-    //     auto n_elements = m_resolution.x * m_resolution.y;
-    //     linear_kernel(debug_draw_rays, 0, stream, n_elements,
-    //         m_resolution.x, 
-    //         m_resolution.y, 
-    //         cam.gpu_positions(),
-    //         cam.gpu_directions(),
-    //         device.render_buffer_view().frame_buffer, 
-    //         device.render_buffer_view().depth_buffer);
-    //     CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
-    // }
+    if (changed_depth && !m_objects.empty()) {
+        // const std::string& name = vo_kv.first;
+        // uint32_t tri_count = static_cast<uint32_t>(m_objects.at(name).cpu_triangles().size());
+        auto n_elements = m_resolution.x * m_resolution.y;
+        linear_kernel(debug_syn_depth, 0, stream, n_elements, m_render_buffer_view.frame_buffer, m_render_buffer_view.depth_buffer);
+        CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
+    }
+    m_last_camera = cam_matrix;
     return true;
 }
 
@@ -227,20 +213,6 @@ void SyntheticWorld::imgui(float frame_time) {
 		if (ImGui::Button("Reset Camera")) {
 			mut_camera().reset_camera();
 		}
-	// 	if (ImGui::SliderFloat3("Camera Position", inputs::i_camera_eye.data(), -10.0, 10.0)) {
-	// 		// camera_position(inputs::i_camera_eye);
-	// 	}
-	// 	if (ImGui::Button("Reset Position")) {
-	// 		inputs::i_camera_eye = camera_default::position;
-	// 		// camera_position(inputs::i_camera_eye);
-	// 	}
-	// 	if (ImGui::SliderFloat3("Camera Look At", inputs::i_camera_at.data(), -10.0, 10.0)) {
-	// 		// camera_look_at(inputs::i_camera_at);
-	// 	}
-	// 	if (ImGui::Button("Reset Look At")) {
-	// 		inputs::i_camera_at = camera_default::lookat;
-	// 		// camera_look_at(inputs::i_camera_at);
-	// 	}
 	}
 	ImGui::End();
 }
@@ -278,6 +250,14 @@ __global__ void debug_triangle_vertices(const uint32_t n_elements, const Triangl
     //     ray_origins[i].r, ray_origins[i].g, ray_origins[i].b, 
     //     ray_directions[i].r, ray_directions[i].g, ray_directions[i].b
     // );
+}
+
+__global__ void debug_syn_depth(const uint32_t n_elements, vec4* __restrict__ rgba, float* __restrict__ depth) {
+	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
+	if (i >= n_elements) return;
+    if (i == n_elements * 4 / 7) {
+        printf("SYN DEPTH: %.5f\n", depth[i]);
+    }
 }
 
 }

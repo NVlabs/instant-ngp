@@ -91,13 +91,15 @@ Triangle* VirtualObject::gpu_triangles() {
 	return triangles_gpu.data();
 }
 
-void VirtualObject::update_triangles(cudaStream_t stream) {
+bool VirtualObject::update_triangles(cudaStream_t stream) {
 	if (needs_update) {
 		mat4 world_mat = get_transform();
 		linear_kernel(transform_triangles, 0, stream, triangles_cpu.size(), 
 			orig_triangles_gpu.data(), triangles_gpu.data(), world_mat);
 		needs_update = false;
+		return true;
 	}
+	return false;
 }
 
 mat4 VirtualObject::get_transform() {

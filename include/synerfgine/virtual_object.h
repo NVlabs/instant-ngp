@@ -33,7 +33,7 @@ class VirtualObject {
 public:
     VirtualObject(const char* fp, const std::string& name);
     ~VirtualObject();
-    void update_triangles(cudaStream_t stream);
+    bool update_triangles(cudaStream_t stream);
     mat4 get_transform();
     Triangle* gpu_triangles();
     const std::vector<Triangle>& cpu_triangles();

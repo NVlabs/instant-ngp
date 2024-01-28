@@ -26,7 +26,7 @@ using namespace tcnn;
 using ngp::Testbed;
 using ngp::GLTexture;
 
-__global__ void clear_nerf(const uint32_t n_elements, vec4* __restrict__ rgba, float* __restrict__ depth);
+__global__ void debug_depth(const uint32_t n_elements, vec4* __restrict__ rgba, float* __restrict__ depth);
 
 inline ivec2 downscale_resolution(const ivec2& resolution, float scale) {
     return clamp(ivec2(vec2(resolution) * scale), resolution / 16, resolution);
@@ -76,8 +76,11 @@ bool NerfWorld::handle(sng::CudaDevice& device, const Camera& cam, const ivec2& 
 	vec2 screen_center = cam.render_screen_center(m_testbed->m_screen_center);
     int visualized_dimension = -1;
     // m_testbed->train_and_render(TRAIN_WITHOUT_RENDER);
+    auto n_elements = product(m_resolution);
     m_testbed->render_frame(stream, cam_matrix, cam_matrix, cam_matrix, screen_center, m_testbed->m_relative_focal_length,
         vec4(vec3(0.0f), 1.0f), {}, {}, visualized_dimension, *m_render_buffer);
+    CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
+    linear_kernel(debug_depth, 0, stream, n_elements, m_render_buffer_view.frame_buffer, m_render_buffer_view.depth_buffer);
     CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
     m_last_camera = cam_matrix;
     return true;
@@ -93,11 +96,12 @@ void NerfWorld::imgui(float frame_time) {
     ImGui::End();
 }
 
-__global__ void clear_nerf(const uint32_t n_elements, vec4* __restrict__ rgba, float* __restrict__ depth) {
+__global__ void debug_depth(const uint32_t n_elements, vec4* __restrict__ rgba, float* __restrict__ depth) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_elements) return;
-    rgba[i] = vec4(0.0, 0.0, 0.0, 1.0);
-    depth[i] = 0.0f;
+    if (i == n_elements * 4 / 7) {
+        printf("NERF DEPTH: %.5f\n", depth[i]);
+    }
 }
 
 }

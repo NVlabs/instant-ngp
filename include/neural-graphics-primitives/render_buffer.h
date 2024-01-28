@@ -296,10 +296,15 @@ public:
 		return m_hidden_area_mask;
 	}
 
+	void set_depth_splat(bool to_splat) {
+		m_must_splat = to_splat;
+	}
+
 private:
 	uint32_t m_spp = 0;
 	EColorSpace m_color_space = EColorSpace::Linear;
 	ETonemapCurve m_tonemap_curve = ETonemapCurve::Identity;
+	bool m_must_splat = false;
 
 	std::unique_ptr<IDlss> m_dlss;
 	float m_dlss_sharpening = 0.0f;
