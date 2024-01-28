@@ -21,8 +21,8 @@ private:
     friend class sng::Display;
     mat4x3 m_last_camera;
     float m_render_ms{1.0};
-    float m_dynamic_res_target_fps{20.0};
-    int m_fixed_res_factor{64};
+    float m_dynamic_res_target_fps{15.0};
+    int m_fixed_res_factor{24};
 
     Testbed *m_testbed;
     std::shared_ptr<GLTexture> m_rgba_render_textures;

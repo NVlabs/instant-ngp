@@ -22,8 +22,8 @@ using namespace tcnn;
 namespace fs = std::filesystem;
 using ngp::Triangle;
 
-constexpr float MIN_DIST = -25.0;
-constexpr float MAX_DIST = 25.0;
+constexpr float MIN_DIST = -5.0;
+constexpr float MAX_DIST = 5.0;
 
 // struct RTView;
 
@@ -45,6 +45,7 @@ private:
     fs::path file_path;
     vec3 pos;
     vec3 rot;
+    float scale{1.0f};
     vec3 center;
 	tinyobj::attrib_t attrib;
 	std::vector<tinyobj::shape_t> shapes;

@@ -2,6 +2,7 @@
 #include <synerfgine/syn_world.h>
 
 #include <tiny-cuda-nn/common.h>
+#include <iostream>
 #include <filesystem>
 
 #ifdef NGP_GUI
@@ -27,7 +28,7 @@ using ngp::GLTexture;
 
 static bool is_first = true;
 
-__global__ void debug_syn_depth(const uint32_t n_elements, vec4* __restrict__ rgba, float* __restrict__ depth);
+__global__ void init_buffer(const uint32_t n_elements, vec4* __restrict__ rgba, float* __restrict__ depth);
 
 __global__ void debug_paint(const uint32_t n_elements, const uint32_t width, const uint32_t height, 
     vec4* __restrict__ rgba, float* __restrict__ depth);
@@ -70,19 +71,16 @@ bool SyntheticWorld::handle(CudaDevice& device, const ivec2& resolution) {
     auto device_guard = use_device(stream, *m_render_buffer, device);
     cam.generate_rays_async(device);
     bool changed_depth = cam_matrix == m_last_camera;
+    // m_render_buffer->clear_frame(stream);
+    auto n_elements = m_resolution.x * m_resolution.y;
+    linear_kernel(init_buffer, 0, stream, n_elements, m_render_buffer_view.frame_buffer, m_render_buffer_view.depth_buffer);
     CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
     for (auto& vo_kv : m_objects) {
         auto& vo = vo_kv.second;
-        changed_depth = changed_depth && vo.update_triangles(stream);
+        std::cerr << vo_kv.first << std::endl;
+        changed_depth = changed_depth & vo.update_triangles(stream);
         CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
         draw_object_async(device, vo);
-        CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
-    }
-    if (changed_depth && !m_objects.empty()) {
-        // const std::string& name = vo_kv.first;
-        // uint32_t tri_count = static_cast<uint32_t>(m_objects.at(name).cpu_triangles().size());
-        auto n_elements = m_resolution.x * m_resolution.y;
-        linear_kernel(debug_syn_depth, 0, stream, n_elements, m_render_buffer_view.frame_buffer, m_render_buffer_view.depth_buffer);
         CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
     }
     m_last_camera = cam_matrix;
@@ -126,11 +124,12 @@ __global__ void gpu_draw_object(const uint32_t n_elements, const uint32_t width,
     vec4* __restrict__ rgba, float* __restrict__ depth) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_elements) return;
-    rgba[i] = vec4(vec3(0.0), 1.0);
-    depth[i] = ngp::MAX_RT_DIST;
+    // rgba[i] = vec4(vec3(0.0), 1.0);
+    // depth[i] = ngp::MAX_RT_DIST;
     vec3 rd = ray_directions[i];
     vec3 ro = ray_origins[i];
-    float dt = ngp::MAX_RT_DIST;
+    vec4 local_color;
+    float dt = depth[i];
     vec3 normal;
     for (size_t k = 0; k < tri_count; ++k) {
         float t = triangles[k].ray_intersect(ro, rd);
@@ -146,11 +145,12 @@ __global__ void gpu_draw_object(const uint32_t n_elements, const uint32_t width,
         vec3 to_sun = normalize(sun.pos - ro);
         // FOR DIFFUSE ONLY, NO AMBIENT / SPEC
         float ndotv = dot(normal, to_sun);
-        rgba[i] = vec4(ndotv * vec3(1.0, 0.2, 0.0), 1.0);
-    } else {
-        rgba[i] = vec4(vec3(0.0), 1.0);
+        local_color = vec4(ndotv * vec3(1.0, 0.2, 0.0), 1.0);
     }
-    depth[i] = dt;
+    if (depth[i] > dt) {
+        rgba[i] = local_color;
+        depth[i] = dt;
+    }
     // if (dt != ngp::MAX_RT_DIST && i % 100000 == 0) {
     //     printf("SYN: %d: %f\n", i, dt);
     // }
@@ -252,12 +252,11 @@ __global__ void debug_triangle_vertices(const uint32_t n_elements, const Triangl
     // );
 }
 
-__global__ void debug_syn_depth(const uint32_t n_elements, vec4* __restrict__ rgba, float* __restrict__ depth) {
+__global__ void init_buffer(const uint32_t n_elements, vec4* __restrict__ rgba, float* __restrict__ depth) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_elements) return;
-    if (i == n_elements * 4 / 7) {
-        printf("SYN DEPTH: %.5f\n", depth[i]);
-    }
+    rgba[i] = vec4(vec3(0.0), 1.0);
+    depth[i] = ngp::MAX_RT_DIST;
 }
 
 }

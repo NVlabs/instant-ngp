@@ -107,7 +107,9 @@ mat4 VirtualObject::get_transform() {
 	mat4 rx = mat4(vec4(1.0, 0.0, 0.0, 0.0), vec4(0.0, cos(rot.x), sin(rot.x), 0.0), vec4(0.0, -sin(rot.x), cos(rot.x), 0.0), last);
 	mat4 ry = mat4(vec4(cos(rot.y), 0.0, -sin(rot.y), 0.0), vec4(0.0, 1.0, 0.0, 0.0), vec4(sin(rot.y), 0, cos(rot.y), 0.0), last);
 	mat4 rz = mat4(vec4(cos(rot.z), sin(rot.z), 0.0, 0.0), vec4(-sin(rot.z), cos(rot.z), 0.0, 0.0), vec4(0.0, 0.0, 1.0, 0.0), last);
-	mat4 rmat = rz * ry * rx;
+	mat4 sc = mat4::identity() * scale;
+	sc[3].a = 1.0f;
+	mat4 rmat = sc * rz * ry * rx;
 	return mat4(rmat[0], rmat[1], rmat[2], vec4(pos, 1.0));
 }
 
@@ -116,10 +118,14 @@ VirtualObject::~VirtualObject() {
 }
 
 void VirtualObject::imgui() {
-    std::string pos_name = "Position: " + name;
-    std::string rot_name = "Rotation: " + name;
+    std::string scl_name = "Scale " + name;
+    std::string pos_name = "Position " + name;
+    std::string rot_name = "Rotation " + name;
     ImGui::Text(name.c_str());
 	// update the bvh when the values change
+    if (ImGui::SliderFloat(scl_name.c_str(), &scale, 0.001f, 5.0f)) {
+		needs_update = true;
+	}
     if (ImGui::SliderFloat3(pos_name.c_str(), pos.data(), sng::MIN_DIST, sng::MAX_DIST)) {
 		needs_update = true;
 	}
