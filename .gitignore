@@ -10,6 +10,8 @@
 /video
 /instant-ngp
 /*.dll
+/*.so
+/*.so.*
 /*.exe
 /*.json
 *.ingp
