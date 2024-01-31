@@ -40,7 +40,7 @@ struct CameraKeyframe {
 	int glow_mode;
 	float glow_y_cutoff;
 	mat4x3 m() const {
-		auto rot = to_mat3(normalize(quat(R)));
+		auto rot = to_mat3(normalize(R));
 		return mat4x3(rot[0], rot[1], rot[2], T);
 	}
 

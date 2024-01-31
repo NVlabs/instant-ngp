@@ -38,7 +38,7 @@ CameraKeyframe lerp(const CameraKeyframe& p0, const CameraKeyframe& p1, float t,
 	}
 
 	return {
-		slerp(p0.R, R1, t),
+		normalize(slerp(p0.R, R1, t)),
 		p0.T + (p1.T - p0.T) * t,
 		p0.slice + (p1.slice - p0.slice) * t,
 		p0.scale + (p1.scale - p0.scale) * t,
@@ -48,6 +48,12 @@ CameraKeyframe lerp(const CameraKeyframe& p0, const CameraKeyframe& p1, float t,
 		p0.glow_mode,
 		p0.glow_y_cutoff + (p1.glow_y_cutoff - p0.glow_y_cutoff) * t,
 	};
+}
+
+CameraKeyframe normalize(const CameraKeyframe& p0) {
+	CameraKeyframe result = p0;
+	result.R = normalize(result.R);
+	return result;
 }
 
 CameraKeyframe spline(float t, const CameraKeyframe& p0, const CameraKeyframe& p1, const CameraKeyframe& p2, const CameraKeyframe& p3) {
@@ -67,7 +73,7 @@ CameraKeyframe spline(float t, const CameraKeyframe& p0, const CameraKeyframe& p
 		float b = (3.f*ttt-6.f*tt+4.f)*(1.f/6.f);
 		float c = (-3.f*ttt+3.f*tt+3.f*t+1.f)*(1.f/6.f);
 		float d = ttt*(1.f/6.f);
-		return p0 * a + p1 * b + p2 * c + p3 * d;
+		return normalize(p0 * a + p1 * b + p2 * c + p3 * d);
 	}
 }
 

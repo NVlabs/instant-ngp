@@ -656,8 +656,7 @@ inline NGP_HOST_DEVICE mat4x3 camera_slerp(const mat4x3& a, const mat4x3& b, flo
 
 inline NGP_HOST_DEVICE mat4x3 get_xform_given_rolling_shutter(const TrainingXForm& training_xform, const vec4& rolling_shutter, const vec2& uv, float motionblur_time) {
 	float pixel_t = rolling_shutter.x + rolling_shutter.y * uv.x + rolling_shutter.z * uv.y + rolling_shutter.w * motionblur_time;
-	return camera_log_lerp(training_xform.start, training_xform.end, pixel_t);
-	// return camera_slerp(training_xform.start, training_xform.end, pixel_t);
+	return camera_slerp(training_xform.start, training_xform.end, pixel_t);
 }
 
 inline NGP_HOST_DEVICE void apply_quilting(uint32_t* x, uint32_t* y, const ivec2& resolution, vec3& parallax_shift, const ivec2& quilting_dims) {
