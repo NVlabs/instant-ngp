@@ -621,30 +621,6 @@ inline NGP_HOST_DEVICE vec2 focal_length_to_fov(const ivec2& resolution, const v
 	return 2.0f * 180.0f / PI() * atan(vec2(resolution) / (focal_length * 2.0f));
 }
 
-inline NGP_HOST_DEVICE float4 to_float4(const vec4& x) {
-	return {x.x, x.y, x.z, x.w};
-}
-
-inline NGP_HOST_DEVICE float3 to_float3(const vec3& x) {
-	return {x.x, x.y, x.z};
-}
-
-inline NGP_HOST_DEVICE float2 to_float2(const vec2& x) {
-	return {x.x, x.y};
-}
-
-inline NGP_HOST_DEVICE vec4 to_vec4(const float4& x) {
-	return {x.x, x.y, x.z, x.w};
-}
-
-inline NGP_HOST_DEVICE vec3 to_vec3(const float3& x) {
-	return {x.x, x.y, x.z};
-}
-
-inline NGP_HOST_DEVICE vec2 to_vec2(const float2& x) {
-	return {x.x, x.y};
-}
-
 inline NGP_HOST_DEVICE mat4x3 camera_log_lerp(const mat4x3& a, const mat4x3& b, float t) {
 	return mat_exp(mat_log(mat4(b) * inverse(mat4(a))) * t) * mat4(a);
 }
