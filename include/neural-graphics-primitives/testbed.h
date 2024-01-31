@@ -877,8 +877,8 @@ public:
 		} training = {};
 
 		// tracing state
-		GPUMemory<vec3> pos[2] = {};
-		GPUMemory<VolPayload> payload[2] = {};
+		GPUMemory<vec3> pos[2] = {{}, {}};
+		GPUMemory<VolPayload> payload[2] = {{}, {}};
 		GPUMemory<uint32_t> hit_counter = {};
 		GPUMemory<vec4> radiance_and_density;
 	} m_volume;
