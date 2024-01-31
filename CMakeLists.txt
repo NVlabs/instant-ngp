@@ -370,6 +370,10 @@ if (NGP_BUILD_EXECUTABLE)
 		endif()
 	else()
 		add_custom_command(TARGET instant-ngp POST_BUILD COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE:instant-ngp> "${NGP_BINARY_FILE}")
+
+		if (NGP_VULKAN)
+			add_custom_command(TARGET instant-ngp POST_BUILD COMMAND "ln" -s -f "${NGX_SHARED_LIB}" "${CMAKE_CURRENT_SOURCE_DIR}/")
+		endif()
 	endif()
 endif(NGP_BUILD_EXECUTABLE)
 
