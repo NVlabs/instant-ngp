@@ -4754,6 +4754,32 @@ void Testbed::save_snapshot(const fs::path& path, bool include_optimizer_state, 
 	tlog::success() << "Saved snapshot '" << path.str() << "'";
 }
 
+void Testbed::save_raw_volumes()
+{
+	static bool flip_y_and_z_axes = false;
+	BoundingBox aabb = (m_testbed_mode == ETestbedMode::Nerf) ? m_render_aabb : m_aabb;
+
+	auto res3d = get_marching_cubes_res(m_mesh.res, aabb);
+	auto effective_view_dir = flip_y_and_z_axes ? vec3{0.0f, 1.0f, 0.0f} : vec3{0.0f, 0.0f, 1.0f};
+	auto old_local = m_render_aabb_to_local;
+	auto old_aabb = m_render_aabb;
+	m_render_aabb_to_local = mat3(1.0f);
+	auto dir = m_data_path / "volume_raw";
+	if (!dir.exists())
+	{
+		fs::create_directory(dir);
+	}
+	for (int cascade = 0; (1 << cascade) <= m_aabb.diag().x + 0.5f; ++cascade)
+	{
+		float radius = (1 << cascade) * 0.5f;
+		m_render_aabb = BoundingBox(vec3(0.5f - radius), vec3(0.5f + radius));
+		GPUMemory<vec4> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, 0.0f, true);
+		save_rgba_grid_to_raw_file(rgba, dir.str().c_str(), res3d, flip_y_and_z_axes, cascade);
+	}
+	m_render_aabb_to_local = old_local;
+	m_render_aabb = old_aabb;
+}
+
 void Testbed::load_snapshot(nlohmann::json config) {
 	const auto& snapshot = config["snapshot"];
 	if (snapshot.value("version", 0) < SNAPSHOT_FORMAT_VERSION) {

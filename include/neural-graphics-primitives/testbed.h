@@ -485,6 +485,7 @@ public:
 	vec2 fov_xy() const ;
 	void set_fov_xy(const vec2& val);
 	void save_snapshot(const fs::path& path, bool include_optimizer_state, bool compress);
+	void save_raw_volumes();
 	void load_snapshot(nlohmann::json config);
 	void load_snapshot(const fs::path& path);
 	void load_snapshot(std::istream& stream, bool is_compressed = true);
