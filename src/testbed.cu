@@ -1624,24 +1624,7 @@ void Testbed::imgui() {
 					save_rgba_grid_to_png_sequence(rgba, dir, res3d, flip_y_and_z_axes);
 				}
 				if (imgui_colored_button("Save raw volumes", 0.4f)) {
-					auto effective_view_dir = flip_y_and_z_axes ? vec3{0.0f, 1.0f, 0.0f} : vec3{0.0f, 0.0f, 1.0f};
-					auto old_local = m_render_aabb_to_local;
-					auto old_aabb = m_render_aabb;
-					m_render_aabb_to_local = mat3::identity();
-					auto dir = m_data_path.is_directory() || m_data_path.empty() ? (m_data_path / "volume_raw") : (m_data_path.parent_path() / fmt::format("{}_volume_raw", m_data_path.filename()));
-					if (!dir.exists()) {
-						fs::create_directory(dir);
-					}
-
-					for (int cascade = 0; (1<<cascade)<= m_aabb.diag().x+0.5f; ++cascade) {
-						float radius = (1<<cascade) * 0.5f;
-						m_render_aabb = BoundingBox(vec3(0.5f-radius), vec3(0.5f+radius));
-						// Dump raw density values that the user can then convert to alpha as they please.
-						GPUMemory<vec4> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, 0.0f, true);
-						save_rgba_grid_to_raw_file(rgba, dir, res3d, flip_y_and_z_axes, cascade);
-					}
-					m_render_aabb_to_local = old_local;
-					m_render_aabb = old_aabb;
+					save_raw_volumes(m_data_path, m_mesh.res, {}, flip_y_and_z_axes);	
 				}
 			}
 
@@ -4754,30 +4737,39 @@ void Testbed::save_snapshot(const fs::path& path, bool include_optimizer_state, 
 	tlog::success() << "Saved snapshot '" << path.str() << "'";
 }
 
-void Testbed::save_raw_volumes()
+void Testbed::save_raw_volumes(const fs::path &filename, int res, BoundingBox aabb, bool flip_y_and_z_axes)
 {
-	static bool flip_y_and_z_axes = false;
-	BoundingBox aabb = (m_testbed_mode == ETestbedMode::Nerf) ? m_render_aabb : m_aabb;
-
-	auto res3d = get_marching_cubes_res(m_mesh.res, aabb);
 	auto effective_view_dir = flip_y_and_z_axes ? vec3{0.0f, 1.0f, 0.0f} : vec3{0.0f, 0.0f, 1.0f};
-	auto old_local = m_render_aabb_to_local;
-	auto old_aabb = m_render_aabb;
-	m_render_aabb_to_local = mat3(1.0f);
-	auto dir = m_data_path / "volume_raw";
+	mat3 render_aabb_to_local = mat3(1.0f);
+
+	if (aabb.is_empty())
+	{
+		aabb = m_testbed_mode == ETestbedMode::Nerf ? m_render_aabb : m_aabb;
+		render_aabb_to_local = m_render_aabb_to_local;
+	}
+
+	if (m_testbed_mode != ETestbedMode::Nerf)
+	{
+		throw std::runtime_error{"Raw volume export is only supported for NeRF."};
+	}
+
+	auto res3d = get_marching_cubes_res(res, aabb);
+
+	std::string flipped = flip_y_and_z_axes ? "_flipedYZ" : "";
+	auto dir =( filename.is_directory() || filename.empty() ? (filename / fmt::format("volume_raw{}",flipped)) : (filename.parent_path() / fmt::format("{}_volume_raw{}", filename.filename(),flipped))) ;		
 	if (!dir.exists())
 	{
 		fs::create_directory(dir);
 	}
+
 	for (int cascade = 0; (1 << cascade) <= m_aabb.diag().x + 0.5f; ++cascade)
 	{
 		float radius = (1 << cascade) * 0.5f;
 		m_render_aabb = BoundingBox(vec3(0.5f - radius), vec3(0.5f + radius));
+		// Dump raw density values that the user can then convert to alpha as they please.
 		GPUMemory<vec4> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, 0.0f, true);
-		save_rgba_grid_to_raw_file(rgba, dir.str().c_str(), res3d, flip_y_and_z_axes, cascade);
+		save_rgba_grid_to_raw_file(rgba, dir, res3d, flip_y_and_z_axes, cascade);
 	}
-	m_render_aabb_to_local = old_local;
-	m_render_aabb = old_aabb;
 }
 
 void Testbed::load_snapshot(nlohmann::json config) {
