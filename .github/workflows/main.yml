@@ -15,6 +15,15 @@ jobs:
     strategy:
       matrix:
         include:
+          - os: ubuntu-24.04
+            cuda: "12.8"
+            arch: 120
+          - os: ubuntu-24.04
+            cuda: "12.8"
+            arch: 100
+          - os: ubuntu-24.04
+            cuda: "12.6"
+            arch: 89
           - os: ubuntu-22.04
             cuda: "11.7"
             arch: 86
@@ -47,10 +56,10 @@ jobs:
     steps:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install build-essential python3-dev libglfw3-dev libglew-dev libxinerama-dev libxcursor-dev libxi-dev
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -r requirements.txt
@@ -73,6 +82,14 @@ jobs:
     strategy:
       matrix:
         include:
+          - os: windows-2025
+            visual_studio: "Visual Studio 17 2022"
+            cuda: "12.8.0"
+            arch: 120
+          - os: windows-2025
+            visual_studio: "Visual Studio 17 2022"
+            cuda: "12.6.3"
+            arch: 89
           - os: windows-2019
             visual_studio: "Visual Studio 16 2019"
             cuda: "11.5.1"
@@ -112,10 +129,10 @@ jobs:
       config: "Release"
       TCNN_CUDA_ARCHITECTURES: ${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -r requirements.txt
