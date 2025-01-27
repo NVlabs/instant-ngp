@@ -72,7 +72,7 @@ jobs:
         run: ./dependencies/tiny-cuda-nn/dependencies/cuda-cmake-github-actions/scripts/actions/install_cuda_ubuntu.sh
         shell: bash
       - name: Install Vulkan SDK
-        uses: humbletim/install-vulkan-sdk@v1.1.1
+        uses: humbletim/install-vulkan-sdk@c2aa128094d42ba02959a660f03e0a4e012192f9
       - name: CMake
         run: cmake . -B ${{ env.build_dir }} ${{ matrix.cmake_flags }} -DCMAKE_BUILD_TYPE=${{ env.config }}
       - name: Build
@@ -149,7 +149,7 @@ jobs:
         shell: powershell
         run: .\dependencies\tiny-cuda-nn\dependencies\cuda-cmake-github-actions\scripts\actions\install_cuda_windows.ps1
       - name: Install Vulkan SDK
-        uses: humbletim/install-vulkan-sdk@v1.1.1
+        uses: humbletim/install-vulkan-sdk@c2aa128094d42ba02959a660f03e0a4e012192f9
       - name: CMake
         run: cmake . -B ${{ env.build_dir }} ${{ matrix.cmake_flags }} -G "${{ matrix.visual_studio }}" -A x64
       - name: Build
@@ -157,7 +157,7 @@ jobs:
         run: cmake --build . --config ${{ env.config }} --target ALL_BUILD --verbose
       - name: Upload release
         if: ${{ matrix.recommended_gpus }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Instant-NGP-for-${{ matrix.recommended_gpus }}
           path: |
@@ -191,7 +191,7 @@ jobs:
     if: github.ref == 'refs/heads/master'
     steps:
       - name: Grab binary artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
       - name: Package
         run: for i in */; do zip -r "${i%/}.zip" "$i"; done
       - name: Update release
