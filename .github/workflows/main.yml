@@ -15,6 +15,18 @@ jobs:
     strategy:
       matrix:
         include:
+          - os: ubuntu-24.04
+            cuda: "12.8"
+            arch: 120
+            python: "3.12"
+          - os: ubuntu-24.04
+            cuda: "12.8"
+            arch: 100
+            python: "3.12"
+          - os: ubuntu-24.04
+            cuda: "12.6"
+            arch: 89
+            python: "3.12"
           - os: ubuntu-22.04
             cuda: "11.7"
             arch: 86
@@ -50,7 +62,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -r requirements.txt
@@ -73,6 +85,17 @@ jobs:
     strategy:
       matrix:
         include:
+          - os: windows-2025
+            visual_studio: "Visual Studio 17 2022"
+            cuda: "12.8.0"
+            arch: 120
+            python: "3.12"
+            recommended_gpus: "RTX-5000"
+          - os: windows-2025
+            visual_studio: "Visual Studio 17 2022"
+            cuda: "12.6.3"
+            arch: 89
+            python: "3.12"
           - os: windows-2019
             visual_studio: "Visual Studio 16 2019"
             cuda: "11.5.1"
@@ -115,7 +138,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -r requirements.txt
