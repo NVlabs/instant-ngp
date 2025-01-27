@@ -47,7 +47,7 @@ jobs:
     steps:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install build-essential python3-dev libglfw3-dev libglew-dev libxinerama-dev libxcursor-dev libxi-dev
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
       - uses: actions/setup-python@v4
@@ -57,7 +57,7 @@ jobs:
       - name: Install CUDA
         env:
           cuda: ${{ matrix.cuda }}
-        run: ./dependencies/cuda-cmake-github-actions/scripts/actions/install_cuda_ubuntu.sh
+        run: ./dependencies/tiny-cuda-nn/dependencies/cuda-cmake-github-actions/scripts/actions/install_cuda_ubuntu.sh
         shell: bash
       - name: Install Vulkan SDK
         uses: humbletim/install-vulkan-sdk@v1.1.1
@@ -112,7 +112,7 @@ jobs:
       config: "Release"
       TCNN_CUDA_ARCHITECTURES: ${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
       - uses: actions/setup-python@v4
@@ -124,7 +124,7 @@ jobs:
           cuda: ${{ matrix.cuda }}
           visual_studio: ${{ matrix.visual_studio }}
         shell: powershell
-        run: .\dependencies\cuda-cmake-github-actions\scripts\actions\install_cuda_windows.ps1
+        run: .\dependencies\tiny-cuda-nn\dependencies\cuda-cmake-github-actions\scripts\actions\install_cuda_windows.ps1
       - name: Install Vulkan SDK
         uses: humbletim/install-vulkan-sdk@v1.1.1
       - name: CMake
