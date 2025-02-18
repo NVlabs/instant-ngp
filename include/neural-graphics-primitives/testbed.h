@@ -885,7 +885,7 @@ public:
 	} m_volume;
 
 	float m_camera_velocity = 1.0f;
-	EColorSpace m_color_space = EColorSpace::Linear;
+	EColorSpace m_color_space = EColorSpace::SRGB;
 	ETonemapCurve m_tonemap_curve = ETonemapCurve::Identity;
 	bool m_dlss = false;
 	std::shared_ptr<IDlssProvider> m_dlss_provider;

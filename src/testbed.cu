@@ -2918,7 +2918,8 @@ void Testbed::train_and_render(bool skip_rendering) {
 				futures[i].get();
 			}
 
-			render_frame_epilogue(synced_streams.get(i), view.camera0, view.prev_camera, view.screen_center, view.relative_focal_length, view.foveation, view.prev_foveation, *view.render_buffer, true);
+			bool to_srgb = (m_color_space == EColorSpace::SRGB);
+			render_frame_epilogue(synced_streams.get(i), view.camera0, view.prev_camera, view.screen_center, view.relative_focal_length, view.foveation, view.prev_foveation, *view.render_buffer, to_srgb);
 			view.prev_camera = view.camera0;
 			view.prev_foveation = view.foveation;
 		}
