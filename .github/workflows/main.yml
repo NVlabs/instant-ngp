@@ -87,7 +87,7 @@ jobs:
         include:
           - os: windows-2025
             visual_studio: "Visual Studio 17 2022"
-            cuda: "12.8.0"
+            cuda: "12.9.1"
             arch: 120
             python: "3.12"
             recommended_gpus: "RTX-5000"
