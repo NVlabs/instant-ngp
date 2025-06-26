@@ -251,6 +251,7 @@ public:
 		float alpha,
 		const float* __restrict__ depth,
 		float depth_scale,
+		float max_depth,
 		const ivec2& resolution,
 		int fov_axis,
 		float zoom,

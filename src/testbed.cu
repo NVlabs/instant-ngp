@@ -1294,6 +1294,7 @@ void Testbed::imgui() {
 
 			accum_reset |= ImGui::Combo("Groundtruth render mode", (int*)&m_ground_truth_render_mode, GroundTruthRenderModeStr);
 			accum_reset |= ImGui::SliderFloat("Groundtruth alpha", &m_ground_truth_alpha, 0.0f, 1.0f, "%.02f", ImGuiSliderFlags_AlwaysClamp);
+			accum_reset |= ImGui::SliderFloat("Groundtruth Max Depth", &m_ground_truth_max_depth, 1e-3f, 10.0f, "%.02f", ImGuiSliderFlags_AlwaysClamp);
 
 			bool lens_changed = ImGui::Checkbox("Apply lens distortion", &m_nerf.render_with_lens_distortion);
 			if (m_nerf.render_with_lens_distortion) {
@@ -4511,6 +4512,7 @@ void Testbed::render_frame_epilogue(
 					m_ground_truth_alpha,
 					metadata.depth,
 					1.0f/m_nerf.training.dataset.scale,
+					m_ground_truth_max_depth,
 					metadata.resolution,
 					m_fov_axis,
 					m_zoom,
