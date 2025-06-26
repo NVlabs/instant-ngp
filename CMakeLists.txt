@@ -8,6 +8,16 @@
 
 cmake_minimum_required(VERSION 3.18)
 
+# Set a default configuration if none was specified
+if (NOT CMAKE_BUILD_TYPE AND NOT DEFINED ENV{CMAKE_BUILD_TYPE})
+	message(STATUS "No release type specified. Setting to 'Release'.")
+	set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+endif()
+
+if(NOT CMAKE_CONFIGURATION_TYPES)
+	set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo")
+endif()
+
 project(instant-ngp
 	VERSION 1.0
 	DESCRIPTION "Instant Neural Graphics Primitives"
@@ -25,18 +35,11 @@ option(NGP_BUILD_WITH_OPTIX "Build with OptiX to enable hardware ray tracing?" O
 option(NGP_BUILD_WITH_PYTHON_BINDINGS "Build bindings that allow instrumenting instant-ngp with Python?" ON)
 option(NGP_BUILD_WITH_VULKAN "Build with Vulkan to enable DLSS support?" ON)
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 ###############################################################################
 # Build type and C++ compiler setup
 ###############################################################################
-
-# Set a default configuration if none was specified
-if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-	message(STATUS "No release type specified. Setting to 'Release'.")
-	set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
-	set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo")
-endif()
 
 if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/glfw/CMakeLists.txt")
 	message(FATAL_ERROR
@@ -51,10 +54,10 @@ if (APPLE)
 endif()
 
 if (MSVC)
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /D_CRT_SECURE_NO_WARNINGS")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP24")
+	add_compile_definitions("$<$<COMPILE_LANGUAGE:CXX>:_CRT_SECURE_NO_WARNINGS>")
+	add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/MP24>")
 else()
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+	add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-fPIC>")
 endif()
 
 set(CMAKE_CXX_STANDARD 14)
@@ -208,8 +211,8 @@ list(APPEND NGP_INCLUDE_DIRECTORIES
 
 find_package(OpenMP)
 if (OPENMP_FOUND)
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+	add_compile_options("$<$<COMPILE_LANGUAGE:C>:${OpenMP_C_FLAGS}>")
+	add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:${OpenMP_CXX_FLAGS}>")
 endif()
 
 if (NGP_BUILD_WITH_OPTIX)
