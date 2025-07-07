@@ -113,7 +113,7 @@ def live_streaming_loop(reader: DataReader, max_cameras: int):
 
 			# Transform
 			X_WV = np.asarray(sample.transform_matrix,
-							dtype=np.float32).reshape((4, 4)).T[:3, :].copy()
+							  dtype=np.float32).reshape((4, 4)).T[:3, :].copy()
 
 			# Add frame to InstantNGP
 			set_frame(testbed,

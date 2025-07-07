@@ -13,7 +13,7 @@ import glob
 import imageio
 import numpy as np
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from scipy.ndimage.filters import convolve1d
 import struct
 import sys
@@ -21,21 +21,7 @@ import sys
 import flip
 import flip.utils
 
-PAPER_FOLDER = Path(__file__).resolve().parent.parent
-SUPPL_FOLDER = PAPER_FOLDER/"supplemental"
-SCRIPTS_FOLDER = PAPER_FOLDER/"scripts"
-TEMPLATE_FOLDER = SCRIPTS_FOLDER/"template"
-DATA_FOLDER = SCRIPTS_FOLDER/"data"
-
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-RESULTS_DIR = os.path.join(ROOT_DIR, "results")
-NGP_DATA_FOLDER = os.environ.get("NGP_DATA_FOLDER") or os.path.join(ROOT_DIR, "data")
-
-
-NERF_DATA_FOLDER = os.path.join(NGP_DATA_FOLDER, "nerf")
-SDF_DATA_FOLDER = os.path.join(NGP_DATA_FOLDER, "sdf")
-IMAGE_DATA_FOLDER = os.path.join(NGP_DATA_FOLDER, "image")
-VOLUME_DATA_FOLDER = os.path.join(NGP_DATA_FOLDER, "volume")
+from constants import *
 
 # Search for pyngp in the build folder.
 sys.path += [os.path.dirname(pyd) for pyd in glob.iglob(os.path.join(ROOT_DIR, "build*", "**/*.pyd"), recursive=True)]
@@ -244,7 +230,7 @@ def compute_error_img(metric, img, ref):
 		return RSE(np.clip(img, 0, 100), np.clip(ref, 0, 100))
 	elif metric == "SSIM":
 		return SSIM(np.clip(img, 0.0, 1.0), np.clip(ref, 0.0, 1.0))
-	elif metric in ["FLIP", "\FLIP"]:
+	elif metric in ["FLIP", "\\FLIP"]:
 		# Set viewing conditions
 		monitor_distance = 0.7
 		monitor_width = 0.7

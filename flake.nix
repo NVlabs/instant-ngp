@@ -21,7 +21,7 @@
       {
         devShell = pkgs.mkShell {
           buildInputs = with pkgs; [
-            gcc
+            gcc13
             gdb
             cmake
             pkg-config
@@ -55,6 +55,11 @@
           ];
 
           shellHook = ''
+            # Set GCC 13 as the default compiler
+            export CC="${pkgs.gcc13}/bin/gcc"
+            export CXX="${pkgs.gcc13}/bin/g++"
+            export PATH="${pkgs.gcc13}/bin:$PATH"
+
             export CUDA_PATH="${pkgs.cudatoolkit}"
             export CLANGD_CUDA_INCLUDE="${pkgs.cudatoolkit}"
 

@@ -19,7 +19,7 @@ For business inquiries, please submit the [NVIDIA research licensing form](https
 
 If you have Windows, download one of the following releases corresponding to your graphics card and extract it. Then, start `instant-ngp.exe`.
 
-- [**RTX 5000 series and other Blackwell cards**](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-RTX-5000.zip)
+- [**RTX 5000 series** and other Blackwell cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-RTX-5000.zip)
 - [**RTX 3000 & 4000 series, RTX A4000&ndash;A6000**, and other Ampere & Ada cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-RTX-3000-and-4000.zip)
 - [**RTX 2000 series, Titan RTX, Quadro RTX 4000&ndash;8000**, and other Turing cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-RTX-2000.zip)
 - [**GTX 1000 series, Titan Xp, Quadro P1000&ndash;P6000**, and other Pascal cards](https://github.com/NVlabs/instant-ngp/releases/download/continuous/Instant-NGP-for-GTX-1000.zip)
@@ -361,4 +361,3 @@ Many thanks to the authors of these brilliant projects!
 Copyright © 2022, NVIDIA Corporation. All rights reserved.
 
 This work is made available under the Nvidia Source Code License-NC. Click [here](LICENSE.txt) to view a copy of this license.
-

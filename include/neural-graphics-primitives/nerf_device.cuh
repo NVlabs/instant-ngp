@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <neural-graphics-primitives/bounding_box.cuh>
 #include <neural-graphics-primitives/common_device.cuh>
 
 #include <tiny-cuda-nn/common_device.h>
@@ -21,25 +22,25 @@
 namespace ngp {
 
 // size of the density/occupancy grid in number of cells along an axis.
-inline constexpr __device__ uint32_t NERF_GRIDSIZE() { return 128; }
-inline constexpr __device__ uint32_t NERF_GRID_N_CELLS() { return NERF_GRIDSIZE() * NERF_GRIDSIZE() * NERF_GRIDSIZE(); }
+inline constexpr NGP_HOST_DEVICE uint32_t NERF_GRIDSIZE() { return 128; }
+inline constexpr NGP_HOST_DEVICE uint32_t NERF_GRID_N_CELLS() { return NERF_GRIDSIZE() * NERF_GRIDSIZE() * NERF_GRIDSIZE(); }
 
-inline constexpr __device__ float NERF_RENDERING_NEAR_DISTANCE() { return 0.05f; }
-inline constexpr __device__ uint32_t NERF_STEPS() { return 1024; } // finest number of steps per unit length
-inline constexpr __device__ uint32_t NERF_CASCADES() { return 8; }
+inline constexpr NGP_HOST_DEVICE float NERF_RENDERING_NEAR_DISTANCE() { return 0.05f; }
+inline constexpr NGP_HOST_DEVICE uint32_t NERF_STEPS() { return 1024; } // finest number of steps per unit length
+inline constexpr NGP_HOST_DEVICE uint32_t NERF_CASCADES() { return 8; }
 
-inline constexpr __device__ float SQRT3() { return 1.73205080757f; }
-inline constexpr __device__ float STEPSIZE() { return (SQRT3() / NERF_STEPS()); } // for nerf raymarch
-inline constexpr __device__ float MIN_CONE_STEPSIZE() { return STEPSIZE(); }
+inline constexpr NGP_HOST_DEVICE float SQRT3() { return 1.73205080757f; }
+inline constexpr NGP_HOST_DEVICE float STEPSIZE() { return (SQRT3() / NERF_STEPS()); } // for nerf raymarch
+inline constexpr NGP_HOST_DEVICE float MIN_CONE_STEPSIZE() { return STEPSIZE(); }
 // Maximum step size is the width of the coarsest gridsize cell.
-inline constexpr __device__ float MAX_CONE_STEPSIZE() { return STEPSIZE() * (1<<(NERF_CASCADES()-1)) * NERF_STEPS() / NERF_GRIDSIZE(); }
+inline constexpr NGP_HOST_DEVICE float MAX_CONE_STEPSIZE() { return STEPSIZE() * (1<<(NERF_CASCADES()-1)) * NERF_STEPS() / NERF_GRIDSIZE(); }
 
 // Used to index into the PRNG stream. Must be larger than the number of
 // samples consumed by any given training ray.
-inline constexpr __device__ uint32_t N_MAX_RANDOM_SAMPLES_PER_RAY() { return 16; }
+inline constexpr NGP_HOST_DEVICE uint32_t N_MAX_RANDOM_SAMPLES_PER_RAY() { return 16; }
 
 // Any alpha below this is considered "invisible" and is thus culled away.
-inline constexpr __device__ float NERF_MIN_OPTICAL_THICKNESS() { return 0.01f; }
+inline constexpr NGP_HOST_DEVICE float NERF_MIN_OPTICAL_THICKNESS() { return 0.01f; }
 
 struct TrainingImageMetadata {
 	// Camera intrinsics and additional data associated with a NeRF training image

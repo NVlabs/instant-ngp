@@ -59,6 +59,8 @@ inline void to_json(nlohmann::json& j, const Lens& lens) {
 		j["latlong"] = true;
 	} else if (lens.mode == ELensMode::Equirectangular) {
 		j["equirectangular"] = true;
+	} else if (lens.mode == ELensMode::Orthographic) {
+		j["orthographic"] = true;
 	}
 }
 
@@ -90,6 +92,8 @@ inline void from_json(const nlohmann::json& j, Lens& lens) {
 		lens.mode = ELensMode::LatLong;
 	} else if (j.contains("equirectangular")) {
 		lens.mode = ELensMode::Equirectangular;
+	} else if (j.contains("orthographic")) {
+		lens.mode = ELensMode::Orthographic;
 	} else {
 		lens.mode = ELensMode::Perspective;
 	}
