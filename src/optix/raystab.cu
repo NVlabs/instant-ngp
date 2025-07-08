@@ -22,15 +22,15 @@
 
 namespace ngp {
 
-extern "C" {
-	__constant__ Raystab::Params params;
-}
+extern "C" __constant__ char params_data[sizeof(Raystab::Params)];
 
 extern "C" __global__ void __raygen__rg() {
+	const auto* params = (Raystab::Params*)params_data;
+
 	const uint3 idx = optixGetLaunchIndex();
 	const uint3 dim = optixGetLaunchDimensions();
 
-	vec3 ray_origin = params.ray_origins[idx.x];
+	vec3 ray_origin = params->ray_origins[idx.x];
 
 	default_rng_t rng;
 	rng.advance(idx.x * 2);
@@ -45,7 +45,7 @@ extern "C" __global__ void __raygen__rg() {
 		// Trace the stab ray against our scene hierarchy
 		unsigned int p0;
 		optixTrace(
-			params.handle,
+			params->handle,
 			to_float3(ray_origin),
 			to_float3(ray_direction),
 			0.0f,                // Min intersection distance
@@ -65,7 +65,7 @@ extern "C" __global__ void __raygen__rg() {
 		}
 	}
 
-	params.distances[idx.x] = -params.distances[idx.x];
+	params->distances[idx.x] = -params->distances[idx.x];
 }
 
 extern "C" __global__ void __miss__ms() {

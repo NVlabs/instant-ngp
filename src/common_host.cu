@@ -22,31 +22,31 @@
 
 #include <filesystem/path.h>
 
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_WRITE_IMPLEMENTATION
+#	define STB_IMAGE_IMPLEMENTATION
+#	define STB_IMAGE_WRITE_IMPLEMENTATION
 
 #ifdef __CUDACC__
-#  ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
-#    pragma nv_diag_suppress 550
-#  else
-#    pragma diag_suppress 550
-#  endif
+#	ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
+#		pragma nv_diag_suppress 550
+#	else
+#		pragma diag_suppress 550
+#	endif
 #endif
 #include <stb_image/stb_image.h>
 #include <stb_image/stb_image_write.h>
 #ifdef __CUDACC__
-#  ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
-#    pragma nv_diag_default 550
-#  else
-#    pragma diag_default 550
-#  endif
+#	ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
+#		pragma nv_diag_default 550
+#	else
+#		pragma diag_default 550
+#	endif
 #endif
 
 #ifdef _WIN32
-#  include <Windows.h>
+#	include <Windows.h>
 #else
-#  include <unistd.h>
-#  include <linux/limits.h>
+#	include <linux/limits.h>
+#	include <unistd.h>
 #endif
 
 #undef min
@@ -118,11 +118,11 @@ fs::path discover_root_dir() {
 	auto executable_dir = discover_executable_dir();
 	fs::path exists_in_root_dir = "scripts";
 	for (const auto& candidate : {
-		fs::path{"."}/exists_in_root_dir,
-		fs::path{".."}/exists_in_root_dir,
-		executable_dir/exists_in_root_dir,
-		executable_dir/".."/exists_in_root_dir,
-	}) {
+			 fs::path{"."} / exists_in_root_dir,
+			 fs::path{".."} / exists_in_root_dir,
+			 executable_dir / exists_in_root_dir,
+			 executable_dir / ".." / exists_in_root_dir,
+		 }) {
 		if (candidate.exists()) {
 			return candidate.parent_path();
 		}
@@ -139,9 +139,7 @@ bool ends_with(const std::string& str, const std::string& ending) {
 	return std::equal(std::rbegin(ending), std::rend(ending), std::rbegin(str));
 }
 
-bool ends_with_case_insensitive(const std::string& str, const std::string& ending) {
-	return ends_with(to_lower(str), to_lower(ending));
-}
+bool ends_with_case_insensitive(const std::string& str, const std::string& ending) { return ends_with(to_lower(str), to_lower(ending)); }
 
 ETestbedMode mode_from_scene(const std::string& scene) {
 	fs::path scene_path = scene;
@@ -158,6 +156,7 @@ ETestbedMode mode_from_scene(const std::string& scene) {
 	} else { // probably an image. Too bothersome to list all supported ones: exr, bin, jpg, png, tga, hdr, ...
 		return ETestbedMode::Image;
 	}
+
 }
 
 ETestbedMode mode_from_string(const std::string& str) {
@@ -193,13 +192,9 @@ static const stbi_io_callbacks istream_stbi_callbacks = {
 		return (int)stream->gcount();
 	},
 	// Seek
-	[](void* context, int size) {
-		reinterpret_cast<std::istream*>(context)->seekg(size, std::ios_base::cur);
-	},
+	[](void* context, int size) { reinterpret_cast<std::istream*>(context)->seekg(size, std::ios_base::cur); },
 	// EOF
-	[](void* context) {
-		return (int)!!(*reinterpret_cast<std::istream*>(context));
-	},
+	[](void* context) { return (int)!!(*reinterpret_cast<std::istream*>(context)); },
 };
 
 void istream_stbi_write_func(void* context, void* data, int size) {
@@ -310,4 +305,4 @@ std::ostream& operator<<(std::ostream& os, const Triangle& triangle) {
 	return os;
 }
 
-}
+} // namespace ngp

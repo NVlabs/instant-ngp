@@ -138,8 +138,6 @@ if __name__ == "__main__":
 	testbed.shall_train = args.train if args.gui else True
 
 
-	testbed.nerf.render_with_lens_distortion = True
-
 	network_stem = os.path.splitext(os.path.basename(args.network))[0] if args.network else "base"
 	if testbed.mode == ngp.TestbedMode.Sdf:
 		setup_colored_sdf(testbed, args.scene)
@@ -232,6 +230,8 @@ if __name__ == "__main__":
 		testbed.shall_train = False
 		testbed.load_training_data(args.test_transforms)
 
+		testbed.render_with_lens_distortion = True
+
 		with tqdm(range(testbed.nerf.training.dataset.n_images), unit="images", desc=f"Rendering test frame") as t:
 			for i in t:
 				resolution = testbed.nerf.training.dataset.metadata[i].resolution
@@ -274,6 +274,7 @@ if __name__ == "__main__":
 		testbed.compute_and_save_marching_cubes_mesh(args.save_mesh, [res, res, res], thresh=thresh)
 
 	if ref_transforms:
+		# TODO: load lens & screen center from ref_transforms
 		testbed.fov_axis = 0
 		testbed.fov = ref_transforms["camera_angle_x"] * 180 / np.pi
 		if not args.screenshot_frames:

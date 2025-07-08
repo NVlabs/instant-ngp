@@ -6,10 +6,11 @@ insert_final_newline = true
 indent_style = tab
 indent_size = 4
 trim_trailing_whitespace = true
+max_line_length = 140
 
 [*.md]
 trim_trailing_whitespace = false
 
-[*.{clangd,yml}]
+[*.{clangd,nix,yml}]
 indent_style = space
 indent_size = 2

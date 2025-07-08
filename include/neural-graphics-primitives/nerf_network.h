@@ -275,6 +275,7 @@ public:
 		uint32_t batch_size = output.n();
 		GPUMatrixDynamic<T> density_network_input{m_pos_encoding->padded_output_width(), batch_size, stream, m_pos_encoding->preferred_output_layout()};
 
+		m_density_model->set_jit_fusion(this->jit_fusion());
 		m_density_model->inference_mixed_precision(stream, input.slice_rows(0, m_pos_encoding->input_width()), output, use_inference_params);
 	}
 
@@ -470,6 +471,174 @@ public:
 			{"density_network", density_network_hyperparams},
 			{"rgb_network", m_rgb_network->hyperparams()},
 		};
+	}
+
+	std::string generate_device_function(const std::string& name) const override {
+		std::string density_network = name + "_density_network";
+		std::string rgb_network = name + "_rgb_network";
+		std::string pos_encoding = name + "_pos_encoding";
+		std::string dir_encoding = name + "_dir_encoding";
+
+		std::ostringstream preamble;
+		preamble
+			<< m_density_network->generate_device_function(density_network) << "\n\n"
+			<< m_rgb_network->generate_device_function(rgb_network) << "\n\n"
+			<< m_pos_encoding->generate_device_function(pos_encoding) << "\n\n"
+			<< m_dir_encoding->generate_device_function(dir_encoding) << "\n\n"
+			;
+
+		std::string body = dfmt(1, R"(
+				auto pos_enc_out = {POS_ENC}(input.slice<0, {POS_ENC_DIMS_IN}>(), params + {POS_ENC_PARAMS_OFFSET}, fwd_ctx ? fwd_ctx + WARP_SIZE * {POS_ENC_FWD_CTX_OFFSET} : nullptr);
+
+				{RGB_MLP_IN} rgb_mlp_in;
+				rgb_mlp_in.slice<0, {DENSITY_MLP_DIMS_OUT}>() = {DENSITY_MLP}(pos_enc_out, params, fwd_ctx);
+				rgb_mlp_in.slice<{DENSITY_MLP_DIMS_OUT}, {DIR_ENC_DIMS_OUT}>() = {DIR_ENC}(input.slice<{DIR_OFFSET}, {DIR_ENC_DIMS_IN}>(), params + {DIR_ENC_PARAMS_OFFSET}, fwd_ctx ? fwd_ctx + WARP_SIZE * {DIR_ENC_FWD_CTX_OFFSET} : nullptr);
+
+				auto rgb_mlp_out = {RGB_MLP}(rgb_mlp_in, params + {RGB_MLP_PARAMS_OFFSET}, fwd_ctx ? fwd_ctx + WARP_SIZE * {RGB_MLP_FWD_CTX_OFFSET} : nullptr);
+
+				return {{rgb_mlp_out[0], rgb_mlp_out[1], rgb_mlp_out[2], rgb_mlp_in[0]}};
+			)",
+			"POS_ENC"_a = pos_encoding,
+			"POS_ENC_DIMS_IN"_a = m_pos_encoding->input_width(),
+			"POS_ENC_PARAMS_OFFSET"_a = m_density_network->n_params() + m_rgb_network->n_params(),
+			"POS_ENC_FWD_CTX_OFFSET"_a = m_density_network->device_function_fwd_ctx_bytes() + m_rgb_network->device_function_fwd_ctx_bytes(),
+			"RGB_MLP"_a = rgb_network,
+			"RGB_MLP_IN"_a = m_rgb_network->generate_vec_in(),
+			"RGB_MLP_PARAMS_OFFSET"_a = m_density_network->n_params(),
+			"RGB_MLP_FWD_CTX_OFFSET"_a = m_density_network->device_function_fwd_ctx_bytes(),
+			"DENSITY_MLP"_a = density_network,
+			"DENSITY_MLP_DIMS_OUT"_a = m_density_network->output_width(),
+			"DIR_ENC"_a = dir_encoding,
+			"DIR_ENC_DIMS_IN"_a = m_dir_encoding->input_width(),
+			"DIR_ENC_DIMS_OUT"_a = m_dir_encoding->output_width(),
+			"DIR_ENC_PARAMS_OFFSET"_a = m_density_network->n_params() + m_rgb_network->n_params() + m_pos_encoding->n_params(),
+			"DIR_ENC_FWD_CTX_OFFSET"_a = m_density_network->device_function_fwd_ctx_bytes() + m_rgb_network->device_function_fwd_ctx_bytes() + m_pos_encoding->device_function_fwd_ctx_bytes(),
+			"DIR_OFFSET"_a = m_dir_offset
+		);
+
+		return fmt::format("{}{}", preamble.str(), this->generate_device_function_from_body(name, body));
+	}
+
+	std::string generate_backward_device_function(const std::string& name, uint32_t n_threads) const override {
+		std::string density_network = name + "_density_network";
+		std::string rgb_network = name + "_rgb_network";
+		std::string pos_encoding = name + "_pos_encoding";
+		std::string dir_encoding = name + "_dir_encoding";
+
+		std::ostringstream preamble;
+		preamble
+			<< m_density_network->generate_backward_device_function(density_network, n_threads) << "\n\n"
+			<< m_rgb_network->generate_backward_device_function(rgb_network, n_threads) << "\n\n"
+			<< m_pos_encoding->generate_backward_device_function(pos_encoding, n_threads) << "\n\n"
+			<< m_dir_encoding->generate_backward_device_function(dir_encoding, n_threads) << "\n\n"
+			;
+
+		std::string body = dfmt(1, R"(
+				bool requires_pos_encoding_bwd = {POS_ENC_N_PARAMS} != 0 || dL_dx;
+				bool requires_dir_encoding_bwd = {DIR_ENC_N_PARAMS} != 0 || dL_dx;
+
+				{RGB_MLP_IN} dL_drgb_mlp_in;
+				{RGB_MLP}(
+					{RGB_MLP_OUT}(dL_dy.rgb()),
+					params + {RGB_MLP_PARAMS_OFFSET},
+					fwd_ctx + WARP_SIZE * {RGB_MLP_FWD_CTX_OFFSET},
+					dL_dparams ? dL_dparams + {RGB_MLP_PARAMS_OFFSET} : nullptr,
+					&dL_drgb_mlp_in
+				);
+				dL_drgb_mlp_in[0] = dL_drgb_mlp_in[0] + dL_dy[3];
+
+				if (requires_dir_encoding_bwd) {{
+					{DIR_ENC}(
+						dL_drgb_mlp_in.slice<{DENSITY_MLP_DIMS_OUT}, {DIR_ENC_DIMS_OUT}>(),
+						params + {DIR_ENC_PARAMS_OFFSET},
+						fwd_ctx + WARP_SIZE * {DIR_ENC_FWD_CTX_OFFSET},
+						dL_dparams ? dL_dparams + {DIR_ENC_PARAMS_OFFSET} : nullptr,
+						dL_dx ? &dL_dx->slice<{DIR_OFFSET}, {DIR_ENC_DIMS_IN}>() : nullptr
+					);
+				}}
+
+				{POS_ENC_OUT} dL_dpos_enc_out;
+				{DENSITY_MLP}(
+					dL_drgb_mlp_in.slice<0, {DENSITY_MLP_DIMS_OUT}>(),
+					params,
+					fwd_ctx,
+					dL_dparams,
+					requires_pos_encoding_bwd ? &dL_dpos_enc_out : nullptr
+				);
+
+				if (requires_pos_encoding_bwd) {{
+					{POS_ENC}(
+						dL_dpos_enc_out,
+						params + {POS_ENC_PARAMS_OFFSET},
+						fwd_ctx + WARP_SIZE * {POS_ENC_FWD_CTX_OFFSET},
+						dL_dparams ? dL_dparams + {POS_ENC_PARAMS_OFFSET} : nullptr,
+						dL_dx ? &dL_dx->slice<0, {POS_ENC_DIMS_IN}>() : nullptr
+					);
+				}}
+			)",
+			"POS_ENC"_a = pos_encoding,
+			"POS_ENC_DIMS_IN"_a = m_pos_encoding->input_width(),
+			"POS_ENC_OUT"_a = m_pos_encoding->generate_vec_out(),
+			"POS_ENC_N_PARAMS"_a = m_pos_encoding->n_params(),
+			"POS_ENC_PARAMS_OFFSET"_a = m_density_network->n_params() + m_rgb_network->n_params(),
+			"POS_ENC_FWD_CTX_OFFSET"_a = m_density_network->device_function_fwd_ctx_bytes() + m_rgb_network->device_function_fwd_ctx_bytes(),
+			"RGB_MLP"_a = rgb_network,
+			"RGB_MLP_IN"_a = m_rgb_network->generate_vec_in(),
+			"RGB_MLP_OUT"_a = m_rgb_network->generate_vec_out(),
+			"RGB_MLP_PARAMS_OFFSET"_a = m_density_network->n_params(),
+			"RGB_MLP_FWD_CTX_OFFSET"_a = m_density_network->device_function_fwd_ctx_bytes(),
+			"DENSITY_MLP"_a = density_network,
+			"DENSITY_MLP_DIMS_OUT"_a = m_density_network->output_width(),
+			"DIR_ENC"_a = dir_encoding,
+			"DIR_ENC_DIMS_IN"_a = m_dir_encoding->input_width(),
+			"DIR_ENC_DIMS_OUT"_a = m_dir_encoding->output_width(),
+			"DIR_ENC_N_PARAMS"_a = m_dir_encoding->n_params(),
+			"DIR_ENC_PARAMS_OFFSET"_a = m_density_network->n_params() + m_rgb_network->n_params() + m_pos_encoding->n_params(),
+			"DIR_ENC_FWD_CTX_OFFSET"_a = m_density_network->device_function_fwd_ctx_bytes() + m_rgb_network->device_function_fwd_ctx_bytes() + m_pos_encoding->device_function_fwd_ctx_bytes(),
+			"DIR_OFFSET"_a = m_dir_offset
+		);
+
+		return fmt::format("{}{}", preamble.str(), this->generate_backward_device_function_from_body(name, body));
+	}
+
+	uint32_t device_function_fwd_ctx_bytes() const override {
+		return
+			m_density_network->device_function_fwd_ctx_bytes() +
+			m_rgb_network->device_function_fwd_ctx_bytes() +
+			m_pos_encoding->device_function_fwd_ctx_bytes() +
+			m_dir_encoding->device_function_fwd_ctx_bytes()
+			;
+	}
+
+	bool device_function_fwd_ctx_aligned_per_element() const override {
+		return false;
+	}
+
+	uint32_t backward_device_function_shmem_bytes(uint32_t n_threads, GradientMode param_gradients_mode) const override {
+		return std::max(
+			std::max(
+				m_density_network->backward_device_function_shmem_bytes(n_threads, param_gradients_mode),
+				m_rgb_network->backward_device_function_shmem_bytes(n_threads, param_gradients_mode)
+			),
+			std::max(
+				m_pos_encoding->backward_device_function_shmem_bytes(n_threads, param_gradients_mode),
+				m_dir_encoding->backward_device_function_shmem_bytes(n_threads, param_gradients_mode)
+			)
+		);
+	}
+
+	void convert_params_to_jit_layout(cudaStream_t stream, bool use_inference_params) override {
+		m_density_network->convert_params_to_jit_layout(stream, use_inference_params);
+		m_rgb_network->convert_params_to_jit_layout(stream, use_inference_params);
+		m_pos_encoding->convert_params_to_jit_layout(stream, use_inference_params);
+		m_dir_encoding->convert_params_to_jit_layout(stream, use_inference_params);
+	}
+
+	void convert_params_from_jit_layout(cudaStream_t stream, bool use_inference_params) override {
+		m_density_network->convert_params_from_jit_layout(stream, use_inference_params);
+		m_rgb_network->convert_params_from_jit_layout(stream, use_inference_params);
+		m_pos_encoding->convert_params_from_jit_layout(stream, use_inference_params);
+		m_dir_encoding->convert_params_from_jit_layout(stream, use_inference_params);
 	}
 
 private:

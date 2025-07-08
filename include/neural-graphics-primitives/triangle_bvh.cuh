@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2020-2025, NVIDIA CORPORATION.  All rights reserved.
  *
  * NVIDIA CORPORATION and its licensors retain all intellectual property
  * and proprietary rights in and to this software, related documentation
@@ -31,47 +31,30 @@ struct TriangleBvhNode {
 	int right_idx;
 };
 
-template <typename T, int MAX_SIZE=32>
-class FixedStack {
-public:
-	__host__ __device__ void push(T val) {
-		if (m_count >= MAX_SIZE-1) {
-			printf("WARNING TOO BIG\n");
-		}
-		m_elems[m_count++] = val;
-	}
-
-	__host__ __device__ T pop() {
-		return m_elems[--m_count];
-	}
-
-	__host__ __device__ bool empty() const {
-		return m_count <= 0;
-	}
-
-private:
-	T m_elems[MAX_SIZE];
-	int m_count = 0;
-};
-
-using FixedIntStack = FixedStack<int>;
-
-
-__host__ __device__ std::pair<int, float> trianglebvh_ray_intersect(const vec3& ro, const vec3& rd, const TriangleBvhNode* __restrict__ bvhnodes, const Triangle* __restrict__ triangles);
+__host__ __device__ std::pair<int, float> trianglebvh_ray_intersect(
+	const vec3& ro, const vec3& rd, const TriangleBvhNode* __restrict__ bvhnodes, const Triangle* __restrict__ triangles
+);
 
 class TriangleBvh {
 public:
-	virtual void signed_distance_gpu(uint32_t n_elements, EMeshSdfMode mode, const vec3* gpu_positions, float* gpu_distances, const Triangle* gpu_triangles, bool use_existing_distances_as_upper_bounds, cudaStream_t stream) = 0;
-	virtual void ray_trace_gpu(uint32_t n_elements, vec3* gpu_positions, vec3* gpu_directions, const Triangle* gpu_triangles, cudaStream_t stream) = 0;
+	virtual void signed_distance_gpu(
+		uint32_t n_elements,
+		EMeshSdfMode mode,
+		const vec3* gpu_positions,
+		float* gpu_distances,
+		const Triangle* gpu_triangles,
+		bool use_existing_distances_as_upper_bounds,
+		cudaStream_t stream
+	) = 0;
+	virtual void
+		ray_trace_gpu(uint32_t n_elements, vec3* gpu_positions, vec3* gpu_directions, const Triangle* gpu_triangles, cudaStream_t stream) = 0;
 	virtual bool touches_triangle(const BoundingBox& bb, const Triangle* __restrict__ triangles) const = 0;
 	virtual void build(std::vector<Triangle>& triangles, uint32_t n_primitives_per_leaf) = 0;
 	virtual void build_optix(const GPUMemory<Triangle>& triangles, cudaStream_t stream) = 0;
 
 	static std::unique_ptr<TriangleBvh> make();
 
-	TriangleBvhNode* nodes_gpu() const {
-		return m_nodes_gpu.data();
-	}
+	TriangleBvhNode* nodes_gpu() const { return m_nodes_gpu.data(); }
 
 protected:
 	std::vector<TriangleBvhNode> m_nodes;
@@ -79,4 +62,4 @@ protected:
 	TriangleBvh() {};
 };
 
-}
+} // namespace ngp

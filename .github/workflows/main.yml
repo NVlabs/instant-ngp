@@ -72,7 +72,9 @@ jobs:
         run: ./dependencies/tiny-cuda-nn/dependencies/cuda-cmake-github-actions/scripts/actions/install_cuda_ubuntu.sh
         shell: bash
       - name: Install Vulkan SDK
-        uses: humbletim/install-vulkan-sdk@c2aa128094d42ba02959a660f03e0a4e012192f9
+        uses: humbletim/install-vulkan-sdk@v1.2
+        with:
+          version: 1.4.309.0
       - name: CMake
         run: cmake . -B ${{ env.build_dir }} ${{ matrix.cmake_flags }} -DCMAKE_BUILD_TYPE=${{ env.config }}
       - name: Build
@@ -85,13 +87,13 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: windows-2025
+          - os: windows-2022
             visual_studio: "Visual Studio 17 2022"
             cuda: "12.9.1"
             arch: 120
             python: "3.12"
             recommended_gpus: "RTX-5000"
-          - os: windows-2025
+          - os: windows-2022
             visual_studio: "Visual Studio 17 2022"
             cuda: "12.6.3"
             arch: 89
@@ -144,12 +146,17 @@ jobs:
         shell: powershell
         run: .\dependencies\tiny-cuda-nn\dependencies\cuda-cmake-github-actions\scripts\actions\install_cuda_windows.ps1
       - name: Install Vulkan SDK
-        uses: humbletim/install-vulkan-sdk@c2aa128094d42ba02959a660f03e0a4e012192f9
+        uses: humbletim/install-vulkan-sdk@v1.2
+        with:
+          version: 1.4.309.0
       - name: CMake
         run: cmake . -B ${{ env.build_dir }} ${{ matrix.cmake_flags }} -G "${{ matrix.visual_studio }}" -A x64
       - name: Build
         working-directory: ${{ env.build_dir }}
         run: cmake --build . --config ${{ env.config }} --target ALL_BUILD --verbose
+      - name: List cwd
+        shell: cmd
+        run: dir
       - name: Upload release
         if: ${{ matrix.recommended_gpus }}
         uses: actions/upload-artifact@v4
@@ -162,6 +169,8 @@ jobs:
             cudart64*.dll
             instant-ngp.exe
             nvngx_dlss.dll
+            nvrtc64*.dll
+            nvrtc-builtins64*.dll
             configs/
             docs/nerf_dataset_tips.md
             docs/assets_readme/
@@ -170,6 +179,7 @@ jobs:
             scripts/category2id.json
             scripts/colmap2nerf.py
             scripts/common.py
+            scripts/constants.py
             scripts/convert_image.py
             scripts/download_colmap.bat
             scripts/download_ffmpeg.bat

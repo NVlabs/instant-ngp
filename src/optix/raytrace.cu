@@ -21,20 +21,20 @@
 
 namespace ngp {
 
-extern "C" {
-	__constant__ Raytrace::Params params;
-}
+extern "C" __constant__ char params_data[sizeof(Raytrace::Params)];
 
 extern "C" __global__ void __raygen__rg() {
+	const auto* params = (Raytrace::Params*)params_data;
+
 	const uint3 idx = optixGetLaunchIndex();
 	const uint3 dim = optixGetLaunchDimensions();
 
-	vec3 ray_origin = params.ray_origins[idx.x];
-	vec3 ray_direction = params.ray_directions[idx.x];
+	vec3 ray_origin = params->ray_origins[idx.x];
+	vec3 ray_direction = params->ray_directions[idx.x];
 
 	unsigned int p0, p1;
 	optixTrace(
-		params.handle,
+		params->handle,
 		to_float3(ray_origin),
 		to_float3(ray_direction),
 		0.0f,                // Min intersection distance
@@ -50,7 +50,7 @@ extern "C" __global__ void __raygen__rg() {
 
 	// Hit position
 	float t = __int_as_float(p1);
-	params.ray_origins[idx.x] = ray_origin + t * ray_direction;
+	params->ray_origins[idx.x] = ray_origin + t * ray_direction;
 
 	// If a triangle was hit, p0 is its index, otherwise p0 is -1.
 	// Write out the triangle's normal if it (abuse the direction buffer).
@@ -58,7 +58,7 @@ extern "C" __global__ void __raygen__rg() {
 		return;
 	}
 
-	params.ray_directions[idx.x] = params.triangles[p0].normal();
+	params->ray_directions[idx.x] = params->triangles[p0].normal();
 }
 
 extern "C" __global__ void __miss__ms() {

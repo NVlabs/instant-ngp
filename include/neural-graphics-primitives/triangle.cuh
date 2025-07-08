@@ -22,6 +22,19 @@
 
 namespace ngp {
 
+inline NGP_HOST_DEVICE float normdot(const vec3 &a, const vec3 &b) {
+	float div = length(a) * length(b);
+	if (div == 0.0f) {
+		return 1.0f;
+	}
+
+	return dot(a, b) / div;
+}
+
+inline NGP_HOST_DEVICE float angle(const vec3 &a, const vec3 &b) {
+	return acosf(clamp(normdot(a, b), -1.0f, 1.0f));
+}
+
 struct Triangle {
 	NGP_HOST_DEVICE vec3 sample_uniform_position(const vec2& sample) const {
 		float sqrt_x = sqrt(sample.x);
@@ -38,6 +51,36 @@ struct Triangle {
 
 	NGP_HOST_DEVICE vec3 normal() const {
 		return normalize(cross(b - a, c - a));
+	}
+
+	NGP_HOST_DEVICE const vec3 &operator[](uint32_t i) const {
+		return i == 0 ? a : (i == 1 ? b : c);
+	}
+
+	NGP_HOST_DEVICE float angle_at_vertex(uint32_t i) const {
+		vec3 v1 = (*this)[i] - (*this)[(i + 1) % 3];
+		vec3 v2 = (*this)[i] - (*this)[(i + 2) % 3];
+		return angle(v1, v2);
+	}
+
+	NGP_HOST_DEVICE uint32_t closest_vertex_idx(const vec3 &pos) const {
+		float mag1 = length2(pos - a);
+		float mag2 = length2(pos - b);
+		float mag3 = length2(pos - c);
+
+		float minv = min(vec3{ mag1, mag2, mag3 });
+
+		if (minv == mag1) {
+			return 0;
+		} else if (minv == mag2) {
+			return 1;
+		} else {
+			return 2;
+		}
+	}
+
+	NGP_HOST_DEVICE float angle_at_pos(const vec3 &pos) const {
+		return angle_at_vertex(closest_vertex_idx(pos));
 	}
 
 	// based on https://www.iquilezles.org/www/articles/intersectors/intersectors.htm

@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.18)
 
 project(instant-ngp
-	VERSION 1.0
+	VERSION 2.0
 	DESCRIPTION "Instant Neural Graphics Primitives"
 	LANGUAGES C CXX CUDA
 )
@@ -23,6 +23,7 @@ option(NGP_BUILD_EXECUTABLE "Build instant-ngp.exe?" ON)
 option(NGP_BUILD_WITH_GUI "Build with GUI support (requires GLFW and GLEW)?" ON)
 option(NGP_BUILD_WITH_OPTIX "Build with OptiX to enable hardware ray tracing?" ON)
 option(NGP_BUILD_WITH_PYTHON_BINDINGS "Build bindings that allow instrumenting instant-ngp with Python?" ON)
+option(NGP_BUILD_WITH_RTC "Build support for runtime compilation of fully fused kernels?" ON)
 option(NGP_BUILD_WITH_VULKAN "Build with Vulkan to enable DLSS support?" ON)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -48,6 +49,11 @@ endif()
 
 if (APPLE)
 	set(CMAKE_MACOSX_RPATH ON)
+endif()
+
+if (CMAKE_EXPORT_COMPILE_COMMANDS)
+    set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
+    set(CMAKE_CUDA_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CUDA_IMPLICIT_INCLUDE_DIRECTORIES})
 endif()
 
 if (MSVC)
@@ -87,6 +93,7 @@ list(APPEND CUDA_NVCC_FLAGS "--use_fast_math")
 
 set(TCNN_BUILD_BENCHMARK OFF)
 set(TCNN_BUILD_EXAMPLES OFF)
+set(TCNN_BUILD_WITH_RTC ${NGP_BUILD_WITH_RTC})
 set(TCNN_ALLOW_CUBLAS_CUSOLVER OFF)
 add_subdirectory(dependencies/tiny-cuda-nn)
 
@@ -193,6 +200,7 @@ if (NGP_BUILD_WITH_GUI)
 		dependencies/imgui/imgui_draw.cpp
 		dependencies/imgui/imgui_tables.cpp
 		dependencies/imgui/imgui_widgets.cpp
+		dependencies/imgui/misc/cpp/imgui_stdlib.cpp
 	)
 
 	list(APPEND NGP_DEFINITIONS -DNGP_GUI)
@@ -319,11 +327,21 @@ if (NGP_OPTIX)
 		"-DOUTPUT=${OPTIX_PTX_HEADER}"
 		-P ${PROJECT_SOURCE_DIR}/cmake/bin2c_wrapper.cmake
 		VERBATIM
-		DEPENDS optix_program
+		DEPENDS $<TARGET_OBJECTS:optix_program>
 		COMMENT "Converting PTX files to a C header"
 	)
 
 	list(APPEND NGP_SOURCES ${OPTIX_PTX_HEADER})
+endif()
+
+cmrc_add_resource_library(ngp-resources NAMESPACE ngp)
+list(APPEND NGP_LIBRARIES ngp-resources)
+if (NGP_BUILD_WITH_RTC)
+	# Create local directory that can serve as cache for the runtime compiled artifacts
+	file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/rtc/cache")
+
+	file(GLOB_RECURSE NGP_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/include/neural-graphics-primitives/*")
+	cmrc_add_resources(ngp-resources WHENCE "${CMAKE_CURRENT_SOURCE_DIR}/include" ${NGP_HEADERS})
 endif()
 
 add_library(ngp STATIC ${NGP_SOURCES})
@@ -347,7 +365,8 @@ if (NGP_VULKAN)
 endif()
 
 if (MSVC)
-	file(GLOB CUDA_DLLS "${CUDA_COMPILER_BIN}/cudart64*.dll")
+	file(GLOB CUDA_DLLS "${CUDA_COMPILER_BIN}/cudart64*.dll" "${CUDA_COMPILER_BIN}/nvrtc*.dll")
+	list(FILTER CUDA_DLLS EXCLUDE REGEX "\\.alt\\.dll$")
 	if (CUDA_DLLS)
 		add_custom_command(TARGET ngp POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${CUDA_DLLS} "${CMAKE_CURRENT_BINARY_DIR}" COMMAND_EXPAND_LISTS)
 	endif()
@@ -361,12 +380,14 @@ if (NGP_BUILD_EXECUTABLE)
 	set(NGP_BINARY_FILE "\"${CMAKE_CURRENT_SOURCE_DIR}/$<TARGET_FILE_NAME:instant-ngp>\"")
 	if (MSVC)
 		add_custom_command(TARGET instant-ngp POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:instant-ngp> ${CMAKE_CURRENT_SOURCE_DIR})
-		file(GLOB NGP_REQUIRED_DLLS "${CUDA_COMPILER_BIN}/cudart64*.dll")
+		file(GLOB NGP_REQUIRED_DLLS "${CUDA_COMPILER_BIN}/cudart64*.dll" "${CUDA_COMPILER_BIN}/nvrtc*.dll")
+		list(FILTER NGP_REQUIRED_DLLS EXCLUDE REGEX "\\.alt\\.dll$")
 		if (NGP_VULKAN)
 			list(APPEND NGP_REQUIRED_DLLS "${NGX_SHARED_LIB}")
 		endif()
+		message("NGP_REQUIRED_DLLS: ${NGP_REQUIRED_DLLS}")
 		if (NGP_REQUIRED_DLLS)
-			add_custom_command(TARGET instant-ngp POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${NGP_REQUIRED_DLLS} ${CMAKE_CURRENT_SOURCE_DIR} COMMAND_EXPAND_LISTS)
+			add_custom_command(TARGET instant-ngp POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${NGP_REQUIRED_DLLS} "${CMAKE_CURRENT_SOURCE_DIR}" COMMAND_EXPAND_LISTS)
 		endif()
 	else()
 		add_custom_command(TARGET instant-ngp POST_BUILD COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE:instant-ngp> "${NGP_BINARY_FILE}")

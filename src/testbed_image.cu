@@ -12,16 +12,16 @@
  *  @author Thomas Müller & Alex Evans, NVIDIA
  */
 
-#include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/common.h>
+#include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/random_val.cuh>
 #include <neural-graphics-primitives/render_buffer.h>
 #include <neural-graphics-primitives/testbed.h>
 #include <neural-graphics-primitives/tinyexr_wrapper.h>
 
 #include <tiny-cuda-nn/gpu_matrix.h>
-#include <tiny-cuda-nn/network_with_input_encoding.h>
 #include <tiny-cuda-nn/network.h>
+#include <tiny-cuda-nn/network_with_input_encoding.h>
 #include <tiny-cuda-nn/trainer.h>
 
 #include <fstream>
@@ -38,39 +38,47 @@ Testbed::NetworkDims Testbed::network_dims_image() const {
 
 __global__ void halton23_kernel(uint32_t n_elements, size_t base_idx, vec2* __restrict__ output) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-	if (i >= n_elements) return;
+	if (i >= n_elements) {
+		return;
+	}
 
-	output[i] = {halton<2>(base_idx+i), halton<3>(base_idx+i)};
+	output[i] = {halton<2>(base_idx + i), halton<3>(base_idx + i)};
 }
 
 __global__ void sobol2_kernel(uint32_t n_elements, size_t base_idx, uint32_t seed, vec2* __restrict__ output) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-	if (i >= n_elements) return;
+	if (i >= n_elements) {
+		return;
+	}
 
 	output[i] = ld_random_val_2d(base_idx + i, seed);
 }
 
 __global__ void zip_kernel(uint32_t n_elements, const float* __restrict__ in, vec2* __restrict__ output) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-	if (i >= n_elements) return;
+	if (i >= n_elements) {
+		return;
+	}
 
-	output[i] = {in[i], in[i+n_elements]};
+	output[i] = {in[i], in[i + n_elements]};
 }
 
 __global__ void stratify2_kernel(uint32_t n_elements, uint32_t log2_batch_size, vec2* __restrict__ inout) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-	if (i >= n_elements) return;
+	if (i >= n_elements) {
+		return;
+	}
 
 	uint32_t log2Size = log2_batch_size / 2;
 	uint32_t size = 1 << log2Size;
 
-	uint32_t in_batch_index = i & ((1 << log2_batch_size)-1);
+	uint32_t in_batch_index = i & ((1 << log2_batch_size) - 1);
 
-	uint32_t x = in_batch_index & ((1 << log2Size)-1);
+	uint32_t x = in_batch_index & ((1 << log2Size) - 1);
 	uint32_t y = in_batch_index >> log2Size;
 
 	vec2 val = inout[i];
-	inout[i] = {val.x / size + ((float)x/size), val.y / size + ((float)y/size)};
+	inout[i] = {val.x / size + ((float)x / size), val.y / size + ((float)y / size)};
 }
 
 __global__ void init_image_coords(
@@ -87,7 +95,8 @@ __global__ void init_image_coords(
 	float plane_z,
 	float aperture_size,
 	Foveation foveation,
-	Buffer2DView<const uint8_t> hidden_area_mask
+	Buffer2DView<const uint8_t> hidden_area_mask,
+	Lens lens
 ) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
@@ -113,7 +122,8 @@ __global__ void init_image_coords(
 		plane_z,
 		aperture_size,
 		foveation,
-		hidden_area_mask
+		hidden_area_mask,
+		lens
 	);
 
 	// Intersect the Z=0.5 plane
@@ -136,7 +146,9 @@ __global__ void init_image_coords(
 	positions[idx] = uv;
 }
 
-__global__ void shade_kernel_image(ivec2 resolution, const vec2* __restrict__ positions, const vec3* __restrict__ colors, vec4* __restrict__ frame_buffer, bool linear_colors) {
+__global__ void shade_kernel_image(
+	ivec2 resolution, const vec2* __restrict__ positions, const vec3* __restrict__ colors, vec4* __restrict__ frame_buffer, bool linear_colors
+) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
 
@@ -162,9 +174,19 @@ __global__ void shade_kernel_image(ivec2 resolution, const vec2* __restrict__ po
 }
 
 template <typename T, uint32_t stride>
-__global__ void eval_image_kernel_and_snap(uint32_t n_elements, const T* __restrict__ texture, vec2* __restrict__ positions, ivec2 resolution, float* __restrict__ result, bool snap_to_pixel_centers, bool linear_colors) {
+__global__ void eval_image_kernel_and_snap(
+	uint32_t n_elements,
+	const T* __restrict__ texture,
+	vec2* __restrict__ positions,
+	ivec2 resolution,
+	float* __restrict__ result,
+	bool snap_to_pixel_centers,
+	bool linear_colors
+) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-	if (i >= n_elements) return;
+	if (i >= n_elements) {
+		return;
+	}
 
 	uint32_t output_idx = i * stride;
 
@@ -193,11 +215,8 @@ __global__ void eval_image_kernel_and_snap(uint32_t n_elements, const T* __restr
 
 		const ivec2 idx = clamp(pos_int, 0, resolution - 2);
 
-		val =
-			(1 - weight.x) * (1 - weight.y) * read_val(idx.x, idx.y) +
-			(weight.x) * (1 - weight.y) * read_val(idx.x+1, idx.y) +
-			(1 - weight.x) * (weight.y) * read_val(idx.x, idx.y+1) +
-			(weight.x) * (weight.y) * read_val(idx.x+1, idx.y+1);
+		val = (1 - weight.x) * (1 - weight.y) * read_val(idx.x, idx.y) + (weight.x) * (1 - weight.y) * read_val(idx.x + 1, idx.y) +
+			(1 - weight.x) * (weight.y) * read_val(idx.x, idx.y + 1) + (weight.x) * (weight.y) * read_val(idx.x + 1, idx.y + 1);
 	}
 
 	result[output_idx + 0] = val.x;
@@ -223,7 +242,9 @@ void Testbed::train_image(size_t target_batch_size, bool get_loss_scalar, cudaSt
 		if (m_image.random_mode == ERandomMode::Halton) {
 			linear_kernel(halton23_kernel, 0, stream, n_elements, (size_t)batch_size * m_training_step, m_image.training.positions.data());
 		} else if (m_image.random_mode == ERandomMode::Sobol) {
-			linear_kernel(sobol2_kernel, 0, stream, n_elements, (size_t)batch_size * m_training_step, m_seed, m_image.training.positions.data());
+			linear_kernel(
+				sobol2_kernel, 0, stream, n_elements, (size_t)batch_size * m_training_step, m_seed, m_image.training.positions.data()
+			);
 		} else {
 			generate_random_uniform<float>(stream, m_rng, n_elements * n_input_dims, (float*)m_image.training.positions.data());
 			if (m_image.random_mode == ERandomMode::Stratified) {
@@ -239,7 +260,10 @@ void Testbed::train_image(size_t target_batch_size, bool get_loss_scalar, cudaSt
 		}
 
 		if (m_image.type == EDataType::Float) {
-			linear_kernel(eval_image_kernel_and_snap<float, 3>, 0, stream,
+			linear_kernel(
+				eval_image_kernel_and_snap<float, 3>,
+				0,
+				stream,
 				n_elements,
 				(float*)m_image.data.data(),
 				m_image.training.positions.data(),
@@ -249,7 +273,10 @@ void Testbed::train_image(size_t target_batch_size, bool get_loss_scalar, cudaSt
 				m_image.training.linear_colors
 			);
 		} else {
-			linear_kernel(eval_image_kernel_and_snap<__half, 3>, 0, stream,
+			linear_kernel(
+				eval_image_kernel_and_snap<__half, 3>,
+				0,
+				stream,
 				n_elements,
 				(__half*)m_image.data.data(),
 				m_image.training.positions.data(),
@@ -281,6 +308,7 @@ void Testbed::render_image(
 	const mat4x3& camera_matrix,
 	const vec2& screen_center,
 	const Foveation& foveation,
+	const Lens& lens,
 	int visualized_dimension
 ) {
 	auto res = render_buffer.resolution;
@@ -295,8 +323,8 @@ void Testbed::render_image(
 	float aspect = (float)m_image.resolution.y / (float)m_image.resolution.x;
 
 	// Generate 2D coords at which to query the network
-	const dim3 threads = { 16, 8, 1 };
-	const dim3 blocks = { div_round_up((uint32_t)res.x, threads.x), div_round_up((uint32_t)res.y, threads.y), 1 };
+	const dim3 threads = {16, 8, 1};
+	const dim3 blocks = {div_round_up((uint32_t)res.x, threads.x), div_round_up((uint32_t)res.y, threads.y), 1};
 	init_image_coords<<<blocks, threads, 0, stream>>>(
 		render_buffer.spp,
 		m_image.render_coords.data(),
@@ -311,12 +339,16 @@ void Testbed::render_image(
 		plane_z,
 		m_aperture_size,
 		foveation,
-		render_buffer.hidden_area_mask ? render_buffer.hidden_area_mask->const_view() : Buffer2DView<const uint8_t>{}
+		render_buffer.hidden_area_mask ? render_buffer.hidden_area_mask->const_view() : Buffer2DView<const uint8_t>{},
+		lens
 	);
 
 	// Obtain colors for each 2D coord
 	if (m_image.type == EDataType::Float) {
-		linear_kernel(eval_image_kernel_and_snap<float, 3>, 0, stream,
+		linear_kernel(
+			eval_image_kernel_and_snap<float, 3>,
+			0,
+			stream,
 			n_elements,
 			(float*)m_image.data.data(),
 			m_image.render_coords.data(),
@@ -326,7 +358,10 @@ void Testbed::render_image(
 			m_image.training.linear_colors
 		);
 	} else {
-		linear_kernel(eval_image_kernel_and_snap<__half, 3>, 0, stream,
+		linear_kernel(
+			eval_image_kernel_and_snap<__half, 3>,
+			0,
+			stream,
 			n_elements,
 			(__half*)m_image.data.data(),
 			m_image.render_coords.data(),
@@ -351,11 +386,7 @@ void Testbed::render_image(
 
 	// Splat colors to render texture
 	shade_kernel_image<<<blocks, threads, 0, stream>>>(
-		res,
-		m_image.render_coords.data(),
-		m_image.render_out.data(),
-		render_buffer.frame_buffer,
-		m_image.training.linear_colors
+		res, m_image.render_coords.data(), m_image.render_out.data(), render_buffer.frame_buffer, m_image.training.linear_colors
 	);
 }
 
@@ -371,9 +402,8 @@ void Testbed::load_image(const fs::path& data_path) {
 	m_aabb = m_render_aabb = BoundingBox{vec3(0.0f), vec3(1.0f)};
 	m_render_aabb_to_local = mat3::identity();
 
-	tlog::success()
-		<< "Loaded a " << (m_image.type == EDataType::Half ? "half" : "full") << "-precision image with "
-		<< m_image.resolution.x << "x" << m_image.resolution.y << " pixels.";
+	tlog::success() << "Loaded a " << (m_image.type == EDataType::Half ? "half" : "full") << "-precision image with "
+					<< m_image.resolution.x << "x" << m_image.resolution.y << " pixels.";
 }
 
 void Testbed::load_exr_image(const fs::path& data_path) {
@@ -406,7 +436,6 @@ void Testbed::load_stbi_image(const fs::path& data_path) {
 	m_image.type = EDataType::Float;
 }
 
-
 void Testbed::load_binary_image(const fs::path& data_path) {
 	if (!data_path.exists()) {
 		throw std::runtime_error{fmt::format("Image file '{}' does not exist.", data_path.str())};
@@ -429,7 +458,9 @@ void Testbed::load_binary_image(const fs::path& data_path) {
 
 __global__ void image_coords_from_idx(const uint32_t n_elements, uint32_t offset, vec2* __restrict__ pos, ivec2 resolution) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-	if (i >= n_elements) return;
+	if (i >= n_elements) {
+		return;
+	}
 
 	const uint32_t idx = i + offset;
 
@@ -439,9 +470,13 @@ __global__ void image_coords_from_idx(const uint32_t n_elements, uint32_t offset
 	pos[i] = (vec2(clamp(ivec2{x, y}, 0, resolution - 1)) + 0.5f) / vec2(resolution);
 }
 
-__global__ void image_mse_kernel(const uint32_t n_elements, const vec3* __restrict__ target, const vec3* __restrict__ prediction, float* __restrict__ result, bool quantize_to_byte) {
+__global__ void image_mse_kernel(
+	const uint32_t n_elements, const vec3* __restrict__ target, const vec3* __restrict__ prediction, float* __restrict__ result, bool quantize_to_byte
+) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-	if (i >= n_elements) return;
+	if (i >= n_elements) {
+		return;
+	}
 
 	vec3 pred = prediction[i];
 	if (quantize_to_byte) {
@@ -458,7 +493,7 @@ float Testbed::compute_image_mse(bool quantize_to_byte) {
 
 	// Auxiliary matrices for training
 	const uint32_t n_elements = product(m_image.resolution);
-	const uint32_t max_batch_size = 1u<<20;
+	const uint32_t max_batch_size = 1u << 20;
 
 	GPUMemory<float> se(n_elements);
 	GPUMemory<vec2> pos(max_batch_size);
@@ -467,21 +502,19 @@ float Testbed::compute_image_mse(bool quantize_to_byte) {
 	const uint32_t n_batches = div_round_up(n_elements, max_batch_size);
 	for (uint32_t i = 0; i < n_batches; ++i) {
 		uint32_t offset = i * max_batch_size;
-		uint32_t batch_size = (std::min(max_batch_size, n_elements - offset) + 255u ) & (~255u);
+		uint32_t batch_size = (std::min(max_batch_size, n_elements - offset) + 255u) & (~255u);
 
 		GPUMatrix<float> pos_matrix((float*)(pos.data()), n_input_dims, batch_size);
 		GPUMatrix<float> targets_matrix((float*)(targets.data()), n_output_dims, batch_size);
 		GPUMatrix<float> predictions_matrix((float*)(predictions.data()), n_output_dims, batch_size);
 
-		linear_kernel(image_coords_from_idx, 0, nullptr,
-			batch_size,
-			offset,
-			pos.data(),
-			m_image.resolution
-		);
+		linear_kernel(image_coords_from_idx, 0, nullptr, batch_size, offset, pos.data(), m_image.resolution);
 
 		if (m_image.type == EDataType::Float) {
-			linear_kernel(eval_image_kernel_and_snap<float, 3>, 0, nullptr,
+			linear_kernel(
+				eval_image_kernel_and_snap<float, 3>,
+				0,
+				nullptr,
 				batch_size,
 				(float*)m_image.data.data(),
 				pos.data(),
@@ -491,7 +524,10 @@ float Testbed::compute_image_mse(bool quantize_to_byte) {
 				m_image.training.linear_colors
 			);
 		} else {
-			linear_kernel(eval_image_kernel_and_snap<__half, 3>, 0, nullptr,
+			linear_kernel(
+				eval_image_kernel_and_snap<__half, 3>,
+				0,
+				nullptr,
 				batch_size,
 				(__half*)m_image.data.data(),
 				pos.data(),
@@ -504,16 +540,10 @@ float Testbed::compute_image_mse(bool quantize_to_byte) {
 
 		m_network->inference(pos_matrix, predictions_matrix);
 
-		linear_kernel(image_mse_kernel, 0, nullptr,
-			batch_size,
-			targets.data(),
-			predictions.data(),
-			se.data() + offset,
-			quantize_to_byte
-		);
+		linear_kernel(image_mse_kernel, 0, nullptr, batch_size, targets.data(), predictions.data(), se.data() + offset, quantize_to_byte);
 	}
 
 	return reduce_sum(se.data(), n_elements, nullptr) / n_elements;
 }
 
-}
+} // namespace ngp

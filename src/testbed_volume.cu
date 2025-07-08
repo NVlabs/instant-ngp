@@ -12,8 +12,8 @@
  *  @author Thomas Müller & Alex Evans, NVIDIA
  */
 
-#include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/common.h>
+#include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/random_val.cuh> // helpers to generate random values, directions
 #include <neural-graphics-primitives/render_buffer.h>
 #include <neural-graphics-primitives/testbed.h>
@@ -21,8 +21,8 @@
 
 #include <tiny-cuda-nn/common_device.h>
 #include <tiny-cuda-nn/gpu_matrix.h>
-#include <tiny-cuda-nn/network_with_input_encoding.h>
 #include <tiny-cuda-nn/network.h>
+#include <tiny-cuda-nn/network_with_input_encoding.h>
 #include <tiny-cuda-nn/trainer.h>
 
 #include <nanovdb/NanoVDB.h>
@@ -52,7 +52,7 @@ __device__ vec4 proc_envmap(const vec3& dir, const vec3& up_dir, const vec3& sun
 	sunam *= sunam;
 
 	vec4 result;
-	result.rgb() = skycol * skyam + vec3{255.f/255.0f, 215.f/255.0f, 195.f/255.0f} * (20.f * sunam);
+	result.rgb() = skycol * skyam + vec3{255.f / 255.0f, 215.f / 255.0f, 195.f / 255.0f} * (20.f * sunam);
 	result.a = 1.0f;
 	return result;
 }
@@ -67,22 +67,31 @@ __device__ vec4 proc_envmap_render(const vec3& dir, const vec3& up_dir, const ve
 	return result;
 }
 
-__device__ inline bool walk_to_next_event(default_rng_t &rng, const BoundingBox &aabb, vec3 &pos, const vec3 &dir, const uint8_t *bitgrid, float scale) {
+__device__ inline bool
+	walk_to_next_event(default_rng_t& rng, const BoundingBox& aabb, vec3& pos, const vec3& dir, const uint8_t* bitgrid, float scale) {
 	while (1) {
 		float zeta1 = random_val(rng); // sample a free flight distance and go there!
-		float dt = -std::log(1.0f - zeta1) * scale; // todo - for spatially varying majorant, we must check dt against the range over which the majorant is defined. we can turn this into an optical thickness accumulating loop...
-		pos += dir*dt;
-		if (!aabb.contains(pos)) return false; // escape to the mooon!
-		uint32_t bitidx = morton3D(int(pos.x*128.f+0.5f),int(pos.y*128.f+0.5f),int(pos.z*128.f+0.5f));
-		if (bitidx<128*128*128 && bitgrid[bitidx>>3]&(1<<(bitidx&7))) break;
+		float dt = -std::log(1.0f - zeta1) *
+			scale; // todo - for spatially varying majorant, we must check dt against the range over which the majorant is defined. we can
+				   // turn this into an optical thickness accumulating loop...
+		pos += dir * dt;
+		if (!aabb.contains(pos)) {
+			return false; // escape to the mooon!
+		}
+		uint32_t bitidx = morton3D(int(pos.x * 128.f + 0.5f), int(pos.y * 128.f + 0.5f), int(pos.z * 128.f + 0.5f));
+		if (bitidx < 128 * 128 * 128 && bitgrid[bitidx >> 3] & (1 << (bitidx & 7))) {
+			break;
+		}
 		// loop around and try again as we are in density=0 region!
 	}
 	return true;
 }
 
-static constexpr uint32_t MAX_TRAIN_VERTICES = 4; // record the first few real interactions and use as training data. uses a local array so cant be big.
+static constexpr uint32_t MAX_TRAIN_VERTICES =
+	4; // record the first few real interactions and use as training data. uses a local array so cant be big.
 
-__global__ void volume_generate_training_data_kernel(uint32_t n_elements,
+__global__ void volume_generate_training_data_kernel(
+	uint32_t n_elements,
 	vec3* pos_out,
 	vec4* target_out,
 	const void* nanovdb,
@@ -100,8 +109,10 @@ __global__ void volume_generate_training_data_kernel(uint32_t n_elements,
 	vec3 sky_col
 ) {
 	uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-	if (idx >= n_elements) return;
-	rng.advance(idx*256);
+	if (idx >= n_elements) {
+		return;
+	}
+	rng.advance(idx * 256);
 	uint32_t numout = 0;
 	vec3 outpos[MAX_TRAIN_VERTICES];
 	float outdensity[MAX_TRAIN_VERTICES];
@@ -117,36 +128,40 @@ __global__ void volume_generate_training_data_kernel(uint32_t n_elements,
 		float t = max(box_intersection.x, 0.0f);
 		pos = pos + (t + 1e-6f) * dir;
 		float throughput = 1.f;
-		for (int iter=0; iter<128; ++iter) {
-			if (!walk_to_next_event(rng, aabb, pos, dir, bitgrid, scale)) // escaped!
+		for (int iter = 0; iter < 128; ++iter) {
+			if (!walk_to_next_event(rng, aabb, pos, dir, bitgrid, scale)) { // escaped!
 				break;
-			vec3 nanovdbpos = pos*world2index_scale + world2index_offset;
-			float density = acc.getValue({int(nanovdbpos.x+random_val(rng)), int(nanovdbpos.y+random_val(rng)), int(nanovdbpos.z+random_val(rng))});
+			}
+			vec3 nanovdbpos = pos * world2index_scale + world2index_offset;
+			float density = acc.getValue(
+				{int(nanovdbpos.x + random_val(rng)), int(nanovdbpos.y + random_val(rng)), int(nanovdbpos.z + random_val(rng))}
+			);
 
 			if (numout < MAX_TRAIN_VERTICES) {
-				outdensity[numout]=density;
-				outpos[numout]=pos;
+				outdensity[numout] = density;
+				outpos[numout] = pos;
 				numout++;
 			}
 
 			float extinction_prob = density / global_majorant;
 			float scatter_prob = extinction_prob * albedo;
-			float zeta2=random_val(rng);
-			if (zeta2 >= extinction_prob)
+			float zeta2 = random_val(rng);
+			if (zeta2 >= extinction_prob) {
 				continue; // null collision
-			if (zeta2 < scatter_prob) // was it a scatter?
+			}
+			if (zeta2 < scatter_prob) { // was it a scatter?
 				dir = normalize(dir * scattering + random_dir(rng));
-			else {
+			} else {
 				throughput = 0.f; // absorb
 				break;
 			}
 		}
 		vec4 targetcol = proc_envmap(dir, up_dir, sun_dir, sky_col) * throughput;
-		uint32_t oidx=idx * MAX_TRAIN_VERTICES;
-		for (uint32_t i=prev_numout;i<numout;++i) {
-			float density=outdensity[i];
-			vec3 pos=outpos[i];
-			pos_out[oidx + i]=pos;
+		uint32_t oidx = idx * MAX_TRAIN_VERTICES;
+		for (uint32_t i = prev_numout; i < numout; ++i) {
+			float density = outdensity[i];
+			vec3 pos = outpos[i];
+			pos_out[oidx + i] = pos;
 			target_out[oidx + i] = targetcol;
 			target_out[oidx + i].w = density;
 		}
@@ -166,10 +181,14 @@ void Testbed::train_volume(size_t target_batch_size, bool get_loss_scalar, cudaS
 	m_volume.training.positions.enlarge(n_elements);
 	m_volume.training.targets.enlarge(n_elements);
 
-	float distance_scale = 1.f/std::max(m_volume.inv_distance_scale,0.01f);
+	float distance_scale = 1.f / std::max(m_volume.inv_distance_scale, 0.01f);
 	auto sky_col = m_background_color.rgb();
 
-	linear_kernel(volume_generate_training_data_kernel, 0, stream, n_elements / MAX_TRAIN_VERTICES,
+	linear_kernel(
+		volume_generate_training_data_kernel,
+		0,
+		stream,
+		n_elements / MAX_TRAIN_VERTICES,
 		m_volume.training.positions.data(),
 		m_volume.training.targets.data(),
 		m_volume.nanovdb_grid.data(),
@@ -186,7 +205,7 @@ void Testbed::train_volume(size_t target_batch_size, bool get_loss_scalar, cudaS
 		m_sun_dir,
 		sky_col
 	);
-	m_rng.advance(n_elements*256);
+	m_rng.advance(n_elements * 256);
 
 	GPUMatrix<float> training_batch_matrix((float*)(m_volume.training.positions.data()), n_input_dims, batch_size);
 	GPUMatrix<float> training_target_matrix((float*)(m_volume.training.targets.data()), n_output_dims, batch_size);
@@ -204,11 +223,12 @@ __global__ void init_rays_volume(
 	uint32_t sample_index,
 	vec3* __restrict__ positions,
 	Testbed::VolPayload* __restrict__ payloads,
-	uint32_t *pixel_counter,
+	uint32_t* pixel_counter,
 	ivec2 resolution,
 	vec2 focal_length,
 	mat4x3 camera_matrix,
 	vec2 screen_center,
+	Lens lens,
 	vec3 parallax_shift,
 	bool snap_to_pixel_centers,
 	BoundingBox aabb,
@@ -221,7 +241,7 @@ __global__ void init_rays_volume(
 	float* __restrict__ depth_buffer,
 	Buffer2DView<const uint8_t> hidden_area_mask,
 	default_rng_t rng,
-	const uint8_t *bitgrid,
+	const uint8_t* bitgrid,
 	float distance_scale,
 	float global_majorant,
 	vec3 up_dir,
@@ -234,7 +254,7 @@ __global__ void init_rays_volume(
 		return;
 	}
 	uint32_t idx = x + resolution.x * y;
-	rng.advance(idx<<8);
+	rng.advance(idx << 8);
 	if (plane_z < 0) {
 		aperture_size = 0.0;
 	}
@@ -252,7 +272,8 @@ __global__ void init_rays_volume(
 		plane_z,
 		aperture_size,
 		foveation,
-		hidden_area_mask
+		hidden_area_mask,
+		lens
 	);
 
 	if (!ray.is_valid()) {
@@ -284,12 +305,12 @@ __global__ void volume_render_kernel_gt(
 	BoundingBox aabb,
 	const vec3* __restrict__ positions_in,
 	const Testbed::VolPayload* __restrict__ payloads_in,
-	const uint32_t *pixel_counter_in,
+	const uint32_t* pixel_counter_in,
 	const vec3 up_dir,
 	const vec3 sun_dir,
 	const vec3 sky_col,
-	const void *nanovdb,
-	const uint8_t *bitgrid,
+	const void* nanovdb,
+	const uint8_t* bitgrid,
 	float global_majorant,
 	vec3 world2index_offset,
 	float world2index_scale,
@@ -299,17 +320,19 @@ __global__ void volume_render_kernel_gt(
 	vec4* __restrict__ frame_buffer
 ) {
 	uint32_t idx = threadIdx.x + blockDim.x * blockIdx.x;
-	if (idx >= n_pixels || idx >= pixel_counter_in[0])
+	if (idx >= n_pixels || idx >= pixel_counter_in[0]) {
 		return;
+	}
 	uint32_t pixidx = payloads_in[idx].pixidx;
 
 	uint32_t y = pixidx / resolution.x;
-	if (y >= resolution.y)
+	if (y >= resolution.y) {
 		return;
+	}
 
 	vec3 pos = positions_in[idx];
 	vec3 dir = payloads_in[idx].dir;
-	rng.advance(pixidx<<8);
+	rng.advance(pixidx << 8);
 	const nanovdb::FloatGrid* grid = reinterpret_cast<const nanovdb::FloatGrid*>(nanovdb);
 	auto acc = grid->tree().getAccessor();
 
@@ -319,21 +342,23 @@ __global__ void volume_render_kernel_gt(
 	bool absorbed = false;
 	bool scattered = false;
 
-	for (int iter=0;iter<128;++iter) {
-		vec3 nanovdbpos = pos*world2index_scale + world2index_offset;
-		float density = acc.getValue({int(nanovdbpos.x+random_val(rng)), int(nanovdbpos.y+random_val(rng)), int(nanovdbpos.z+random_val(rng))});
+	for (int iter = 0; iter < 128; ++iter) {
+		vec3 nanovdbpos = pos * world2index_scale + world2index_offset;
+		float density =
+			acc.getValue({int(nanovdbpos.x + random_val(rng)), int(nanovdbpos.y + random_val(rng)), int(nanovdbpos.z + random_val(rng))});
 		float extinction_prob = density / global_majorant;
 		float scatter_prob = extinction_prob * albedo;
-		float zeta2=random_val(rng);
-		if (zeta2<scatter_prob) {
+		float zeta2 = random_val(rng);
+		if (zeta2 < scatter_prob) {
 			dir = normalize(dir * scattering + random_dir(rng));
 			scattered = true;
-		} else if (zeta2<extinction_prob) {
+		} else if (zeta2 < extinction_prob) {
 			absorbed = true;
 			break;
 		}
-		if (!walk_to_next_event(rng, aabb, pos, dir, bitgrid, scale))
+		if (!walk_to_next_event(rng, aabb, pos, dir, bitgrid, scale)) {
 			break;
+		}
 	}
 	// the ray is done!
 
@@ -355,16 +380,16 @@ __global__ void volume_render_kernel_step(
 	BoundingBox aabb,
 	const vec3* __restrict__ positions_in,
 	const Testbed::VolPayload* __restrict__ payloads_in,
-	const uint32_t *pixel_counter_in,
+	const uint32_t* pixel_counter_in,
 	vec3* __restrict__ positions_out,
 	Testbed::VolPayload* __restrict__ payloads_out,
-	uint32_t *pixel_counter_out,
-	const vec4 *network_outputs_in,
+	uint32_t* pixel_counter_out,
+	const vec4* network_outputs_in,
 	const vec3 up_dir,
 	const vec3 sun_dir,
 	const vec3 sky_col,
-	const void *nanovdb,
-	const uint8_t *bitgrid,
+	const void* nanovdb,
+	const uint8_t* bitgrid,
 	float global_majorant,
 	vec3 world2index_offset,
 	float world2index_scale,
@@ -375,16 +400,18 @@ __global__ void volume_render_kernel_step(
 	bool force_finish_ray
 ) {
 	uint32_t idx = threadIdx.x + blockDim.x * blockIdx.x;
-	if (idx >= n_pixels || idx >= pixel_counter_in[0])
+	if (idx >= n_pixels || idx >= pixel_counter_in[0]) {
 		return;
+	}
 	Testbed::VolPayload payload = payloads_in[idx];
 	uint32_t pixidx = payload.pixidx;
 	uint32_t y = pixidx / resolution.x;
-	if (y >= resolution.y)
+	if (y >= resolution.y) {
 		return;
+	}
 	vec3 pos = positions_in[idx];
 	vec3 dir = payload.dir;
-	rng.advance(pixidx<<8);
+	rng.advance(pixidx << 8);
 	const nanovdb::FloatGrid* grid = reinterpret_cast<const nanovdb::FloatGrid*>(nanovdb);
 	auto acc = grid->tree().getAccessor();
 	// ye olde delta tracker
@@ -393,13 +420,15 @@ __global__ void volume_render_kernel_step(
 	float scale = distance_scale / global_majorant;
 	float density = local_output.w;
 	float extinction_prob = density / global_majorant;
-	if (extinction_prob>1.f) extinction_prob=1.f;
+	if (extinction_prob > 1.f) {
+		extinction_prob = 1.f;
+	}
 	float T = 1.f - payload.col.a;
 	float alpha = extinction_prob * T;
 	payload.col.rgb() += local_output.rgb() * alpha;
 	payload.col.a += alpha;
 	if (payload.col.a > 0.99f || !walk_to_next_event(rng, aabb, pos, dir, bitgrid, scale) || force_finish_ray) {
-		payload.col += (1.f-payload.col.a) * proc_envmap_render(dir, up_dir, sun_dir, sky_col);
+		payload.col += (1.f - payload.col.a) * proc_envmap_render(dir, up_dir, sun_dir, sky_col);
 		frame_buffer[pixidx] = payload.col;
 		return;
 	}
@@ -414,10 +443,13 @@ void Testbed::render_volume(
 	const vec2& focal_length,
 	const mat4x3& camera_matrix,
 	const vec2& screen_center,
-	const Foveation& foveation
+	const Foveation& foveation,
+	const Lens& lens
 ) {
+	auto jit_guard = m_network->jit_guard(stream, true);
+
 	float plane_z = m_slice_plane_z + m_scale;
-	float distance_scale = 1.f/std::max(m_volume.inv_distance_scale,0.01f);
+	float distance_scale = 1.f / std::max(m_volume.inv_distance_scale, 0.01f);
 	auto res = render_buffer.resolution;
 
 	size_t n_pixels = (size_t)res.x * res.y;
@@ -430,8 +462,8 @@ void Testbed::render_volume(
 
 	vec3 sky_col = m_background_color.rgb();
 
-	const dim3 threads = { 16, 8, 1 };
-	const dim3 blocks = { div_round_up((uint32_t)res.x, threads.x), div_round_up((uint32_t)res.y, threads.y), 1 };
+	const dim3 threads = {16, 8, 1};
+	const dim3 blocks = {div_round_up((uint32_t)res.x, threads.x), div_round_up((uint32_t)res.y, threads.y), 1};
 	init_rays_volume<<<blocks, threads, 0, stream>>>(
 		render_buffer.spp,
 		m_volume.pos[0].data(),
@@ -441,6 +473,7 @@ void Testbed::render_volume(
 		focal_length,
 		camera_matrix,
 		screen_center,
+		lens,
 		m_parallax_shift,
 		m_snap_to_pixel_centers,
 		m_render_aabb,
@@ -467,7 +500,10 @@ void Testbed::render_volume(
 	CUDA_CHECK_THROW(cudaStreamSynchronize(stream));
 
 	if (m_render_ground_truth) {
-		linear_kernel(volume_render_kernel_gt, 0, stream,
+		linear_kernel(
+			volume_render_kernel_gt,
+			0,
+			stream,
 			n,
 			res,
 			m_rng,
@@ -485,7 +521,7 @@ void Testbed::render_volume(
 			m_volume.world2index_offset,
 			m_volume.world2index_scale,
 			distance_scale,
-			std::min(m_volume.albedo,0.995f),
+			std::min(m_volume.albedo, 0.995f),
 			m_volume.scattering,
 			render_buffer.frame_buffer
 		);
@@ -505,17 +541,20 @@ void Testbed::render_volume(
 
 			CUDA_CHECK_THROW(cudaMemsetAsync(m_volume.hit_counter.data() + dstbuf, 0, sizeof(uint32_t), stream));
 
-			linear_kernel(volume_render_kernel_step, 0, stream,
+			linear_kernel(
+				volume_render_kernel_step,
+				0,
+				stream,
 				n,
 				res,
 				m_rng,
 				m_render_aabb,
 				m_volume.pos[srcbuf].data(),
 				m_volume.payload[srcbuf].data(),
-				m_volume.hit_counter.data()+srcbuf,
+				m_volume.hit_counter.data() + srcbuf,
 				m_volume.pos[dstbuf].data(),
 				m_volume.payload[dstbuf].data(),
-				m_volume.hit_counter.data()+dstbuf,
+				m_volume.hit_counter.data() + dstbuf,
 				m_volume.radiance_and_density.data(),
 				m_up_dir,
 				m_sun_dir,
@@ -526,10 +565,10 @@ void Testbed::render_volume(
 				m_volume.world2index_offset,
 				m_volume.world2index_scale,
 				distance_scale,
-				std::min(m_volume.albedo,0.995f),
+				std::min(m_volume.albedo, 0.995f),
 				m_volume.scattering,
 				render_buffer.frame_buffer,
-				(iter>=max_iter-1)
+				(iter >= max_iter - 1)
 			);
 
 			m_rng.advance(n_pixels * 256);
@@ -543,8 +582,7 @@ void Testbed::render_volume(
 }
 
 #define NANOVDB_MAGIC_NUMBER 0x304244566f6e614eUL // "NanoVDB0" in hex - little endian (uint64_t)
-struct NanoVDBFileHeader
-{
+struct NanoVDBFileHeader {
 	uint64_t magic;     // 8 bytes
 	uint32_t version;   // 4 bytes version numbers
 	uint16_t gridCount; // 2 bytes
@@ -552,20 +590,19 @@ struct NanoVDBFileHeader
 };
 static_assert(sizeof(NanoVDBFileHeader) == 16, "nanovdb padding error");
 
-struct NanoVDBMetaData
-{
+struct NanoVDBMetaData {
 	uint64_t gridSize, fileSize, nameKey, voxelCount; // 4 * 8 = 32B.
-	uint32_t gridType;      // 4B.
-	uint32_t gridClass;     // 4B.
-	double worldBBox[2][3]; // 2 * 3 * 8 = 48B.
-	int indexBBox[2][3];    // 2 * 3 * 4 = 24B.
-	double voxelSize[3];    // 24B.
-	uint32_t nameSize;      // 4B.
-	uint32_t nodeCount[4];  // 4 x 4 = 16B
-	uint32_t tileCount[3];  // 3 x 4 = 12B
-	uint16_t codec;         // 2B
-	uint16_t padding;       // 2B, due to 8B alignment from uint64_t
-	uint32_t version;       // 4B
+	uint32_t gridType;                                // 4B.
+	uint32_t gridClass;                               // 4B.
+	double worldBBox[2][3];                           // 2 * 3 * 8 = 48B.
+	int indexBBox[2][3];                              // 2 * 3 * 4 = 24B.
+	double voxelSize[3];                              // 24B.
+	uint32_t nameSize;                                // 4B.
+	uint32_t nodeCount[4];                            // 4 x 4 = 16B
+	uint32_t tileCount[3];                            // 3 x 4 = 12B
+	uint16_t codec;                                   // 2B
+	uint16_t padding;                                 // 2B, due to 8B alignment from uint64_t
+	uint32_t version;                                 // 4B
 };
 static_assert(sizeof(NanoVDBMetaData) == 176, "nanovdb padding error");
 
@@ -580,22 +617,27 @@ void Testbed::load_volume(const fs::path& data_path) {
 	f.read(reinterpret_cast<char*>(&header), sizeof(header));
 	f.read(reinterpret_cast<char*>(&metadata), sizeof(metadata));
 
-	if (header.magic!=NANOVDB_MAGIC_NUMBER)
+	if (header.magic != NANOVDB_MAGIC_NUMBER) {
 		throw std::runtime_error{"not a nanovdb file"};
-	if (header.gridCount==0)
+	}
+	if (header.gridCount == 0) {
 		throw std::runtime_error{"no grids in file"};
-	if (header.gridCount>1)
+	}
+	if (header.gridCount > 1) {
 		tlog::warning() << "Only loading first grid in file";
-	if (metadata.codec!=0)
+	}
+	if (metadata.codec != 0) {
 		throw std::runtime_error{"cannot use compressed nvdb files"};
+	}
 	char name[256] = {};
-	if (metadata.nameSize > 256)
+	if (metadata.nameSize > 256) {
 		throw std::runtime_error{"nanovdb name too long"};
+	}
 	f.read(name, metadata.nameSize);
-	tlog::info()
-		<< name << ": gridSize=" << metadata.gridSize << " filesize=" << metadata.fileSize
-		<< " voxelCount=" << metadata.voxelCount << " gridType=" << metadata.gridType
-		<< " gridClass=" << metadata.gridClass << " indexBBox=[min=["<<metadata.indexBBox[0][0]<<","<<metadata.indexBBox[0][1]<<","<<metadata.indexBBox[0][2]<<"],max]["<<metadata.indexBBox[1][0]<<","<<metadata.indexBBox[1][1]<<","<<metadata.indexBBox[1][2]<<"]]";
+	tlog::info() << name << ": gridSize=" << metadata.gridSize << " filesize=" << metadata.fileSize << " voxelCount=" << metadata.voxelCount
+				 << " gridType=" << metadata.gridType << " gridClass=" << metadata.gridClass << " indexBBox=[min=["
+				 << metadata.indexBBox[0][0] << "," << metadata.indexBBox[0][1] << "," << metadata.indexBBox[0][2] << "],max]["
+				 << metadata.indexBBox[1][0] << "," << metadata.indexBBox[1][1] << "," << metadata.indexBBox[1][2] << "]]";
 
 	std::vector<char> cpugrid;
 	cpugrid.resize(metadata.gridSize);
@@ -606,7 +648,7 @@ void Testbed::load_volume(const fs::path& data_path) {
 
 	float mn = 10000.0f, mx = -10000.0f;
 	bool hmm = grid->hasMinMax();
-	//grid->tree().extrema(mn,mx);
+	// grid->tree().extrema(mn,mx);
 	int xsize = std::max(1, metadata.indexBBox[1][0] - metadata.indexBBox[0][0]);
 	int ysize = std::max(1, metadata.indexBBox[1][1] - metadata.indexBBox[0][1]);
 	int zsize = std::max(1, metadata.indexBBox[1][2] - metadata.indexBBox[0][2]);
@@ -628,25 +670,33 @@ void Testbed::load_volume(const fs::path& data_path) {
 	auto acc = grid->tree().getAccessor();
 	std::vector<uint8_t> bitgrid;
 	bitgrid.resize(128 * 128 * 128 / 8);
-	for (int i = metadata.indexBBox[0][0]; i < metadata.indexBBox[1][0]; ++i)
-	for (int j = metadata.indexBBox[0][1]; j < metadata.indexBBox[1][1]; ++j)
-	for (int k = metadata.indexBBox[0][2]; k < metadata.indexBBox[1][2]; ++k) {
-		float d = acc.getValue({i, j, k});
-		if (d > mx) mx = d;
-		if (d < mn) mn = d;
-		if (d > 0.001f) {
-			float fx = ((i + 0.5f) - m_volume.world2index_offset.x) / m_volume.world2index_scale;
-			float fy = ((j + 0.5f) - m_volume.world2index_offset.y) / m_volume.world2index_scale;
-			float fz = ((k + 0.5f) - m_volume.world2index_offset.z) / m_volume.world2index_scale;
-			uint32_t bitidx = morton3D(int(fx * 128.0f + 0.5f), int(fy * 128.0f + 0.5f), int(fz * 128.0f + 0.5f));
-			if (bitidx < 128 * 128 * 128)
-				bitgrid[bitidx / 8] |= 1 << (bitidx & 7);
+	for (int i = metadata.indexBBox[0][0]; i < metadata.indexBBox[1][0]; ++i) {
+		for (int j = metadata.indexBBox[0][1]; j < metadata.indexBBox[1][1]; ++j) {
+			for (int k = metadata.indexBBox[0][2]; k < metadata.indexBBox[1][2]; ++k) {
+				float d = acc.getValue({i, j, k});
+				if (d > mx) {
+					mx = d;
+				}
+				if (d < mn) {
+					mn = d;
+				}
+				if (d > 0.001f) {
+					float fx = ((i + 0.5f) - m_volume.world2index_offset.x) / m_volume.world2index_scale;
+					float fy = ((j + 0.5f) - m_volume.world2index_offset.y) / m_volume.world2index_scale;
+					float fz = ((k + 0.5f) - m_volume.world2index_offset.z) / m_volume.world2index_scale;
+					uint32_t bitidx = morton3D(int(fx * 128.0f + 0.5f), int(fy * 128.0f + 0.5f), int(fz * 128.0f + 0.5f));
+					if (bitidx < 128 * 128 * 128) {
+						bitgrid[bitidx / 8] |= 1 << (bitidx & 7);
+					}
+				}
+			}
 		}
 	}
 	m_volume.bitgrid.enlarge(bitgrid.size());
 	m_volume.bitgrid.copy_from_host(bitgrid);
-	tlog::info() << "nanovdb extrema: " << mn << " " << mx << " (" << hmm << ")";;
+	tlog::info() << "nanovdb extrema: " << mn << " " << mx << " (" << hmm << ")";
+	;
 	m_volume.global_majorant = mx;
 }
 
-}
+} // namespace ngp

@@ -10,7 +10,7 @@
 
 import os
 
-from common import *
+from constants import *
 
 def ours_real_converted(path, frameidx):
 	return {
@@ -24,7 +24,7 @@ def ours_real_converted(path, frameidx):
 
 def nerf_synthetic(name, frameidx):
 	return {
-		"data_dir"      : os.path.join(NERF_DATA_FOLDER, f"nerf_synthetic/{name}"),
+		"data_dir"      : os.path.join(NERF_DATA_FOLDER, "nerf_synthetic", name),
 		"dataset_train" : "transforms_train.json",
 		"dataset_test"  : "transforms_test.json",
 		"dataset"       : "",
@@ -33,7 +33,7 @@ def nerf_synthetic(name, frameidx):
 
 def nerf_real_360(name, frameidx):
 	return {
-		"data_dir"      : os.path.join(NERF_DATA_FOLDER, f"nerf_real_360/{name}"),
+		"data_dir"      : os.path.join(NERF_DATA_FOLDER, "nerf_real_360", name),
 		"dataset_train" : "transforms.json",
 		"dataset_test"  : "transforms.json",
 		"dataset"       : "",
@@ -42,14 +42,14 @@ def nerf_real_360(name, frameidx):
 
 def mipnerf_360(name, frameidx):
 	return {
-		"data_dir"      : os.path.join(NERF_DATA_FOLDER, f"mipnerf_360/{name}"),
+		"data_dir"      : os.path.join(NERF_DATA_FOLDER, "mipnerf_360", name),
 		"dataset_train" : "transforms.json",
 		"dataset_test"  : "transforms.json",
 		"dataset"       : "",
 		"frameidx"      : frameidx
 	}
 scenes_nerf = {
-	"fox"         : ours_real_converted("fox/", frameidx=0),
+	"fox"         : ours_real_converted("fox", frameidx=0),
 	"lego"      : nerf_synthetic("lego", frameidx=52),
 	"drums"     : nerf_synthetic("drums", frameidx=52),
 	"ship"      : nerf_synthetic("ship", frameidx=52),
@@ -216,10 +216,12 @@ def setup_colored_sdf(testbed, scene, softshadow=True):
 	testbed.sdf.analytic_normals = False
 	testbed.sdf.use_triangle_octree = False
 
-	col = list(testbed.background_color)
-	testbed.sdf.brdf.ambientcolor = np.multiply(col,col)[0:3]
 	testbed.sdf.shadow_sharpness = 16 if softshadow else 2048
 	testbed.scale = testbed.scale * 1.13
+
+	import numpy as np
+	col = list(testbed.background_color)
+	testbed.sdf.brdf.ambientcolor = np.multiply(col,col)[0:3]
 
 def default_snapshot_filename(scene_info):
 	filename = f"base.ingp"

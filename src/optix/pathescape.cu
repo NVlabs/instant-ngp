@@ -22,9 +22,7 @@
 
 namespace ngp {
 
-extern "C" {
-	__constant__ PathEscape::Params params;
-}
+extern "C" __constant__ char params_data[sizeof(PathEscape::Params)];
 
 struct Onb {
 	inline __device__ Onb(const vec3& normal) {
@@ -54,10 +52,12 @@ struct Onb {
 };
 
 extern "C" __global__ void __raygen__rg() {
+	const auto* params = (PathEscape::Params*)params_data;
+
 	const uint3 idx = optixGetLaunchIndex();
 	const uint3 dim = optixGetLaunchDimensions();
 
-	vec3 query_point = params.ray_origins[idx.x];
+	vec3 query_point = params->ray_origins[idx.x];
 
 	static constexpr uint32_t N_PATHS = 32;
 	static constexpr uint32_t N_BOUNCES = 4;
@@ -73,7 +73,7 @@ extern "C" __global__ void __raygen__rg() {
 			// Trace the stab ray against our scene hierarchy
 			unsigned int p0;
 			optixTrace(
-				params.handle,
+				params->handle,
 				to_float3(ray_origin),
 				to_float3(ray_direction),
 				0.0f,                // Min intersection distance
@@ -98,7 +98,7 @@ extern "C" __global__ void __raygen__rg() {
 			}
 
 			vec3 N_0;
-			float t = params.triangles[p0].ray_intersect(ray_origin, ray_direction, N_0);
+			float t = params->triangles[p0].ray_intersect(ray_origin, ray_direction, N_0);
 			const vec3 N = normalize(faceforward(N_0, ray_direction, N_0));
 
 			// Prevent self-intersections by subtracting 1e-3f from the target distance.
@@ -109,7 +109,7 @@ extern "C" __global__ void __raygen__rg() {
 			onb.inverse_transform(ray_direction);
 		}
 	}
-	params.distances[idx.x] = -params.distances[idx.x];
+	params->distances[idx.x] = -params->distances[idx.x];
 }
 
 extern "C" __global__ void __miss__ms() {

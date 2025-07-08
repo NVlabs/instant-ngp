@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2020-2025, NVIDIA CORPORATION.  All rights reserved.
  *
  * NVIDIA CORPORATION and its licensors retain all intellectual property
  * and proprietary rights in and to this software, related documentation
@@ -44,14 +44,14 @@ __global__ void kernel_takikawa(
 	const uint32_t encoded_index = i * n_features;
 	if (encoded_index >= num_elements * n_features) return;
 
-	int level = TriangleOctree::traverse(
+	int level = traverse(
 		octree_nodes,
 		octree_dual_nodes,
 		n_levels + starting_level,
 		{
-			data_in(0, i),
-			data_in(1, i),
-			data_in(2, i),
+			data_in(0u, i),
+			data_in(1u, i),
+			data_in(2u, i),
 		},
 		[&](const TriangleOctreeDualNode& node, uint32_t level, vec3 pos) {
 			if (level < starting_level) {
@@ -175,9 +175,10 @@ __global__ void kernel_takikawa_backward_input(
 	const uint32_t j = input_index - i * 3;
 
 	float result = 0;
-	for (int k = 0; k < num_grid_features; ++k) {
+	for (uint32_t k = 0; k < num_grid_features; ++k) {
 		result += (float)dL_dy(k, i) * dy_dx[i * fan_out_grad + j * num_grid_features + k];
 	}
+
 	dL_dx(j, i) = result;
 }
 
@@ -197,14 +198,14 @@ __global__ void kernel_takikawa_backward(
 	const uint32_t encoded_index = i * N_FEATURES_PER_LEVEL * n_levels;
 	if (encoded_index >= num_elements * N_FEATURES_PER_LEVEL * n_levels) return;
 
-	TriangleOctree::traverse(
+	traverse(
 		octree_nodes,
 		octree_dual_nodes,
 		n_levels + starting_level,
 		{
-			data_in(0, i),
-			data_in(1, i),
-			data_in(2, i),
+			data_in(0u, i),
+			data_in(1u, i),
+			data_in(2u, i),
 		},
 		[&](const TriangleOctreeDualNode& node, uint32_t level, vec3 pos) {
 			if (level < starting_level) {
