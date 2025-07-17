@@ -76,7 +76,10 @@ __global__ void train_nerf(
 	const vec3* __restrict__ exposure,
 	vec3* __restrict__ exposure_gradient,
 	float depth_supervision_lambda,
-	float near_distance
+	float near_distance,
+
+	uint32_t training_step,
+	ETrainMode training_mode
 ) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -127,6 +130,39 @@ __global__ void train_nerf(
 	const float startt = advance_n_steps(tminmax.x, cone_angle, random_val(rng));
 	vec3 idir = vec3(1.0f) / ray.d;
 
+	if (train_with_random_bg_color) {
+		background_color = random_val_3d(rng);
+	}
+
+	vec3 pre_envmap_background_color = background_color = srgb_to_linear(background_color);
+
+	// Composit background behind envmap
+	vec4 envmap_value;
+	if (envmap) {
+		envmap_value = read_envmap(envmap, ray.d);
+		background_color = envmap_value.rgb() + background_color * (1.0f - envmap_value.a);
+	}
+
+	vec3 exposure_scale = exp(0.6931471805599453f * exposure[img]);
+
+	// Need rgbtarget before the first pass in RFL training mode
+	vec3 rgbtarget;
+	if (train_in_linear_colors || color_space == EColorSpace::Linear) {
+		rgbtarget = exposure_scale * texsamp.rgb() + (1.0f - texsamp.a) * background_color;
+
+		if (!train_in_linear_colors) {
+			rgbtarget = linear_to_srgb(rgbtarget);
+			background_color = linear_to_srgb(background_color);
+		}
+	} else if (color_space == EColorSpace::SRGB) {
+		background_color = linear_to_srgb(background_color);
+		if (texsamp.a > 0) {
+			rgbtarget = linear_to_srgb(exposure_scale * texsamp.rgb() / texsamp.a) * texsamp.a + (1.0f - texsamp.a) * background_color;
+		} else {
+			rgbtarget = background_color;
+		}
+	}
+
 	// first pass to compute an accurate number of steps
 	uint32_t j = 0;
 	float t = startt;
@@ -135,6 +171,7 @@ __global__ void train_nerf(
 
 	vec4 color = vec4(0.0f);
 	vec3 hitpoint = vec3(0.0f);
+	vec3 loss_bg = vec3(0.0f);
 
 	bool alive = valid;
 
@@ -180,8 +217,10 @@ __global__ void train_nerf(
 		// Composit color
 		float alpha = 1.f - __expf(-network_to_density(nerf_out.w, density_activation) * dt);
 		float weight = alpha * (1.0f - color.a);
-		color += vec4(network_to_rgb_vec(nerf_out.xyz(), rgb_activation) * weight, weight);
+		vec3 rgb = network_to_rgb_vec(nerf_out.rgb(), rgb_activation);
+		color += vec4(rgb * weight, weight);
 
+		loss_bg += weight * loss_and_gradient(rgbtarget, rgb, loss_type).loss;
 		hitpoint += weight * pos;
 
 		if (1.0f - color.a < EPSILON || j >= NERF_STEPS()) {
@@ -209,40 +248,9 @@ __global__ void train_nerf(
 		numsteps_out[ray_idx*2+1] = base;
 	}
 
-	if (train_with_random_bg_color) {
-		background_color = random_val_3d(rng);
-	}
-
-	vec3 pre_envmap_background_color = background_color = srgb_to_linear(background_color);
-
-	// Composit background behind envmap
-	vec4 envmap_value;
-	if (envmap) {
-		envmap_value = read_envmap(envmap, ray.d);
-		background_color = envmap_value.rgb() + background_color * (1.0f - envmap_value.a);
-	}
-
-	vec3 exposure_scale = exp(0.6931471805599453f * exposure[img]);
-
-	vec3 rgbtarget;
-	if (train_in_linear_colors || color_space == EColorSpace::Linear) {
-		rgbtarget = exposure_scale * texsamp.rgb() + (1.0f - texsamp.a) * background_color;
-
-		if (!train_in_linear_colors) {
-			rgbtarget = linear_to_srgb(rgbtarget);
-			background_color = linear_to_srgb(background_color);
-		}
-	} else if (color_space == EColorSpace::SRGB) {
-		background_color = linear_to_srgb(background_color);
-		if (texsamp.a > 0) {
-			rgbtarget = linear_to_srgb(exposure_scale * texsamp.rgb() / texsamp.a) * texsamp.a + (1.0f - texsamp.a) * background_color;
-		} else {
-			rgbtarget = background_color;
-		}
-	}
-
 	if (1.0f - color.a >= EPSILON) {
 		color.rgb() += (1.0f - color.a) * background_color;
+		loss_bg += (1.0f - color.a) * loss_and_gradient(rgbtarget, background_color, loss_type).loss;
 	}
 
 	// Step again, this time computing loss
@@ -299,6 +307,7 @@ __global__ void train_nerf(
 
 	// now do it again computing gradients
 	vec4 color2 = vec4(0.0f);
+	vec3 loss_bg2 = vec3(0.0f);
 	float depth2 = 0.0f;
 	t = startt;
 	j = 0;
@@ -366,7 +375,42 @@ __global__ void train_nerf(
 
 		// we know the suffix of this ray compared to where we are up to. note the suffix depends on this step's alpha as suffix = (1-alpha)*(somecolor), so dsuffix/dalpha = -somecolor = -suffix/(1-alpha)
 		const vec3 suffix = color.rgb() - color2.rgb();
-		const vec3 dloss_by_drgb = weight * lg.gradient;
+
+		float density_derivative = network_to_density_derivative(float(local_network_output[3]), density_activation);
+		const float depth_suffix = depth - depth2;
+		const float depth_supervision = depth_loss_gradient * (T * local_depth - depth_suffix);
+
+		vec3 dloss_by_drgb;
+		float dloss_by_dmlp;
+		if (training_step < 500) {
+			training_mode = ETrainMode::NeRF; // Warm up training (about 3 seconds)
+		}
+		if (training_mode == ETrainMode::RFL) {
+			// Radiance field loss
+			LossAndGradient local_lg = loss_and_gradient(rgbtarget, rgb, loss_type);
+			loss_bg2 += weight * local_lg.loss;
+			dloss_by_drgb = weight * local_lg.gradient;
+			dloss_by_dmlp = density_derivative * (
+				dt * sum(T * local_lg.loss - (loss_bg - loss_bg2) + depth_supervision)
+			);
+		} else if (training_mode == ETrainMode::RFLrelax) {
+			// Radiance field loss with relaxation
+			// Different from the relaxation in the paper, but works well in practice
+			const vec3 rgb_bg = suffix / fmaxf(1e-6f, T);
+			const vec3 rgb_lerp = (1 - alpha) * rgb_bg + alpha * rgb;
+			LossAndGradient local_lg = loss_and_gradient(rgbtarget, rgb_lerp, loss_type);
+
+			dloss_by_drgb = weight * local_lg.gradient;
+			dloss_by_dmlp = density_derivative * (
+				dt * (dot(local_lg.gradient, T * rgb - suffix) + depth_supervision)
+			);
+		} else {
+			// The original NeRF loss
+			dloss_by_drgb = weight * lg.gradient;
+			dloss_by_dmlp = density_derivative * (
+				dt * (dot(lg.gradient, T * rgb - suffix) + depth_supervision)
+			);
+		}
 
 		tvec<network_precision_t, 4> local_dL_doutput;
 
@@ -374,14 +418,6 @@ __global__ void train_nerf(
 		local_dL_doutput[0] = loss_scale * (dloss_by_drgb.x * network_to_rgb_derivative(local_network_output[0], rgb_activation) + fmaxf(0.0f, output_l2_reg * (float)local_network_output[0])); // Penalize way too large color values
 		local_dL_doutput[1] = loss_scale * (dloss_by_drgb.y * network_to_rgb_derivative(local_network_output[1], rgb_activation) + fmaxf(0.0f, output_l2_reg * (float)local_network_output[1]));
 		local_dL_doutput[2] = loss_scale * (dloss_by_drgb.z * network_to_rgb_derivative(local_network_output[2], rgb_activation) + fmaxf(0.0f, output_l2_reg * (float)local_network_output[2]));
-
-		float density_derivative = network_to_density_derivative(float(local_network_output[3]), density_activation);
-		const float depth_suffix = depth - depth2;
-		const float depth_supervision = depth_loss_gradient * (T * local_depth - depth_suffix);
-
-		float dloss_by_dmlp = density_derivative * (
-			dt * (dot(lg.gradient, T * rgb - suffix) + depth_supervision)
-		);
 
 		//static constexpr float mask_supervision_strength = 1.f; // we are already 'leaking' mask information into the nerf via the random bg colors; setting this to eg between 1 and  100 encourages density towards 0 in such regions.
 		//dloss_by_dmlp += (texsamp.a<0.001f) ? mask_supervision_strength * weight : 0.f;

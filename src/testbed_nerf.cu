@@ -1991,7 +1991,9 @@ void Testbed::render_nerf(
 				m_nerf.density_activation,
 				m_nerf.rgb_activation,
 				m_nerf.render_min_transmittance,
-				m_nerf.training.linear_colors
+				m_nerf.training.linear_colors,
+				m_nerf.surface_rendering,
+				m_nerf.surface_rendering_threshold
 			);
 
 			return;
@@ -3077,7 +3079,106 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 
 	auto hg_enc = dynamic_cast<MultiLevelEncoding<network_precision_t>*>(m_encoding.get());
 
-	{
+	//  TODO: the below fused kernel is actually slower than the unfused alternative.
+	//        look into optimizing it until it is faster.
+	if (m_jit_fusion) {
+		auto jit_guard = m_nerf_network->jit_guard(stream, false);
+
+		if (!m_nerf.training.fused_kernel) {
+			try {
+				m_nerf.training.fused_kernel = std::make_unique<CudaRtcKernel>(
+					"train_nerf",
+					fmt::format(
+						"{MODEL_BODY}\n"
+						"using GRID_T = {GRID_T};\n"
+						"static constexpr uint32_t N_EXTRA_DIMS = {N_EXTRA_DIMS};\n"
+						"#include <neural-graphics-primitives/fused_kernels/train_nerf.cuh>\n",
+						fmt::arg("MODEL_BODY", m_nerf_network->generate_device_function("eval_nerf")),
+						fmt::arg("GRID_T", type_to_string<network_precision_t>()),
+						fmt::arg("N_EXTRA_DIMS", m_nerf.training.dataset.n_extra_dims())
+					),
+					all_files(cmrc::ngp::get_filesystem())
+				);
+			} catch (const std::runtime_error& e) {
+				tlog::warning() << e.what();
+				tlog::warning() << "Disabling JIT fusion.";
+				m_jit_fusion = false;
+			}
+		}
+
+		if (m_nerf.training.fused_kernel) {
+			m_nerf.training.fused_kernel->launch(
+				n_blocks_linear(counters.rays_per_batch),
+				N_THREADS_LINEAR,
+				0,
+				stream,
+				counters.rays_per_batch,
+				m_aabb,
+				target_batch_size,
+				n_rays_total,
+				m_rng,
+				ray_counter,
+				counters.numsteps_counter.data(),
+				ray_indices,
+				rays_unnormalized,
+				numsteps,
+				PitchedPtr<NerfCoordinate>((NerfCoordinate*)coords_compacted, 1, 0, extra_stride),
+				m_nerf.training.n_images_for_training,
+				m_nerf.training.dataset.metadata_gpu.data(),
+				m_nerf.training.transforms_gpu.data(),
+				m_nerf.density_grid_bitfield.data(),
+				counters.loss.data(),
+				m_max_level_rand_training,
+				max_level_compacted,
+				m_nerf.max_cascade,
+				m_nerf.training.snap_to_pixel_centers,
+				m_nerf.training.train_envmap,
+				m_nerf.cone_angle_constant,
+				m_distortion.view(),
+				sample_focal_plane_proportional_to_error ? m_nerf.training.error_map.cdf_x_cond_y.data() : nullptr,
+				sample_focal_plane_proportional_to_error ? m_nerf.training.error_map.cdf_y.data() : nullptr,
+				sample_image_proportional_to_error ? m_nerf.training.error_map.cdf_img.data() : nullptr,
+				m_nerf.training.error_map.cdf_resolution,
+				m_nerf.training.extra_dims_gpu.data(),
+				m_nerf_network->params(),
+				m_nerf.density_activation,
+				m_nerf.rgb_activation,
+				LOSS_SCALE(),
+				padded_output_width,
+				m_envmap.view(),
+				envmap_gradient,
+				m_envmap.resolution,
+				m_envmap.loss_type,
+				m_background_color.rgb(),
+				m_color_space,
+				m_nerf.training.random_bg_color,
+				m_nerf.training.linear_colors,
+				dloss_dmlp_out,
+				m_nerf.training.loss_type,
+				m_nerf.training.depth_loss_type,
+				accumulate_error ? m_nerf.training.error_map.data.data() : nullptr,
+				m_nerf.training.error_map.resolution,
+				include_sharpness_in_error ? m_nerf.training.dataset.sharpness_data.data() : nullptr,
+				m_nerf.training.dataset.sharpness_resolution,
+				m_nerf.training.sharpness_grid.data(),
+				m_nerf.density_grid_mean.data(),
+				m_nerf.training.cam_exposure_gpu.data(),
+				m_nerf.training.optimize_exposure ? m_nerf.training.cam_exposure_gradient_gpu.data() : nullptr,
+				m_nerf.training.depth_supervision_lambda,
+				m_nerf.training.near_distance,
+				m_training_step,
+				m_nerf.training.train_mode
+			);
+
+			CUDA_CHECK_THROW(cudaMemcpyAsync(
+				counters.numsteps_counter_compacted.data(), counters.numsteps_counter.data(), sizeof(uint32_t), cudaMemcpyDeviceToDevice, stream
+			));
+
+			if (hg_enc) {
+				hg_enc->set_max_level_gpu(m_max_level_rand_training ? max_level_compacted : nullptr);
+			}
+		}
+	} else {
 		linear_kernel(
 			generate_training_samples_nerf,
 			0,

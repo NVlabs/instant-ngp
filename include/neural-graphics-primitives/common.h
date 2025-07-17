@@ -38,6 +38,13 @@ using namespace tcnn;
 
 namespace ngp {
 
+enum class ETrainMode : int {
+	NeRF,
+	RFL,
+	RFLrelax,
+};
+static constexpr const char* TrainModeStr = "NeRF\0RFL\0RFLrelax\0\0";
+
 enum class EMeshRenderMode : int {
 	Off,
 	VertexColors,
