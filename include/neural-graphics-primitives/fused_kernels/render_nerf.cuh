@@ -53,7 +53,9 @@ __global__ void render_nerf(
 	ENerfActivation density_activation,
 	ENerfActivation rgb_activation,
 	float min_transmittance,
-	bool train_in_linear_colors
+	bool train_in_linear_colors,
+	bool surface_rendering,
+	float surface_rendering_threshold
 ) {
 	uint32_t x = threadIdx.x + blockDim.x * blockIdx.x;
 	uint32_t y = threadIdx.y + blockDim.y * blockIdx.y;
@@ -142,14 +144,21 @@ __global__ void render_nerf(
 		// Composit color
 		float alpha = 1.f - __expf(-network_to_density(nerf_out.w, density_activation) * dt);
 		float weight = alpha * (1.0f - color.a);
-		color += vec4(network_to_rgb_vec(nerf_out.xyz(), rgb_activation) * weight, weight);
+		vec3 rgb = network_to_rgb_vec(nerf_out.xyz(), rgb_activation);
+		color += vec4(rgb * weight, weight);
 
 		if (weight > max_weight) {
 			max_weight = weight;
 			best_depth_candidate = lens.is_360() ? distance(pos, cam_pos) : dot(cam_fwd, pos - cam_pos);
 		}
 
-		if (color.a > (1.0f - min_transmittance)) {
+		if (surface_rendering && alpha >= surface_rendering_threshold) {
+			// Surface rendering: return the first surface point that has a sufficient occupancy
+			color.rgb() = rgb;
+			color.a = 1.0f;
+			best_depth_candidate = lens.is_360() ? distance(pos, cam_pos) : dot(cam_fwd, pos - cam_pos);
+			alive = false;
+		} else if (color.a > (1.0f - min_transmittance)) {
 			color /= color.a;
 			alive = false;
 		}
