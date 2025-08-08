@@ -819,6 +819,8 @@ public:
 			default_rng_t density_grid_rng;
 			int view = 0;
 
+			ETrainMode train_mode = ETrainMode::NeRF;
+
 			float depth_supervision_lambda = 0.f;
 
 			GPUMemory<float> sharpness_grid;
@@ -879,6 +881,9 @@ public:
 		float sharpen = 0.f;
 
 		float cone_angle_constant = 1.f / 256.f;
+
+		bool surface_rendering = false;
+		float surface_rendering_threshold = 0.5f;
 
 		bool visualize_cameras = false;
 
