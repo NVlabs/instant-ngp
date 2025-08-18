@@ -383,7 +383,7 @@ __global__ void train_nerf(
 		vec3 dloss_by_drgb;
 		float dloss_by_dmlp;
 		if (training_step < 500) {
-			training_mode = ETrainMode::NeRF; // Warm up training (about 3 seconds)
+			training_mode = ETrainMode::NeRF; // Warm up training (seconds)
 		}
 		if (training_mode == ETrainMode::RFL) {
 			// Radiance field loss
@@ -394,8 +394,8 @@ __global__ void train_nerf(
 				dt * sum(T * local_lg.loss - (loss_bg - loss_bg2) + depth_supervision)
 			);
 		} else if (training_mode == ETrainMode::RFLrelax) {
-			// Radiance field loss with relaxation
-			// Different from the relaxation in the paper, but works well in practice
+			// A variant of radiance field loss relaxation.
+			// This is different from the relaxation in the paper, but is much simpler and also promotes surfaces.
 			const vec3 rgb_bg = suffix / fmaxf(1e-6f, T);
 			const vec3 rgb_lerp = (1 - alpha) * rgb_bg + alpha * rgb;
 			LossAndGradient local_lg = loss_and_gradient(rgbtarget, rgb_lerp, loss_type);

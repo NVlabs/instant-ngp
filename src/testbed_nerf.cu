@@ -3079,9 +3079,15 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 
 	auto hg_enc = dynamic_cast<MultiLevelEncoding<network_precision_t>*>(m_encoding.get());
 
-	//  TODO: the below fused kernel is actually slower than the unfused alternative.
+	// RFL training only implemented in JIT training mode.
+	if (!m_jit_fusion && m_nerf.training.train_mode != ETrainMode::NeRF) {
+		m_nerf.training.train_mode = ETrainMode::NeRF;
+		tlog::warning() << "JIT fusion is disabled, switching to NeRF training mode.";
+	}
+
+	//  TODO: the below fused kernel is actually slower than the unfused alternative for NeRF training.
 	//        look into optimizing it until it is faster.
-	if (m_jit_fusion) {
+	if (m_jit_fusion && m_nerf.training.train_mode != ETrainMode::NeRF) {
 		auto jit_guard = m_nerf_network->jit_guard(stream, false);
 
 		if (!m_nerf.training.fused_kernel) {
