@@ -158,6 +158,7 @@ if __name__ == "__main__":
 			testbed.nerf.training.train_mode = ngp.TrainMode.RflRelax
 		else:
 			raise ValueError(f"Unknown train mode: {args.train_mode}")
+
 	testbed.nerf.training.rfl_warmup_steps = args.rfl_warmup_steps
 
 	if args.nerf_compatibility:
@@ -194,12 +195,19 @@ if __name__ == "__main__":
 		n_steps = 35000
 
 	original_train_mode = ngp.TrainMode(testbed.nerf.training.train_mode)
+	prev_train_mode = original_train_mode
+
 	tqdm_last_update = 0
 	if n_steps > 0:
 		with tqdm(desc="Training", total=n_steps, unit="steps") as t:
 			while testbed.frame():
+				if prev_train_mode != testbed.nerf.training.train_mode and not args.no_rflrelax_training_schedule:
+					print("Disabling RflRelax training schedule due to UI train mode change")
+					args.no_rflrelax_training_schedule = True
+
 				if testbed.want_repl():
 					repl(testbed)
+
 				# What will happen when training is done?
 				if testbed.training_step >= n_steps:
 					if args.gui:
@@ -214,8 +222,7 @@ if __name__ == "__main__":
 
 				# Rfl-relax training schedule
 				progress_fraction = float(testbed.training_step) / n_steps
-				if (original_train_mode == ngp.TrainMode.RflRelax and
-				    not args.no_rflrelax_training_schedule):
+				if original_train_mode == ngp.TrainMode.RflRelax and not args.no_rflrelax_training_schedule:
 					# By default only enable RflRelax mode between 15k and 30k steps
 					if 3/7 <= progress_fraction < 6/7:
 						testbed.nerf.training.train_mode = ngp.TrainMode.RflRelax
@@ -228,6 +235,8 @@ if __name__ == "__main__":
 					t.set_postfix(loss=testbed.loss)
 					old_training_step = testbed.training_step
 					tqdm_last_update = now
+
+				prev_train_mode = ngp.TrainMode(testbed.nerf.training.train_mode)
 
 	if args.save_snapshot:
 		os.makedirs(os.path.dirname(args.save_snapshot), exist_ok=True)
@@ -317,7 +326,7 @@ if __name__ == "__main__":
 				cam_matrix = f['transform_matrix_start']
 			else:
 				raise KeyError("Missing both 'transform_matrix' and 'transform_matrix_start'")
-			
+
 			testbed.set_nerf_camera_matrix(np.matrix(cam_matrix)[:-1,:])
 			outname = os.path.join(args.screenshot_dir, os.path.basename(f["file_path"]))
 

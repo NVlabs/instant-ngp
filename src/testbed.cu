@@ -731,6 +731,7 @@ std::vector<vec3> Testbed::crop_box_corners(bool nerf_space) const {
 			tlog::info() << a.x << "," << a.y << "," << a.z << " [" << i << "]";
 		}
 	}
+
 	return rv;
 }
 
