@@ -1115,18 +1115,6 @@ void Testbed::imgui() {
 		ImGui::SameLine();
 		ImGui::Checkbox("rand levels", &m_max_level_rand_training);
 		if (m_testbed_mode == ETestbedMode::Nerf) {
-			ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.4f);
-			if (ImGui::Combo("Train mode", (int*)&m_nerf.training.train_mode, TrainModeStr)) {
-				if (m_nerf.training.train_mode == ETrainMode::Rfl) {
-					m_nerf.surface_rendering = true;
-				} else {
-					m_nerf.surface_rendering = false;
-				}
-			}
-			ImGui::PopItemWidth();
-			ImGui::SameLine();
-			ImGui::Checkbox("Surface rendering", &m_nerf.surface_rendering);
-
 			if (m_nerf.surface_rendering) {
 				ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.2f);
 				ImGui::SliderFloat("Surface alpha thres", &m_nerf.surface_rendering_threshold, 0.0f, 1.0f);
@@ -1140,7 +1128,6 @@ void Testbed::imgui() {
 			ImGui::Checkbox("distortion", &m_nerf.training.optimize_distortion);
 			ImGui::SameLine();
 			ImGui::Checkbox("per-image latents", &m_nerf.training.optimize_extra_dims);
-
 
 			static bool export_extrinsics_in_quat_format = true;
 			static bool extrinsics_have_been_optimized = false;
@@ -1158,6 +1145,12 @@ void Testbed::imgui() {
 				ImGui::Checkbox("as quaternions", &export_extrinsics_in_quat_format);
 				ImGui::InputText("File##Extrinsics file path", m_imgui.extrinsics_path, sizeof(m_imgui.extrinsics_path));
 			}
+
+			ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.3f);
+			ImGui::Combo("Train mode", (int*)&m_nerf.training.train_mode, TrainModeStr);
+			ImGui::PopItemWidth();
+			ImGui::SameLine();
+			ImGui::Checkbox("Surface rendering", &m_nerf.surface_rendering);
 		}
 
 		ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.3f);
@@ -2264,11 +2257,6 @@ bool Testbed::keyboard_event() {
 		if (shift) {
 			if (ImGui::IsKeyPressed(c[idx])) {
 				m_nerf.training.train_mode = (ETrainMode)idx;
-				if (m_nerf.training.train_mode == ETrainMode::Rfl) {
-					m_nerf.surface_rendering = true;
-				} else {
-					m_nerf.surface_rendering = false;
-				}
 			}
 		} else {
 			if (ImGui::IsKeyPressed(c[idx])) {
