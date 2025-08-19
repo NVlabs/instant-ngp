@@ -799,6 +799,8 @@ PYBIND11_MODULE(pyngp, m) {
 		//.def_readonly("focal_lengths", &Testbed::Nerf::Training::focal_lengths) // use training.dataset.metadata instead
 		.def_readwrite("near_distance", &Testbed::Nerf::Training::near_distance)
 		.def_readwrite("density_grid_decay", &Testbed::Nerf::Training::density_grid_decay)
+		.def_readwrite("train_mode", &Testbed::Nerf::Training::train_mode)
+		.def_readwrite("rfl_warmup_steps", &Testbed::Nerf::Training::rfl_warmup_steps)
 		.def_readwrite("extrinsic_l2_reg", &Testbed::Nerf::Training::extrinsic_l2_reg)
 		.def_readwrite("extrinsic_learning_rate", &Testbed::Nerf::Training::extrinsic_learning_rate)
 		.def_readwrite("intrinsic_l2_reg", &Testbed::Nerf::Training::intrinsic_l2_reg)

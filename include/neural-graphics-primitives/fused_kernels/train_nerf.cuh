@@ -79,7 +79,8 @@ __global__ void train_nerf(
 	float near_distance,
 
 	uint32_t training_step,
-	ETrainMode training_mode
+	ETrainMode training_mode,
+	uint32_t rfl_warmup_steps
 ) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -382,7 +383,7 @@ __global__ void train_nerf(
 
 		vec3 dloss_by_drgb;
 		float dloss_by_dmlp;
-		if (training_mode == ETrainMode::Rfl && training_step < 1000) {
+		if (training_mode == ETrainMode::Rfl && training_step < rfl_warmup_steps) {
 			training_mode = ETrainMode::Nerf; // Warm up training
 		}
 		if (training_mode == ETrainMode::Rfl) {

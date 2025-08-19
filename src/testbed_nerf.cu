@@ -3087,11 +3087,7 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 
 	//  TODO: the below fused kernel is actually slower than the unfused alternative for NeRF training.
 	//        look into optimizing it until it is faster.
-	if (m_jit_fusion &&
-		(m_nerf.training.train_mode == ETrainMode::Rfl ||
-		 (m_nerf.training.train_mode == ETrainMode::RflRelax &&
-		  m_training_step >= 15000 &&
-		  m_training_step < 30000))) {
+	if (m_jit_fusion && (m_nerf.training.train_mode != ETrainMode::Nerf)) {
 		// JIT training, supports Nerf/Rfl/RflRelax training mode. But for pure
 		// NeRF training, it is faster to use the unfused kernel.
 		auto jit_guard = m_nerf_network->jit_guard(stream, false);
@@ -3179,7 +3175,8 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 				m_nerf.training.depth_supervision_lambda,
 				m_nerf.training.near_distance,
 				m_training_step,
-				m_nerf.training.train_mode
+				m_nerf.training.train_mode,
+				m_nerf.training.rfl_warmup_steps
 			);
 
 			CUDA_CHECK_THROW(cudaMemcpyAsync(

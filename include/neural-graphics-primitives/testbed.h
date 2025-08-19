@@ -820,6 +820,7 @@ public:
 			int view = 0;
 
 			ETrainMode train_mode = ETrainMode::RflRelax;
+			int rfl_warmup_steps = 1000;
 
 			float depth_supervision_lambda = 0.f;
 
