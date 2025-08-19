@@ -1115,12 +1115,6 @@ void Testbed::imgui() {
 		ImGui::SameLine();
 		ImGui::Checkbox("rand levels", &m_max_level_rand_training);
 		if (m_testbed_mode == ETestbedMode::Nerf) {
-			if (m_nerf.surface_rendering) {
-				ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.2f);
-				ImGui::SliderFloat("Surface alpha thres", &m_nerf.surface_rendering_threshold, 0.0f, 1.0f);
-				ImGui::PopItemWidth();
-			}
-
 			ImGui::Checkbox("envmap", &m_nerf.training.train_envmap);
 			ImGui::SameLine();
 			ImGui::Checkbox("extrinsics", &m_nerf.training.optimize_extrinsics);
@@ -1145,12 +1139,6 @@ void Testbed::imgui() {
 				ImGui::Checkbox("as quaternions", &export_extrinsics_in_quat_format);
 				ImGui::InputText("File##Extrinsics file path", m_imgui.extrinsics_path, sizeof(m_imgui.extrinsics_path));
 			}
-
-			ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.3f);
-			ImGui::Combo("Train mode", (int*)&m_nerf.training.train_mode, TrainModeStr);
-			ImGui::PopItemWidth();
-			ImGui::SameLine();
-			ImGui::Checkbox("Surface rendering", &m_nerf.surface_rendering);
 		}
 
 		ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.3f);
@@ -1205,6 +1193,7 @@ void Testbed::imgui() {
 		);
 
 		if (m_testbed_mode == ETestbedMode::Nerf && ImGui::TreeNode("NeRF training options")) {
+			ImGui::Combo("Train mode", (int*)&m_nerf.training.train_mode, TrainModeStr);
 			ImGui::Checkbox("Random bg color", &m_nerf.training.random_bg_color);
 			ImGui::SameLine();
 			ImGui::Checkbox("Snap to pixel centers", &m_nerf.training.snap_to_pixel_centers);
@@ -1557,6 +1546,18 @@ void Testbed::imgui() {
 		}
 
 		if (m_testbed_mode == ETestbedMode::Nerf && ImGui::TreeNode("NeRF rendering options")) {
+			ImGui::Checkbox("Surface rendering", &m_nerf.surface_rendering);
+			if (!m_nerf.surface_rendering) {
+				ImGui::BeginDisabled();
+			}
+
+			ImGui::SameLine();
+			ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.2f);
+			ImGui::SliderFloat("Surface alpha thres", &m_nerf.surface_rendering_threshold, 0.0f, 1.0f);
+			ImGui::PopItemWidth();
+
+			ImGui::EndDisabled();
+
 			if (m_nerf.training.dataset.has_light_dirs) {
 				vec3 light_dir = normalize(m_nerf.light_dir);
 				if (ImGui::TreeNodeEx("Light Dir (Polar)", ImGuiTreeNodeFlags_DefaultOpen)) {
