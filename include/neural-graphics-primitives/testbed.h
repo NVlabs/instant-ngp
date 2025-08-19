@@ -819,7 +819,7 @@ public:
 			default_rng_t density_grid_rng;
 			int view = 0;
 
-			ETrainMode train_mode = ETrainMode::NeRF;
+			ETrainMode train_mode = ETrainMode::Nerf;
 
 			float depth_supervision_lambda = 0.f;
 

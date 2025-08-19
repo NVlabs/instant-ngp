@@ -38,12 +38,18 @@ using namespace tcnn;
 
 namespace ngp {
 
+// Training modes.
+// - NeRF: Standard volumetric reconstruction approach
+// - RFL (Radiance Field Loss): Promotes surface-like representations
+// - RFL-Relaxed: Hybrid approach that maintains NeRF-like volumetric properties while
+//   encouraging surface formation, resulting in faster rendering
+// For technical details, see: https://rgl.epfl.ch/publications/Zhang2025Radiance
 enum class ETrainMode : int {
-	NeRF,
-	RFL,
-	RFLrelax,
+	Nerf,
+	Rfl,
+	RflRelax,
 };
-static constexpr const char* TrainModeStr = "NeRF\0RFL\0RFLrelax\0\0";
+static constexpr const char* TrainModeStr = "Nerf\0Rfl\0RflRelax\0\0";
 
 enum class EMeshRenderMode : int {
 	Off,

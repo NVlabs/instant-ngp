@@ -309,9 +309,9 @@ PYBIND11_MODULE(pyngp, m) {
 	m.def("free_temporary_memory", &free_all_gpu_memory_arenas);
 
 	py::enum_<ETrainMode>(m, "TrainMode")
-		.value("NeRF", ETrainMode::NeRF)
-		.value("RFL", ETrainMode::RFL)
-		.value("RFLrelax", ETrainMode::RFLrelax)
+		.value("Nerf", ETrainMode::Nerf)
+		.value("Rfl", ETrainMode::Rfl)
+		.value("RflRelax", ETrainMode::RflRelax)
 		.export_values();
 
 	py::enum_<ETestbedMode>(m, "TestbedMode")

@@ -1117,8 +1117,11 @@ void Testbed::imgui() {
 		if (m_testbed_mode == ETestbedMode::Nerf) {
 			ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.4f);
 			if (ImGui::Combo("Train mode", (int*)&m_nerf.training.train_mode, TrainModeStr)) {
-				if (m_nerf.training.train_mode != ETrainMode::RFL)
+				if (m_nerf.training.train_mode == ETrainMode::Rfl) {
+					m_nerf.surface_rendering = true;
+				} else {
 					m_nerf.surface_rendering = false;
+				}
 			}
 			ImGui::PopItemWidth();
 			ImGui::SameLine();
@@ -2261,6 +2264,11 @@ bool Testbed::keyboard_event() {
 		if (shift) {
 			if (ImGui::IsKeyPressed(c[idx])) {
 				m_nerf.training.train_mode = (ETrainMode)idx;
+				if (m_nerf.training.train_mode == ETrainMode::Rfl) {
+					m_nerf.surface_rendering = true;
+				} else {
+					m_nerf.surface_rendering = false;
+				}
 			}
 		} else {
 			if (ImGui::IsKeyPressed(c[idx])) {
