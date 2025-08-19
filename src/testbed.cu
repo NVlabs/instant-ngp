@@ -1115,6 +1115,24 @@ void Testbed::imgui() {
 		ImGui::SameLine();
 		ImGui::Checkbox("rand levels", &m_max_level_rand_training);
 		if (m_testbed_mode == ETestbedMode::Nerf) {
+			ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.4f);
+			if (ImGui::Combo("Train mode", (int*)&m_nerf.training.train_mode, TrainModeStr)) {
+				if (m_nerf.training.train_mode == ETrainMode::Rfl) {
+					m_nerf.surface_rendering = true;
+				} else {
+					m_nerf.surface_rendering = false;
+				}
+			}
+			ImGui::PopItemWidth();
+			ImGui::SameLine();
+			ImGui::Checkbox("Surface rendering", &m_nerf.surface_rendering);
+
+			if (m_nerf.surface_rendering) {
+				ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.2f);
+				ImGui::SliderFloat("Surface alpha thres", &m_nerf.surface_rendering_threshold, 0.0f, 1.0f);
+				ImGui::PopItemWidth();
+			}
+
 			ImGui::Checkbox("envmap", &m_nerf.training.train_envmap);
 			ImGui::SameLine();
 			ImGui::Checkbox("extrinsics", &m_nerf.training.optimize_extrinsics);
@@ -2238,16 +2256,27 @@ bool Testbed::keyboard_event() {
 		m_imgui.show = !m_imgui.show;
 	}
 
-	for (int idx = 0; idx < std::min((int)ERenderMode::NumRenderModes, 10); ++idx) {
-		char c[] = {"1234567890"};
-		if (ImGui::IsKeyPressed(c[idx])) {
-			m_render_mode = (ERenderMode)idx;
-			reset_accumulation();
-		}
-	}
-
 	bool ctrl = ImGui::GetIO().KeyCtrl;
 	bool shift = ImGui::GetIO().KeyShift;
+
+	for (int idx = 0; idx < std::min((int)ERenderMode::NumRenderModes, 10); ++idx) {
+		char c[] = {"1234567890"};
+		if (shift) {
+			if (ImGui::IsKeyPressed(c[idx])) {
+				m_nerf.training.train_mode = (ETrainMode)idx;
+				if (m_nerf.training.train_mode == ETrainMode::Rfl) {
+					m_nerf.surface_rendering = true;
+				} else {
+					m_nerf.surface_rendering = false;
+				}
+			}
+		} else {
+			if (ImGui::IsKeyPressed(c[idx])) {
+				m_render_mode = (ERenderMode)idx;
+				reset_accumulation();
+			}
+		}
+	}
 
 	if (ImGui::IsKeyPressed('Z')) {
 		m_camera_path.m_gizmo_op = ImGuizmo::TRANSLATE;
