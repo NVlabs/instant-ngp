@@ -19,8 +19,7 @@
 
 using namespace ngp;
 
-__launch_bounds__(128, 4)
-__global__ void render_nerf(
+__launch_bounds__(128, 4) __global__ void render_nerf(
 	uint32_t sample_index,
 	ivec2 resolution,
 	vec2 focal_length,
@@ -65,7 +64,8 @@ __global__ void render_nerf(
 
 	vec2 pixel_offset = ld_random_pixel_offset(snap_to_pixel_centers ? 0 : sample_index);
 	vec2 uv = vec2{(float)x + pixel_offset.x, (float)y + pixel_offset.y} / vec2(resolution);
-	mat4x3 camera = get_xform_given_rolling_shutter({camera_matrix0, camera_matrix1}, rolling_shutter, uv, ld_random_val(sample_index, idx * 72239731));
+	mat4x3 camera =
+		get_xform_given_rolling_shutter({camera_matrix0, camera_matrix1}, rolling_shutter, uv, ld_random_val(sample_index, idx * 72239731));
 
 	Ray ray = uv_to_ray(
 		sample_index,
@@ -108,7 +108,9 @@ __global__ void render_nerf(
 		vec3 pos = cam_pos;
 
 		if (alive) {
-			t = if_unoccupied_advance_to_next_occupied_voxel(t, cone_angle, ray, idir, density_grid, min_mip, max_mip, render_aabb, render_aabb_to_local);
+			t = if_unoccupied_advance_to_next_occupied_voxel(
+				t, cone_angle, ray, idir, density_grid, min_mip, max_mip, render_aabb, render_aabb_to_local
+			);
 			alive &= t < MAX_DEPTH();
 			if (alive) {
 				pos = ray(t);

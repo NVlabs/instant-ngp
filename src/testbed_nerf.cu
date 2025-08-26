@@ -1928,19 +1928,21 @@ void Testbed::render_nerf(
 	if (m_jit_fusion && m_render_mode == ERenderMode::Shade && m_visualized_dimension == -1 && m_nerf.show_accel == -1) {
 		if (!device.fused_render_kernel()) {
 			try {
-				device.set_fused_render_kernel(std::make_unique<CudaRtcKernel>(
-					"render_nerf",
-					fmt::format(
-						"{MODEL_BODY}\n"
-						"using GRID_T = {GRID_T};\n"
-						"static constexpr uint32_t N_EXTRA_DIMS = {N_EXTRA_DIMS};\n"
-						"#include <neural-graphics-primitives/fused_kernels/render_nerf.cuh>\n",
-						fmt::arg("MODEL_BODY", nerf_network->generate_device_function("eval_nerf")),
-						fmt::arg("GRID_T", type_to_string<network_precision_t>()),
-						fmt::arg("N_EXTRA_DIMS", m_nerf.training.dataset.n_extra_dims())
-					),
-					all_files(cmrc::ngp::get_filesystem())
-				));
+				device.set_fused_render_kernel(
+					std::make_unique<CudaRtcKernel>(
+						"render_nerf",
+						fmt::format(
+							"{MODEL_BODY}\n"
+							"using GRID_T = {GRID_T};\n"
+							"static constexpr uint32_t N_EXTRA_DIMS = {N_EXTRA_DIMS};\n"
+							"#include <neural-graphics-primitives/fused_kernels/render_nerf.cuh>\n",
+							fmt::arg("MODEL_BODY", nerf_network->generate_device_function("eval_nerf")),
+							fmt::arg("GRID_T", type_to_string<network_precision_t>()),
+							fmt::arg("N_EXTRA_DIMS", m_nerf.training.dataset.n_extra_dims())
+						),
+						all_files(cmrc::ngp::get_filesystem())
+					)
+				);
 			} catch (const std::runtime_error& e) {
 				tlog::warning() << e.what();
 				tlog::warning() << "Disabling JIT fusion.";
@@ -2909,14 +2911,18 @@ void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaS
 				pos_gradient += m_nerf.training.cam_pos_offset[i].variable() * l2_reg;
 				rot_gradient += m_nerf.training.cam_rot_offset[i].variable() * l2_reg;
 
-				m_nerf.training.cam_pos_offset[i].set_learning_rate(std::max(
-					m_nerf.training.extrinsic_learning_rate * std::pow(0.33f, (float)(m_nerf.training.cam_pos_offset[i].step() / 128)),
-					m_optimizer->learning_rate() / 1000.0f
-				));
-				m_nerf.training.cam_rot_offset[i].set_learning_rate(std::max(
-					m_nerf.training.extrinsic_learning_rate * std::pow(0.33f, (float)(m_nerf.training.cam_rot_offset[i].step() / 128)),
-					m_optimizer->learning_rate() / 1000.0f
-				));
+				m_nerf.training.cam_pos_offset[i].set_learning_rate(
+					std::max(
+						m_nerf.training.extrinsic_learning_rate * std::pow(0.33f, (float)(m_nerf.training.cam_pos_offset[i].step() / 128)),
+						m_optimizer->learning_rate() / 1000.0f
+					)
+				);
+				m_nerf.training.cam_rot_offset[i].set_learning_rate(
+					std::max(
+						m_nerf.training.extrinsic_learning_rate * std::pow(0.33f, (float)(m_nerf.training.cam_rot_offset[i].step() / 128)),
+						m_optimizer->learning_rate() / 1000.0f
+					)
+				);
 
 				m_nerf.training.cam_pos_offset[i].step(pos_gradient);
 				m_nerf.training.cam_rot_offset[i].step(rot_gradient);
@@ -2944,9 +2950,11 @@ void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaS
 			vec2 focal_length_gradient = m_nerf.training.cam_focal_length_gradient * per_camera_loss_scale;
 			float l2_reg = m_nerf.training.intrinsic_l2_reg;
 			focal_length_gradient += m_nerf.training.cam_focal_length_offset.variable() * l2_reg;
-			m_nerf.training.cam_focal_length_offset.set_learning_rate(std::max(
-				1e-3f * std::pow(0.33f, (float)(m_nerf.training.cam_focal_length_offset.step() / 128)), m_optimizer->learning_rate() / 1000.0f
-			));
+			m_nerf.training.cam_focal_length_offset.set_learning_rate(
+				std::max(
+					1e-3f * std::pow(0.33f, (float)(m_nerf.training.cam_focal_length_offset.step() / 128)), m_optimizer->learning_rate() / 1000.0f
+				)
+			);
 			m_nerf.training.cam_focal_length_offset.step(focal_length_gradient);
 			m_nerf.training.dataset.update_metadata();
 		}
@@ -3088,8 +3096,6 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 	//  TODO: the below fused kernel is actually slower than the unfused alternative for NeRF training.
 	//        look into optimizing it until it is faster.
 	if (m_jit_fusion && (m_nerf.training.train_mode != ETrainMode::Nerf)) {
-		// JIT training, supports Nerf/Rfl/RflRelax training mode. But for pure
-		// NeRF training, it is faster to use the unfused kernel.
 		auto jit_guard = m_nerf_network->jit_guard(stream, false);
 
 		if (!m_nerf.training.fused_kernel) {
@@ -3174,9 +3180,7 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 				m_nerf.training.optimize_exposure ? m_nerf.training.cam_exposure_gradient_gpu.data() : nullptr,
 				m_nerf.training.depth_supervision_lambda,
 				m_nerf.training.near_distance,
-				m_training_step,
-				m_nerf.training.train_mode,
-				m_nerf.training.rfl_warmup_steps
+				m_nerf.training.train_mode
 			);
 
 			CUDA_CHECK_THROW(cudaMemcpyAsync(
@@ -3188,7 +3192,6 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 			}
 		}
 	} else {
-		// Non-JIT training, only NeRF training mode supported.
 		linear_kernel(
 			generate_training_samples_nerf,
 			0,
@@ -3631,12 +3634,14 @@ int Testbed::marching_cubes(ivec3 res3d, const BoundingBox& aabb, const mat3& re
 	m_mesh.trainable_verts->set_params((float*)m_mesh.verts.data(), (float*)m_mesh.verts.data(), (float*)m_mesh.verts_gradient.data());
 	m_mesh.verts.copy_from_device(m_mesh.verts_gradient);
 
-	m_mesh.verts_optimizer.reset(create_optimizer<float>({
-		{"otype",         "Adam"},
-		{"learning_rate", 1e-4  },
-		{"beta1",         0.9f  },
-		{"beta2",         0.99f },
-	}));
+	m_mesh.verts_optimizer.reset(
+		create_optimizer<float>({
+			{"otype",         "Adam"},
+			{"learning_rate", 1e-4  },
+			{"beta1",         0.9f  },
+			{"beta2",         0.99f },
+    })
+	);
 
 	m_mesh.verts_optimizer->allocate(m_mesh.trainable_verts);
 

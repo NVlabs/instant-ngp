@@ -40,9 +40,11 @@ def parse_args():
 	parser.add_argument("--test_transforms", default="", help="Path to a nerf style transforms json from which we will compute PSNR.")
 	parser.add_argument("--near_distance", default=-1, type=float, help="Set the distance from the camera at which training rays start for nerf. <0 means use ngp default")
 	parser.add_argument("--exposure", default=0.0, type=float, help="Controls the brightness of the image. Positive numbers increase brightness, negative numbers decrease it.")
+
 	parser.add_argument("--train_mode", default="", type=str, help="The training mode to use. Can be 'nerf', 'rfl', 'rfl_relax'. If not specified, the default mode will be used.")
 	parser.add_argument("--rfl_warmup_steps", type=int, default=1000, help="Number of steps to train in NeRF mode before switching to RFL mode. Default is 1000. Only used if --train_mode is set to 'rfl'.")
-	parser.add_argument("--no_rflrelax_training_schedule", action="store_true", help="Disable RFL training schedule for RflRelax mode (active between steps 15k-30k).")
+	parser.add_argument("--rflrelax_begin_step", type=int, default=15000, help="First training step in which RflRelax mode is used. Default is 15000. Only used if --train_mode is set to 'rflrelax'.")
+	parser.add_argument("--rflrelax_end_step", type=int, default=30000, help="Last training step in which RflRelax mode is used. Default is 30000. Only used if --train_mode is set to 'rflrelax'.")
 
 	parser.add_argument("--screenshot_transforms", default="", help="Path to a nerf style transforms.json from which to save screenshots.")
 	parser.add_argument("--screenshot_frames", nargs="*", help="Which frame(s) to take screenshots of.")
@@ -159,8 +161,6 @@ if __name__ == "__main__":
 		else:
 			raise ValueError(f"Unknown train mode: {args.train_mode}")
 
-	testbed.nerf.training.rfl_warmup_steps = args.rfl_warmup_steps
-
 	if args.nerf_compatibility:
 		print(f"NeRF compatibility mode enabled")
 
@@ -183,7 +183,10 @@ if __name__ == "__main__":
 		testbed.nerf.training.random_bg_color = False
 
 		# Ensure that the training mode is set to NeRF.
+		if testbed.nerf.training.train_mode != ngp.TrainMode.Nerf:
+			print(f"Warning: forcing train mode to NeRF for nerf compatibility (was {testbed.nerf.training.train_mode})")
 		testbed.nerf.training.train_mode = ngp.TrainMode.Nerf
+
 
 	old_training_step = 0
 	n_steps = args.n_steps
@@ -196,14 +199,15 @@ if __name__ == "__main__":
 
 	original_train_mode = ngp.TrainMode(testbed.nerf.training.train_mode)
 	prev_train_mode = original_train_mode
+	use_training_schedule = True
 
 	tqdm_last_update = 0
 	if n_steps > 0:
 		with tqdm(desc="Training", total=n_steps, unit="steps") as t:
 			while testbed.frame():
-				if prev_train_mode != testbed.nerf.training.train_mode and not args.no_rflrelax_training_schedule:
-					print("Disabling RflRelax training schedule due to UI train mode change")
-					args.no_rflrelax_training_schedule = True
+				if prev_train_mode != testbed.nerf.training.train_mode and use_training_schedule:
+					print("Disabling Rfl/RflRelax training schedule due to UI train mode change")
+					use_training_schedule = False
 
 				if testbed.want_repl():
 					repl(testbed)
@@ -221,13 +225,21 @@ if __name__ == "__main__":
 					t.reset()
 
 				# Rfl-relax training schedule
-				progress_fraction = float(testbed.training_step) / n_steps
-				if original_train_mode == ngp.TrainMode.RflRelax and not args.no_rflrelax_training_schedule:
-					# By default only enable RflRelax mode between 15k and 30k steps
-					if 3/7 <= progress_fraction < 6/7:
-						testbed.nerf.training.train_mode = ngp.TrainMode.RflRelax
-					else:
-						testbed.nerf.training.train_mode = ngp.TrainMode.Nerf
+				if use_training_schedule:
+					if original_train_mode == ngp.TrainMode.RflRelax:
+						# By default only enable RflRelax mode in the middle of training. Start with NeRF mode,
+						# then switch to RflRelax mode to "sueface-ify" the scene, then switch back to NeRF mode
+						# at the very and for fine tuning.
+						if args.rflrelax_begin_step <= testbed.training_step < args.rflrelax_end_step:
+							testbed.nerf.training.train_mode = ngp.TrainMode.RflRelax
+						else:
+							testbed.nerf.training.train_mode = ngp.TrainMode.Nerf
+					elif original_train_mode == ngp.TrainMode.Rfl:
+						# Start in NeRF mode, then switch to RFL mode after a warmup period
+						if testbed.training_step > args.rfl_warmup_steps:
+							testbed.nerf.training.train_mode = ngp.TrainMode.Rfl
+						else:
+							testbed.nerf.training.train_mode = ngp.TrainMode.Nerf
 
 				now = time.monotonic()
 				if now - tqdm_last_update > 0.1:

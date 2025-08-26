@@ -442,8 +442,8 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 		}
 
 		if (json.contains("from_mitsuba")) {
-  		    result.from_mitsuba = bool(json["from_mitsuba"]);
-  		}
+			result.from_mitsuba = bool(json["from_mitsuba"]);
+		}
 
 		if (json.contains("fix_premult")) {
 			fix_premult = (bool)json["fix_premult"];
