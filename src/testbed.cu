@@ -731,7 +731,6 @@ std::vector<vec3> Testbed::crop_box_corners(bool nerf_space) const {
 			tlog::info() << a.x << "," << a.y << "," << a.z << " [" << i << "]";
 		}
 	}
-
 	return rv;
 }
 
@@ -1123,6 +1122,7 @@ void Testbed::imgui() {
 			ImGui::Checkbox("distortion", &m_nerf.training.optimize_distortion);
 			ImGui::SameLine();
 			ImGui::Checkbox("per-image latents", &m_nerf.training.optimize_extra_dims);
+
 
 			static bool export_extrinsics_in_quat_format = true;
 			static bool extrinsics_have_been_optimized = false;
@@ -1547,7 +1547,22 @@ void Testbed::imgui() {
 		}
 
 		if (m_testbed_mode == ETestbedMode::Nerf && ImGui::TreeNode("NeRF rendering options")) {
+			if (!jit_fusion()) {
+				ImGui::BeginDisabled();
+				if (m_nerf.surface_rendering) {
+					tlog::warning() << "JIT fusion is disabled, disabling surface rendering.";
+				}
+
+				m_nerf.surface_rendering = false;
+			}
+
 			ImGui::Checkbox("Surface rendering", &m_nerf.surface_rendering);
+			if (!jit_fusion()) {
+				ImGui::SameLine();
+				ImGui::Text("(requires JIT fusion)");
+				ImGui::EndDisabled();
+			}
+
 			if (!m_nerf.surface_rendering) {
 				ImGui::BeginDisabled();
 			}
@@ -2117,24 +2132,26 @@ void Testbed::draw_visualizations(ImDrawList* list, const mat4x3& camera_matrix)
 
 	float xyscale = (float)m_window_res[m_fov_axis];
 	vec2 screen_center = render_screen_center(m_screen_center);
-	mat4 view2proj = transpose(mat4{
-		xyscale,
-		0.0f,
-		(float)m_window_res.x * screen_center.x * zscale,
-		0.0f,
-		0.0f,
-		xyscale,
-		(float)m_window_res.y * screen_center.y * zscale,
-		0.0f,
-		0.0f,
-		0.0f,
-		1.0f,
-		0.0f,
-		0.0f,
-		0.0f,
-		zscale,
-		0.0f,
-	});
+	mat4 view2proj = transpose(
+		mat4{
+			xyscale,
+			0.0f,
+			(float)m_window_res.x * screen_center.x * zscale,
+			0.0f,
+			0.0f,
+			xyscale,
+			(float)m_window_res.y * screen_center.y * zscale,
+			0.0f,
+			0.0f,
+			0.0f,
+			1.0f,
+			0.0f,
+			0.0f,
+			0.0f,
+			zscale,
+			0.0f,
+		}
+	);
 
 	mat4 world2proj = view2proj * world2view;
 	float aspect = (float)m_window_res.x / (float)m_window_res.y;
@@ -2161,24 +2178,26 @@ void Testbed::draw_visualizations(ImDrawList* list, const mat4x3& camera_matrix)
 		float fly = focal.y;
 		float zfar = m_ndc_zfar;
 		float znear = m_ndc_znear;
-		mat4 view2proj_guizmo = transpose(mat4{
-			fly * 2.0f / aspect,
-			0.0f,
-			0.0f,
-			0.0f,
-			0.0f,
-			-fly * 2.f,
-			0.0f,
-			0.0f,
-			0.0f,
-			0.0f,
-			(zfar + znear) / (zfar - znear),
-			-(2.0f * zfar * znear) / (zfar - znear),
-			0.0f,
-			0.0f,
-			1.0f,
-			0.0f,
-		});
+		mat4 view2proj_guizmo = transpose(
+			mat4{
+				fly * 2.0f / aspect,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				-fly * 2.f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				(zfar + znear) / (zfar - znear),
+				-(2.0f * zfar * znear) / (zfar - znear),
+				0.0f,
+				0.0f,
+				1.0f,
+				0.0f,
+			}
+		);
 
 		ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
 
@@ -4260,16 +4279,18 @@ void Testbed::reset_network(bool clear_density_grid) {
 
 		// Instantiate an additional model for each auxiliary GPU
 		for (auto& device : m_devices) {
-			device.set_nerf_network(std::make_shared<NerfNetwork<network_precision_t>>(
-				dims.n_pos,
-				n_dir_dims,
-				n_extra_dims,
-				dims.n_pos + 1, // The offset of 1 comes from the dt member variable of NerfCoordinate. HACKY
-				encoding_config,
-				dir_encoding_config,
-				network_config,
-				rgb_network_config
-			));
+			device.set_nerf_network(
+				std::make_shared<NerfNetwork<network_precision_t>>(
+					dims.n_pos,
+					n_dir_dims,
+					n_extra_dims,
+					dims.n_pos + 1, // The offset of 1 comes from the dt member variable of NerfCoordinate. HACKY
+					encoding_config,
+					dir_encoding_config,
+					network_config,
+					rgb_network_config
+				)
+			);
 		}
 
 		m_network = m_nerf_network = primary_device().nerf_network();
