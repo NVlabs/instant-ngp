@@ -14,7 +14,6 @@
           config = {
             allowUnfree = true;
             cudaSupport = true;
-            config.cudaVersion = "12";
           };
         };
       in
