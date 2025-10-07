@@ -162,7 +162,7 @@ In VR, you have the following controls.
   - __Windows:__ CUDA 11.5 or higher
   - __Linux:__ CUDA 10.2 or higher
 - __[CMake](https://cmake.org/) v3.21 or higher__.
-- __(optional) [Python](https://www.python.org/) 3.7 or higher__ for interactive bindings. Also, run `pip install -r requirements.txt`.
+- __(optional) [Python](https://www.python.org/) 3.8 or higher__ for interactive bindings. Also, run `pip install -r requirements.txt`.
 - __(optional) [OptiX](https://developer.nvidia.com/optix) 7.6 or higher__ for faster mesh SDF training.
 - __(optional) [Vulkan SDK](https://vulkan.lunarg.com/)__ for DLSS support.
 
