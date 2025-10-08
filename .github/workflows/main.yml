@@ -46,11 +46,11 @@ jobs:
           - os: ubuntu-22.04
             cuda: "11.7"
             arch: 53
-            python: "3.7"
+            python: "3.8"
           - os: ubuntu-22.04
             cuda: "11.7"
             arch: 37
-            python: "3.7"
+            python: "3.8"
             cmake_flags: "-DNGP_BUILD_WITH_GUI=OFF -DNGP_BUILD_WITH_VULKAN=OFF -DNGP_BUILD_WITH_OPTIX=OFF"
     env:
       build_dir: "build"
@@ -125,7 +125,7 @@ jobs:
             visual_studio: "Visual Studio 17 2022"
             cuda: "12.6.3"
             arch: 53
-            python: "3.7"
+            python: "3.8"
             cmake_flags: "-DNGP_BUILD_WITH_GUI=OFF -DNGP_BUILD_WITH_VULKAN=OFF -DNGP_BUILD_WITH_OPTIX=OFF"
     env:
       build_dir: "build"
