@@ -727,14 +727,13 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 	result.sharpness_data.enlarge( result.sharpness_resolution.x * result.sharpness_resolution.y *  result.n_images );
 
 	// copy / convert images to the GPU
+	auto progress_to_gpu = tlog::progress(result.n_images);
+	tlog::info() << "Copying / converting images to GPU...";
 	for (uint32_t i = 0; i < result.n_images; ++i) {
 		const LoadedImageInfo& m = images[i];
 		result.set_training_image(i, m.res, m.pixels, m.depth_pixels, m.depth_scale * result.scale, m.image_data_on_gpu, m.image_type, EDepthDataType::UShort, sharpen_amount, m.white_transparent, m.black_transparent, m.mask_color, m.rays);
 		CUDA_CHECK_THROW(cudaDeviceSynchronize());
-	}
-	CUDA_CHECK_THROW(cudaDeviceSynchronize());
-	// free memory
-	for (uint32_t i = 0; i < result.n_images; ++i) {
+		// free memory
 		if (images[i].image_data_on_gpu) {
 			CUDA_CHECK_THROW(cudaFree(images[i].pixels));
 		} else {
@@ -742,7 +741,10 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 		}
 		free(images[i].rays);
 		free(images[i].depth_pixels);
+		progress_to_gpu.update(i);
 	}
+	CUDA_CHECK_THROW(cudaDeviceSynchronize());
+	tlog::success() << "Copy / Converted " << images.size() << " images to GPU after " << tlog::durationToString(progress_to_gpu.duration());
 	return result;
 }
 
