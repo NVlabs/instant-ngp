@@ -75,6 +75,13 @@ int main_func(const std::vector<std::string>& arguments) {
 		{"no-train"},
 	};
 
+	Flag low_vram_flag{
+		parser,
+		"LOW_VRAM",
+		"Store entire training dataset in cpu ram, and only send parts to vram for training iteration.",
+		{"low-vram"},
+	};
+
 	ValueFlag<string> scene_flag{
 		parser,
 		"SCENE",
@@ -150,6 +157,7 @@ int main_func(const std::vector<std::string>& arguments) {
 
 	Testbed testbed;
 
+	testbed.m_low_vram = low_vram_flag;
 	for (auto file : get(files)) {
 		testbed.load_file(file);
 	}

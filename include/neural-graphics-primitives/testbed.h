@@ -1087,6 +1087,7 @@ public:
 
 	uint32_t m_training_step = 0;
 	uint32_t m_training_batch_size = 1 << 18;
+	bool m_low_vram = false;
 	Ema<float> m_loss_scalar = {EEmaType::Time, 100};
 	std::vector<float> m_loss_graph = std::vector<float>(256, 0.0f);
 	size_t m_loss_graph_samples = 0;
