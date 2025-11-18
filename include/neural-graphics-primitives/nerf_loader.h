@@ -86,7 +86,7 @@ struct NerfDataset {
 		return (has_light_dirs ? 3u : 0u) + n_extra_learnable_dims;
 	}
 
-	void set_training_image(int frame_idx, const ivec2& image_resolution, const void* pixels, const void* depth_pixels, float depth_scale, bool image_data_on_gpu, EImageDataType image_type, EDepthDataType depth_type, float sharpen_amount = 0.f, bool white_transparent = false, bool black_transparent = false, uint32_t mask_color = 0, const Ray *rays = nullptr, bool low_vram = 0);
+	void set_training_image(int frame_idx, const ivec2& image_resolution, const void* pixels, const void* depth_pixels, float depth_scale, bool image_data_on_gpu, EImageDataType image_type, EDepthDataType depth_type, float sharpen_amount = 0.f, bool white_transparent = false, bool black_transparent = false, uint32_t mask_color = 0, const Ray *rays = nullptr, bool in_cpu_ram = false);
 
 	vec3 nerf_direction_to_ngp(const vec3& nerf_dir) {
 		vec3 result = nerf_dir;
@@ -168,7 +168,7 @@ struct NerfDataset {
 	}
 };
 
-NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amount = 0.f, bool low_vram = false);
+NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amount = 0.f, bool in_cpu_ram = false);
 NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale = 1, bool is_hdr = false);
 
 }

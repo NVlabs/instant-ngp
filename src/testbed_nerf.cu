@@ -2459,7 +2459,7 @@ void Testbed::load_nerf(const fs::path& data_path) {
 
 		const auto prev_aabb_scale = m_nerf.training.dataset.aabb_scale;
 
-		m_nerf.training.dataset = ngp::load_nerf(json_paths, m_nerf.sharpen, m_low_vram);
+		m_nerf.training.dataset = ngp::load_nerf(json_paths, m_nerf.sharpen, m_dataset_in_cpu_ram);
 
 		// Check if the NeRF network has been previously configured.
 		// If it has not, don't reset it.

@@ -67,7 +67,7 @@ def parse_args():
 	parser.add_argument("--height", "--screenshot_h", type=int, default=0, help="Resolution height of GUI and screenshots.")
 
 	parser.add_argument("--gui", action="store_true", help="Run the testbed GUI interactively.")
-    parser.add_argument("--low_vram", action="store_true", help="Store entire training dataset in cpu ram, and only send parts to vram for training iteration.")
+    parser.add_argument("--nerf_dataset_in_cpu_ram", action="store_true", help="Store entire training dataset in cpu ram, and only send parts to vram for training iteration.")
 	parser.add_argument("--train", action="store_true", help="If the GUI is enabled, controls whether training starts immediately.")
 	parser.add_argument("--n_steps", type=int, default=-1, help="Number of steps to train for before quitting.")
 	parser.add_argument("--second_window", action="store_true", help="Open a second window containing a copy of the main output.")
@@ -94,7 +94,7 @@ if __name__ == "__main__":
 
 	testbed = ngp.Testbed()
 	testbed.root_dir = ROOT_DIR
-    testbed.low_vram = args.low_vram
+    testbed.dataset_in_cpu_ram = args.nerf_dataset_in_cpu_ram
 
 	for file in args.files:
 		scene_info = get_scene(file)

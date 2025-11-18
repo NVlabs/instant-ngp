@@ -270,7 +270,7 @@ bool read_focal_length(const nlohmann::json &json, vec2 &focal_length, const ive
 	return true;
 }
 
-NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amount, bool low_vram) {
+NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amount, bool in_cpu_ram) {
 	if (jsonpaths.empty()) {
 		throw std::runtime_error{"Cannot load NeRF data from an empty set of paths."};
 	}
@@ -731,7 +731,7 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 	tlog::info() << "Copying / converting images to GPU...";
 	for (uint32_t i = 0; i < result.n_images; ++i) {
 		const LoadedImageInfo& m = images[i];
-		result.set_training_image(i, m.res, m.pixels, m.depth_pixels, m.depth_scale * result.scale, m.image_data_on_gpu, m.image_type, EDepthDataType::UShort, sharpen_amount, m.white_transparent, m.black_transparent, m.mask_color, m.rays, low_vram);
+		result.set_training_image(i, m.res, m.pixels, m.depth_pixels, m.depth_scale * result.scale, m.image_data_on_gpu, m.image_type, EDepthDataType::UShort, sharpen_amount, m.white_transparent, m.black_transparent, m.mask_color, m.rays, in_cpu_ram);
 		CUDA_CHECK_THROW(cudaDeviceSynchronize());
 		// free memory
 		if (images[i].image_data_on_gpu) {
@@ -744,11 +744,11 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 		progress_to_gpu.update(i);
 	}
 	CUDA_CHECK_THROW(cudaDeviceSynchronize());
-	tlog::success() << "Copy / Converted " << images.size() << " images to GPU after " << tlog::durationToString(progress_to_gpu.duration());
+	tlog::success() << "Copied / Converted " << images.size() << " images to GPU after " << tlog::durationToString(progress_to_gpu.duration());
 	return result;
 }
 
-void NerfDataset::set_training_image(int frame_idx, const ivec2& image_resolution, const void* pixels, const void* depth_pixels, float depth_scale, bool image_data_on_gpu, EImageDataType image_type, EDepthDataType depth_type, float sharpen_amount, bool white_transparent, bool black_transparent, uint32_t mask_color, const Ray *rays, bool low_vram) {
+void NerfDataset::set_training_image(int frame_idx, const ivec2& image_resolution, const void* pixels, const void* depth_pixels, float depth_scale, bool image_data_on_gpu, EImageDataType image_type, EDepthDataType depth_type, float sharpen_amount, bool white_transparent, bool black_transparent, uint32_t mask_color, const Ray *rays, bool in_cpu_ram) {
 	if (frame_idx < 0 || frame_idx >= n_images) {
 		throw std::runtime_error{"NerfDataset::set_training_image: invalid frame index"};
 	}
@@ -774,12 +774,11 @@ void NerfDataset::set_training_image(int frame_idx, const ivec2& image_resolutio
 	}
 
 	// copy or convert the pixels
-	// pixelmemory[frame_idx].resize(img_size * image_type_size(image_type));
 	size_t total_image_mem_size = img_size * image_type_size(image_type);
 	void *pixelmemory[frame_idx] = { nullptr };
 	cudaMallocManaged(&pixelmemory[frame_idx], total_image_mem_size);
 	void* dst = pixelmemory[frame_idx];
-	if (low_vram) {
+	if (in_cpu_ram) {
 		CUDA_CHECK_THROW(cudaMemAdvise(dst, total_image_mem_size, cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
 	} else {
 		int current_device;
@@ -819,7 +818,6 @@ void NerfDataset::set_training_image(int frame_idx, const ivec2& image_resolutio
 		if (image_type == EImageDataType::Byte) {
 			GPUMemory<uint8_t> images_data_half(img_size * sizeof(__half));
 			linear_kernel(from_rgba32<__half>, 0, nullptr, n_pixels, (uint8_t*)pixels, (__half*)images_data_half.data(), white_transparent, black_transparent, mask_color);
-			// pixelmemory[frame_idx] = std::move(images_data_half);
 			pixelmemory[frame_idx] = reinterpret_cast<int*>(images_data_half.data());
 			dst = pixelmemory[frame_idx];
 			image_type = EImageDataType::Half;
@@ -836,7 +834,6 @@ void NerfDataset::set_training_image(int frame_idx, const ivec2& image_resolutio
 			linear_kernel(sharpen<float>, 0, nullptr, n_pixels, image_resolution.x, (float*)dst, (float*)images_data_sharpened.data(), center_w, 1.f / (center_w - 4.f));
 		}
 
-		// pixelmemory[frame_idx] = std::move(images_data_sharpened);
 		pixelmemory[frame_idx] = reinterpret_cast<int*>(images_data_sharpened.data());
 		dst = pixelmemory[frame_idx];
 	}

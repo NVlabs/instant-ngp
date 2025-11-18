@@ -75,11 +75,11 @@ int main_func(const std::vector<std::string>& arguments) {
 		{"no-train"},
 	};
 
-	Flag low_vram_flag{
+	Flag nerf_dataset_in_cpu_ram{
 		parser,
-		"LOW_VRAM",
-		"Store entire training dataset in cpu ram, and only send parts to vram for training iteration.",
-		{"low-vram"},
+		"NERF_DATASET_IN_CPU_RAM",
+		"Store the entire training dataset in CPU RAM, and use Nvidia Unified Memory for GPU to access data for training iterations.",
+		{"nerf-dataset-in-cpu-ram"},
 	};
 
 	ValueFlag<string> scene_flag{
@@ -157,7 +157,7 @@ int main_func(const std::vector<std::string>& arguments) {
 
 	Testbed testbed;
 
-	testbed.m_low_vram = low_vram_flag;
+	testbed.m_dataset_in_cpu_ram = nerf_dataset_in_cpu_ram;
 	for (auto file : get(files)) {
 		testbed.load_file(file);
 	}
