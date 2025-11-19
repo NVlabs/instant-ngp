@@ -58,7 +58,7 @@ struct NerfDataset {
 	std::vector<TrainingImageMetadata> metadata;
 	GPUMemory<TrainingImageMetadata> metadata_gpu;
 
-	void update_metadata(int first = 0, int last = -1);
+	void update_metadata(int first = 0, int last = -1, bool in_cpu_ram = false);
 
 	std::vector<TrainingXForm> xforms;
 	std::vector<std::string> paths;
