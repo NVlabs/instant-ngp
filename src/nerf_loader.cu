@@ -744,7 +744,7 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 		progress_to_gpu.update(i);
 	}
 	CUDA_CHECK_THROW(cudaDeviceSynchronize());
-	tlog::success() << "Copied / Converted " << images.size() << " images to GPU after " << tlog::durationToString(progress_to_gpu.duration());
+	tlog::success() << "Copied / converted " << images.size() << " images to GPU after " << tlog::durationToString(progress_to_gpu.duration());
 	return result;
 }
 
@@ -776,13 +776,10 @@ void NerfDataset::set_training_image(int frame_idx, const ivec2& image_resolutio
 	// copy or convert the pixels
 	size_t total_image_mem_size = img_size * image_type_size(image_type);
 	void* dst;
+	pixelmemory[frame_idx] = GPUMemory<uint8_t>(total_image_mem_size, in_cpu_ram);
+	dst = pixelmemory[frame_idx].data();
 	if (in_cpu_ram) {
-		pixelmemory[frame_idx] = GPUMemory<uint8_t>(total_image_mem_size, true);
-		dst = pixelmemory[frame_idx].data();
 		CUDA_CHECK_THROW(cudaMemAdvise(dst, pixelmemory[frame_idx].get_bytes(), cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
-	} else {
-		pixelmemory[frame_idx].resize(total_image_mem_size);
-		dst = pixelmemory[frame_idx].data();
 	}
 
 	switch (image_type) {
