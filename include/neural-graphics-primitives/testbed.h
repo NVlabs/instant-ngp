@@ -743,6 +743,7 @@ public:
 			NerfDataset dataset;
 			int n_images_for_training = 0;      // how many images to train from, as a high watermark compared to the dataset size
 			int n_images_for_training_prev = 0; // how many images we saw last time we updated the density grid
+			bool dataset_in_cpu_ram = false;
 
 			struct ErrorMap {
 				GPUMemory<float> data;
@@ -1087,7 +1088,6 @@ public:
 
 	uint32_t m_training_step = 0;
 	uint32_t m_training_batch_size = 1 << 18;
-	bool m_dataset_in_cpu_ram = false;
 	Ema<float> m_loss_scalar = {EEmaType::Time, 100};
 	std::vector<float> m_loss_graph = std::vector<float>(256, 0.0f);
 	size_t m_loss_graph_samples = 0;

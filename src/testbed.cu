@@ -197,12 +197,18 @@ void Testbed::set_mode(ETestbedMode mode) {
 		return;
 	}
 
+	// Temporarily store the settings that shouldn't reset
+	bool tmp_dataset_in_cpu_ram = m_nerf.training.dataset_in_cpu_ram;
+
 	// Reset mode-specific members
 	m_image = {};
 	m_mesh = {};
 	m_nerf = {};
 	m_sdf = {};
 	m_volume = {};
+
+	// Restore the tmp values after reset
+	m_nerf.training.dataset_in_cpu_ram = tmp_dataset_in_cpu_ram;
 
 	// Kill training-related things
 	m_encoding = {};

@@ -94,7 +94,7 @@ if __name__ == "__main__":
 
 	testbed = ngp.Testbed()
 	testbed.root_dir = ROOT_DIR
-    testbed.dataset_in_cpu_ram = args.nerf_dataset_in_cpu_ram
+    testbed.m_nerf.training.dataset_in_cpu_ram = args.nerf_dataset_in_cpu_ram
 
 	for file in args.files:
 		scene_info = get_scene(file)

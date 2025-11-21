@@ -275,7 +275,7 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 		throw std::runtime_error{"Cannot load NeRF data from an empty set of paths."};
 	}
 
-	tlog::info() << "Loading NeRF dataset from";
+	tlog::info() << "nerf_loader.cu in_cpu_ram " << in_cpu_ram;
 
 	NerfDataset result{};
 

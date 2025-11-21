@@ -157,7 +157,7 @@ int main_func(const std::vector<std::string>& arguments) {
 
 	Testbed testbed;
 
-	testbed.m_dataset_in_cpu_ram = nerf_dataset_in_cpu_ram;
+	testbed.m_nerf.training.dataset_in_cpu_ram = nerf_dataset_in_cpu_ram;
 	for (auto file : get(files)) {
 		testbed.load_file(file);
 	}
