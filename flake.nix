@@ -47,16 +47,17 @@
             python3
             stdenv.cc.cc.lib
 
-            cudatoolkit
-            cudaPackages.cuda_cudart
-            cudaPackages.cuda_nvrtc
-            cudaPackages.cuda_nvtx
+            cudaPackages_13.cudatoolkit
+            cudaPackages_13.cuda_cudart
+            cudaPackages_13.cuda_nvrtc
+            cudaPackages_13.cuda_nvtx
           ];
 
           shellHook = ''
             # Set GCC 13 as the default compiler
             export CC="${pkgs.gcc13}/bin/gcc"
             export CXX="${pkgs.gcc13}/bin/g++"
+            export CUDAHOSTCXX="${pkgs.gcc13}/bin/g++"
             export PATH="${pkgs.gcc13}/bin:$PATH"
 
             export CUDA_PATH="${pkgs.cudatoolkit}"
