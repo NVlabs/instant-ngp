@@ -851,6 +851,7 @@ public:
 
 #ifdef NGP_PYTHON
 			void set_image(int frame_idx, pybind11::array_t<float> img, pybind11::array_t<float> depth_img, float depth_scale);
+			void set_image_no_depth(int frame_idx, pybind11::array_t<float> img);
 #endif
 
 			void reset_camera_extrinsics();
