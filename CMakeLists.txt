@@ -299,7 +299,7 @@ if (NGP_OPTIX)
 	)
 
 	set_target_properties(optix_program PROPERTIES CUDA_PTX_COMPILATION ON CUDA_ARCHITECTURES OFF)
-	target_compile_definitions(optix_program PUBLIC ${NGP_DEFINITIONS} -DTCNN_MIN_GPU_ARCH=0)
+	target_compile_definitions(optix_program PUBLIC ${NGP_DEFINITIONS} -DTCNN_MIN_GPU_ARCH=0 -DTCNN_HALF_PRECISION=${TCNN_HALF_PRECISION})
 	target_compile_options(optix_program PUBLIC "--expt-relaxed-constexpr")
 
 	get_target_property(TCNN_INCLUDE_DIRECTORIES tiny-cuda-nn INCLUDE_DIRECTORIES)
