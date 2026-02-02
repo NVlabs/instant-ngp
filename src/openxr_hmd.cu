@@ -300,7 +300,7 @@ void OpenXRHMD::init_create_xr_instance() {
 	instance_create_info.applicationInfo.applicationVersion = 1;
 	strncpy(instance_create_info.applicationInfo.engineName, "Instant Neural Graphics Primitives v" NGP_VERSION, XR_MAX_ENGINE_NAME_SIZE);
 	instance_create_info.applicationInfo.engineVersion = 1;
-	instance_create_info.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
+	instance_create_info.applicationInfo.apiVersion = XR_API_VERSION_1_0;
 	instance_create_info.enabledExtensionCount = (uint32_t)extensions.size();
 	instance_create_info.enabledExtensionNames = extensions.data();
 	instance_create_info.enabledApiLayerCount = (uint32_t)layers.size();
