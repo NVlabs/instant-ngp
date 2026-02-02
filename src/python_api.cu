@@ -71,6 +71,24 @@ void Testbed::Nerf::Training::set_image(int frame_idx, pybind11::array_t<float> 
 	);
 }
 
+void Testbed::Nerf::Training::set_image_no_depth(int frame_idx, pybind11::array_t<float> img) {
+	if (frame_idx < 0 || frame_idx >= dataset.n_images) {
+		throw std::runtime_error{"Invalid frame index"};
+	}
+
+	py::buffer_info img_buf = img.request();
+
+	if (img_buf.ndim != 3) {
+		throw std::runtime_error{"image should be (H,W,C) where C=4"};
+	}
+
+	if (img_buf.shape[2] != 4) {
+		throw std::runtime_error{"image should be (H,W,C) where C=4"};
+	}
+
+	dataset.set_training_image(frame_idx, {(int)img_buf.shape[1], (int)img_buf.shape[0]}, (const void*)img_buf.ptr, nullptr, -1.0, false, EImageDataType::Float, EDepthDataType::Float);
+}
+
 void Testbed::override_sdf_training_data(py::array_t<float> points, py::array_t<float> distances) {
 	py::buffer_info points_buf = points.request();
 	py::buffer_info distances_buf = distances.request();
