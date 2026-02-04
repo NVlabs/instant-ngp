@@ -75,6 +75,13 @@ int main_func(const std::vector<std::string>& arguments) {
 		{"no-train"},
 	};
 
+	Flag nerf_dataset_in_cpu_ram{
+		parser,
+		"NERF_DATASET_IN_CPU_RAM",
+		"Store the entire training dataset in CPU RAM, and use Nvidia Unified Memory for GPU to access data for training iterations.",
+		{"nerf-dataset-in-cpu-ram"},
+	};
+
 	ValueFlag<string> scene_flag{
 		parser,
 		"SCENE",
@@ -150,6 +157,7 @@ int main_func(const std::vector<std::string>& arguments) {
 
 	Testbed testbed;
 
+	testbed.m_nerf.training.dataset_in_cpu_ram = nerf_dataset_in_cpu_ram;
 	for (auto file : get(files)) {
 		testbed.load_file(file);
 	}

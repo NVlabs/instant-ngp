@@ -781,6 +781,7 @@ PYBIND11_MODULE(pyngp, m) {
 	py::class_<Testbed::Nerf::Training>(nerf, "Training")
 		.def_readwrite("random_bg_color", &Testbed::Nerf::Training::random_bg_color)
 		.def_readwrite("n_images_for_training", &Testbed::Nerf::Training::n_images_for_training)
+		.def_readwrite("dataset_in_cpu_ram", &Testbed::Nerf::Training::dataset_in_cpu_ram)
 		.def_readwrite("linear_colors", &Testbed::Nerf::Training::linear_colors)
 		.def_readwrite("loss_type", &Testbed::Nerf::Training::loss_type)
 		.def_readwrite("depth_loss_type", &Testbed::Nerf::Training::depth_loss_type)

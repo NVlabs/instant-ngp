@@ -743,6 +743,7 @@ public:
 			NerfDataset dataset;
 			int n_images_for_training = 0;      // how many images to train from, as a high watermark compared to the dataset size
 			int n_images_for_training_prev = 0; // how many images we saw last time we updated the density grid
+			bool dataset_in_cpu_ram = false;
 
 			struct ErrorMap {
 				GPUMemory<float> data;

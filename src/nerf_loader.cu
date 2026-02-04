@@ -270,12 +270,10 @@ bool read_focal_length(const nlohmann::json &json, vec2 &focal_length, const ive
 	return true;
 }
 
-NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amount) {
+NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amount, bool in_cpu_ram) {
 	if (jsonpaths.empty()) {
 		throw std::runtime_error{"Cannot load NeRF data from an empty set of paths."};
 	}
-
-	tlog::info() << "Loading NeRF dataset from";
 
 	NerfDataset result{};
 
@@ -727,14 +725,13 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 	result.sharpness_data.enlarge( result.sharpness_resolution.x * result.sharpness_resolution.y *  result.n_images );
 
 	// copy / convert images to the GPU
+	auto progress_to_gpu = tlog::progress(result.n_images);
+	tlog::info() << "Copying / converting images to GPU...";
 	for (uint32_t i = 0; i < result.n_images; ++i) {
 		const LoadedImageInfo& m = images[i];
-		result.set_training_image(i, m.res, m.pixels, m.depth_pixels, m.depth_scale * result.scale, m.image_data_on_gpu, m.image_type, EDepthDataType::UShort, sharpen_amount, m.white_transparent, m.black_transparent, m.mask_color, m.rays);
+		result.set_training_image(i, m.res, m.pixels, m.depth_pixels, m.depth_scale * result.scale, m.image_data_on_gpu, m.image_type, EDepthDataType::UShort, sharpen_amount, m.white_transparent, m.black_transparent, m.mask_color, m.rays, in_cpu_ram);
 		CUDA_CHECK_THROW(cudaDeviceSynchronize());
-	}
-	CUDA_CHECK_THROW(cudaDeviceSynchronize());
-	// free memory
-	for (uint32_t i = 0; i < result.n_images; ++i) {
+		// free memory
 		if (images[i].image_data_on_gpu) {
 			CUDA_CHECK_THROW(cudaFree(images[i].pixels));
 		} else {
@@ -742,11 +739,14 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 		}
 		free(images[i].rays);
 		free(images[i].depth_pixels);
+		progress_to_gpu.update(i);
 	}
+	CUDA_CHECK_THROW(cudaDeviceSynchronize());
+	tlog::success() << "Copied / converted " << images.size() << " images to GPU after " << tlog::durationToString(progress_to_gpu.duration());
 	return result;
 }
 
-void NerfDataset::set_training_image(int frame_idx, const ivec2& image_resolution, const void* pixels, const void* depth_pixels, float depth_scale, bool image_data_on_gpu, EImageDataType image_type, EDepthDataType depth_type, float sharpen_amount, bool white_transparent, bool black_transparent, uint32_t mask_color, const Ray *rays) {
+void NerfDataset::set_training_image(int frame_idx, const ivec2& image_resolution, const void* pixels, const void* depth_pixels, float depth_scale, bool image_data_on_gpu, EImageDataType image_type, EDepthDataType depth_type, float sharpen_amount, bool white_transparent, bool black_transparent, uint32_t mask_color, const Ray *rays, bool in_cpu_ram) {
 	if (frame_idx < 0 || frame_idx >= n_images) {
 		throw std::runtime_error{"NerfDataset::set_training_image: invalid frame index"};
 	}
@@ -772,8 +772,13 @@ void NerfDataset::set_training_image(int frame_idx, const ivec2& image_resolutio
 	}
 
 	// copy or convert the pixels
-	pixelmemory[frame_idx].resize(img_size * image_type_size(image_type));
-	void* dst = pixelmemory[frame_idx].data();
+	size_t total_image_mem_size = img_size * image_type_size(image_type);
+	void* dst;
+	pixelmemory[frame_idx] = GPUMemory<uint8_t>(total_image_mem_size, in_cpu_ram);
+	dst = pixelmemory[frame_idx].data();
+	if (in_cpu_ram) {
+		CUDA_CHECK_THROW(cudaMemAdvise(dst, pixelmemory[frame_idx].get_bytes(), cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
+	}
 
 	switch (image_type) {
 		default: throw std::runtime_error{"unknown image type in set_training_image"};
@@ -846,10 +851,10 @@ void NerfDataset::set_training_image(int frame_idx, const ivec2& image_resolutio
 		raymemory[frame_idx].free_memory();
 	}
 	metadata[frame_idx].rays = raymemory[frame_idx].data();
-	update_metadata(frame_idx, frame_idx + 1);
+	update_metadata(frame_idx, frame_idx + 1, in_cpu_ram);
 }
 
-void NerfDataset::update_metadata(int first, int last) {
+void NerfDataset::update_metadata(int first, int last, bool in_cpu_ram) {
 	if (last < 0) {
 		last = n_images;
 	}
@@ -864,7 +869,10 @@ void NerfDataset::update_metadata(int first, int last) {
 	}
 
 	metadata_gpu.enlarge(last);
-	CUDA_CHECK_THROW(cudaMemcpy(metadata_gpu.data() + first, metadata.data() + first, n * sizeof(TrainingImageMetadata), cudaMemcpyHostToDevice));
+	if (!in_cpu_ram) {
+		size_t total_size = n * sizeof(TrainingImageMetadata);
+		CUDA_CHECK_THROW(cudaMemcpy(metadata_gpu.data() + first, metadata.data() + first, total_size, cudaMemcpyHostToDevice));
+	}
 }
 
 }
