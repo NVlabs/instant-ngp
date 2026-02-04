@@ -130,7 +130,7 @@ def run_colmap(args):
 	except:
 		pass
 	do_system(f"mkdir {sparse}")
-	do_system(f"{colmap_binary} mapper --database_path {db} --image_path {images} --output_path {sparse}")
+	do_system(f"{colmap_binary} mapper --database_path {db} --image_path {images} --export_path {sparse}")
 	do_system(f"{colmap_binary} bundle_adjuster --input_path {sparse}/0 --output_path {sparse}/0 --BundleAdjustment.refine_principal_point 1")
 	try:
 		shutil.rmtree(text)
