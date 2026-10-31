@@ -327,17 +327,17 @@ if __name__ == "__main__":
 		up = np.zeros(3)
 		for line in f:
 			line = line.strip()
-			if line[0] == "#":
+			if line.startswith("#"):
 				continue
 			i = i + 1
 			if i < SKIP_EARLY*2:
 				continue
 			if  i % 2 == 1:
-				elems=line.split(" ") # 1-4 is quat, 5-7 is trans, 9ff is filename (9, if filename contains no spaces)
+				elems=line.split(maxsplit=9) # Keep the complete image name after the nine numeric fields.
 				#name = str(PurePosixPath(Path(IMAGE_FOLDER, elems[9])))
 				# why is this requireing a relitive path while using ^
 				image_rel = os.path.relpath(IMAGE_FOLDER)
-				name = str(f"./{image_rel}/{'_'.join(elems[9:])}")
+				name = str(f"./{image_rel}/{elems[9]}")
 				b = sharpness(name)
 				print(name, "sharpness=",b)
 				image_id = int(elems[0])
