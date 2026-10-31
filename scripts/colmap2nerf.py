@@ -168,13 +168,21 @@ def qvec2rotmat(qvec):
 def rotmat(a, b):
 	a, b = a / np.linalg.norm(a), b / np.linalg.norm(b)
 	v = np.cross(a, b)
-	c = np.dot(a, b)
-	# handle exception for the opposite direction input
-	if c < -1 + 1e-10:
-		return rotmat(a + np.random.uniform(-1e-2, 1e-2, 3), b)
+	# Remove roundoff along a before normalizing a nearly vanishing axis.
+	v -= np.dot(v, a) * a
+	c = np.clip(np.dot(a, b), -1, 1)
 	s = np.linalg.norm(v)
+	if s <= np.finfo(float).eps:
+		if c >= 0:
+			return np.eye(3)
+		# A deterministic half-turn about an axis perpendicular to a.
+		axis = np.cross(a, np.eye(3)[np.argmin(np.abs(a))])
+		axis /= np.linalg.norm(axis)
+		return 2 * np.outer(axis, axis) - np.eye(3)
+	# Normalize the axis before Rodrigues' formula to stay stable near pi.
+	v /= s
 	kmat = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
-	return np.eye(3) + kmat + kmat.dot(kmat) * ((1 - c) / (s ** 2 + 1e-10))
+	return np.eye(3) + s * kmat + (1 - c) * kmat.dot(kmat)
 
 def closest_point_2_lines(oa, da, ob, db): # returns point closest to both rays of form o+t*d, and a weight factor that goes to 0 if the lines are parallel
 	da = da / np.linalg.norm(da)
